@@ -40,7 +40,7 @@ export default function Layout({ children }: LayoutProps) {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      router.push('/login');
+      router.push('/auth/login');
     } catch (error) {
       console.error('ログアウトに失敗しました:', error);
     }
@@ -54,12 +54,12 @@ export default function Layout({ children }: LayoutProps) {
     );
   }
 
-  if (!user && router.pathname !== '/login') {
-    router.push('/login');
+  if (!user && router.pathname !== '/auth/login') {
+    router.push('/auth/login');
     return null;
   }
 
-  if (user && router.pathname === '/login') {
+  if (user && router.pathname === '/auth/login') {
     router.push('/dashboard');
     return null;
   }
