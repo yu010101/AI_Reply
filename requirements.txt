@@ -1,0 +1,10 @@
+google-api-python-client>=2.0.0
+openai>=1.15.0
+firebase-admin>=6.0.0
+google-cloud-pubsub>=2.0.0
+google-cloud-functions>=1.0.0
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+python-dotenv>=1.0.0 
