@@ -1,40 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# RevAI Concierge
 
-## Getting Started
+RevAI Conciergeは、Googleレビュー管理とAI返信生成機能を提供するSaaSアプリケーションです。
+ビジネスオーナーやマーケティング担当者が、顧客レビューを効率的に管理し、高品質な返信を自動生成することができます。
 
-First, run the development server:
+## 主な機能
 
+- **Googleレビュー連携**: 複数店舗のGoogleレビューを一元管理
+- **AI返信生成**: OpenAI APIを活用した高品質な返信文の自動生成
+- **返信テンプレート**: カスタマイズ可能な返信テンプレートの管理
+- **分析ダッシュボード**: レビュー評価や返信率のグラフィカルな分析
+- **通知システム**: 新着・低評価レビューのメール通知
+- **サブスクリプション管理**: Stripe連携による複数プラン提供
+
+## 技術スタック
+
+- **フロントエンド**: Next.js, React, TypeScript, Material UI
+- **バックエンド**: Next.js API Routes
+- **データベース**: Supabase (PostgreSQL)
+- **認証**: Supabase Auth
+- **決済**: Stripe
+- **AI**: OpenAI (GPT-4)
+- **メール**: Nodemailer
+- **データ可視化**: Chart.js
+
+## 開発環境のセットアップ
+
+### 前提条件
+- Node.js 16.x以上
+- npm 8.x以上
+- Supabaseアカウント
+- OpenAIアカウント
+- Stripeアカウント
+
+### インストール手順
+
+1. リポジトリをクローン
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/yourusername/revai-concierge.git
+cd revai-concierge
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. 依存パッケージをインストール
+```bash
+npm install
+```
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+3. 環境変数を設定
+`.env.local`ファイルを作成し、以下の変数を設定：
+```
+# Supabase設定
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+# OpenAI設定
+OPENAI_API_KEY=your_openai_api_key
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
+# Stripe設定
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
 
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# メール設定
+SMTP_HOST=your_smtp_host
+SMTP_PORT=587
+SMTP_USER=your_smtp_user
+SMTP_PASSWORD=your_smtp_password
+SMTP_SECURE=false
 
-## Learn More
+# アプリ設定
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NOTIFICATION_API_KEY=your_notification_api_key
 
-To learn more about Next.js, take a look at the following resources:
+# Google API
+GOOGLE_API_KEY=your_google_api_key
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
+4. 開発サーバーを起動
+```bash
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+5. ブラウザで[http://localhost:3000](http://localhost:3000)にアクセス
 
-## Deploy on Vercel
+## データベース構造
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Supabaseで以下のテーブルを作成する必要があります：
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+- `tenants`: テナント情報
+- `users`: ユーザー情報
+- `locations`: 店舗情報
+- `reviews`: レビュー情報
+- `replies`: 返信情報
+- `reply_templates`: 返信テンプレート
+- `subscriptions`: サブスクリプション情報
+- `payments`: 支払い情報
+- `usage_metrics`: 使用量メトリクス
+- `notification_settings`: 通知設定
+- `notification_logs`: 通知ログ
+
+詳細なスキーマは`docs/database.md`を参照してください。
+
+## 本番デプロイ
+
+### Vercelへのデプロイ
+
+1. [Vercel](https://vercel.com)にアカウントを作成
+2. GitHubリポジトリと連携
+3. 環境変数を設定
+4. デプロイ
+
+## テスト
+
+```bash
+# 単体テストを実行
+npm test
+
+# テストカバレッジレポートを生成
+npm run test:coverage
+```
+
+## ライセンス
+
+[MIT](LICENSE)
+
+## お問い合わせ
+
+サポートやフィードバックは[support@example.com](mailto:support@example.com)までお願いします。
