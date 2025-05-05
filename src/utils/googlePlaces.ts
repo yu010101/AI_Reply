@@ -9,6 +9,7 @@ export const fetchPlaceReviews = async (placeId: string, apiKey: string) => {
         place_id: placeId,
         key: apiKey,
         fields: ['reviews', 'name'],
+        // @ts-ignore - 'ja'は実際には有効な言語設定ですが、型定義が制限的です
         language: 'ja',
       },
     });

@@ -33,6 +33,7 @@ export default async function handler(
         params: {
           place_id: placeId,
           key: process.env.GOOGLE_API_KEY as string,
+          // @ts-ignore - 'ja'は実際には有効な言語設定ですが、型定義が制限的です
           language: 'ja',
           fields: ['name', 'rating', 'reviews']
         }
@@ -47,7 +48,9 @@ export default async function handler(
 
       for (const review of reviews) {
         try {
-          const reviewDate = new Date(review.time * 1000);
+          // review.timeを数値型に確実に変換
+          const reviewTime = typeof review.time === 'string' ? parseInt(review.time, 10) : review.time;
+          const reviewDate = new Date(reviewTime * 1000);
           
           // レビューが既に存在するか確認
           const { data: existingReview } = await supabase
