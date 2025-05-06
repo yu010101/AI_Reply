@@ -118,11 +118,16 @@ export const getAuthToken = async (tenantId: string): Promise<{ token: string; i
       // 新しいトークンと有効期限を保存
       if (accessToken) {
         const { credentials } = oauth2Client;
+        // 有効期限がなければ現在時刻から1時間後を設定
+        const expiryMillis = credentials.expiry_date || Date.now() + 3600000;
+        // 必ず数値型のミリ秒タイムスタンプからDateオブジェクトを経由してISOフォーマットの文字列に変換する
+        const expiryDate = new Date(Number(expiryMillis)).toISOString();
+        
         await supabase
           .from('google_auth_tokens')
           .update({
             access_token: accessToken,
-            expiry_date: credentials.expiry_date
+            expiry_date: expiryDate
           })
           .eq('id', data.id);
 

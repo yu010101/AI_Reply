@@ -33,17 +33,17 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const drawerWidth = 240;
 
-export default function Navigation() {
+interface NavigationProps {
+  mobileOpen: boolean;
+  handleDrawerToggle: () => void;
+}
+
+export default function Navigation({ mobileOpen, handleDrawerToggle }: NavigationProps) {
   const router = useRouter();
   const { signOut } = useAuth();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [reviewsOpen, setReviewsOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [billingOpen, setBillingOpen] = useState(false);
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
 
   const handleSignOut = async () => {
     try {
@@ -214,15 +214,6 @@ export default function Navigation() {
       component="nav"
       sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
     >
-      <IconButton
-        color="inherit"
-        aria-label="open drawer"
-        edge="start"
-        onClick={handleDrawerToggle}
-        sx={{ mr: 2, display: { sm: 'none' } }}
-      >
-        <MenuIcon />
-      </IconButton>
       <Drawer
         variant="temporary"
         open={mobileOpen}
