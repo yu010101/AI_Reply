@@ -1,8 +1,13 @@
 import { loadStripe } from '@stripe/stripe-js';
 import { PLAN_PRICES, PLAN_LIMITS } from '@/constants/plan';
+import Stripe from 'stripe';
 
 // StripeのAPIキー
 const STRIPE_PUBLIC_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2025-04-30.basil',
+});
 
 // Stripeの初期化
 export const getStripe = async () => {
@@ -13,90 +18,93 @@ export const getStripe = async () => {
 // 定数をエクスポート
 export { PLAN_PRICES, PLAN_LIMITS };
 
-// サブスクリプション作成処理
-export const createSubscription = async (planId: string, customerId?: string) => {
-  try {
-    const response = await fetch('/api/subscriptions/create', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        planId,
-        customerId,
-      }),
-    });
+// クライアントサイドの関数
+export const clientApi = {
+  // サブスクリプション作成処理
+  createSubscription: async (planId: string, customerId?: string) => {
+    try {
+      const response = await fetch('/api/subscriptions/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planId,
+          customerId,
+        }),
+      });
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('サブスクリプション作成エラー:', error);
-    throw error;
-  }
-};
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('サブスクリプション作成エラー:', error);
+      throw error;
+    }
+  },
 
-// サブスクリプション更新処理
-export const updateSubscription = async (subscriptionId: string, planId: string) => {
-  try {
-    const response = await fetch('/api/subscriptions/update', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriptionId,
-        planId,
-      }),
-    });
+  // サブスクリプション更新処理
+  updateSubscription: async (subscriptionId: string, planId: string) => {
+    try {
+      const response = await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subscriptionId,
+          planId,
+        }),
+      });
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('サブスクリプション更新エラー:', error);
-    throw error;
-  }
-};
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('サブスクリプション更新エラー:', error);
+      throw error;
+    }
+  },
 
-// サブスクリプション解約処理
-export const cancelSubscription = async (subscriptionId: string) => {
-  try {
-    const response = await fetch('/api/subscriptions/cancel', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriptionId,
-      }),
-    });
+  // サブスクリプション解約処理
+  cancelSubscription: async (subscriptionId: string) => {
+    try {
+      const response = await fetch('/api/subscriptions/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subscriptionId,
+        }),
+      });
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('サブスクリプション解約エラー:', error);
-    throw error;
-  }
-};
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('サブスクリプション解約エラー:', error);
+      throw error;
+    }
+  },
 
-// 顧客ポータルへのリンク生成
-export const createCustomerPortalLink = async (customerId: string) => {
-  try {
-    const response = await fetch('/api/subscriptions/portal', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        customerId,
-      }),
-    });
+  // 顧客ポータルへのリンク生成
+  createCustomerPortalLink: async (customerId: string) => {
+    try {
+      const response = await fetch('/api/subscriptions/portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customerId,
+        }),
+      });
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('顧客ポータルリンク生成エラー:', error);
-    throw error;
-  }
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('顧客ポータルリンク生成エラー:', error);
+      throw error;
+    }
+  },
 };
 
 // プラン価格フォーマット
@@ -108,38 +116,111 @@ export const formatPrice = (plan: keyof typeof PLAN_PRICES) => {
   }).format(price);
 };
 
-export const createCheckoutSession = async (priceId: string) => {
-  try {
-    const response = await fetch('/api/create-checkout-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ priceId }),
-    });
+export interface CreateCheckoutSessionParams {
+  priceId: string;
+  customerId?: string;
+  successUrl: string;
+  cancelUrl: string;
+  metadata?: Record<string, string>;
+}
 
-    if (!response.ok) {
-      throw new Error('セッションの作成に失敗しました');
-    }
+// サーバーサイドの関数
+export const serverApi = {
+  createCheckoutSession: async ({
+    priceId,
+    customerId,
+    successUrl,
+    cancelUrl,
+    metadata,
+  }: CreateCheckoutSessionParams) => {
+    try {
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price: priceId,
+            quantity: 1,
+          },
+        ],
+        customer: customerId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata,
+      });
 
-    const { sessionId } = await response.json();
-    const stripe = await getStripe();
-
-    if (!stripe) {
-      throw new Error('Stripeの初期化に失敗しました');
-    }
-
-    const { error } = await stripe.redirectToCheckout({
-      sessionId,
-    });
-
-    if (error) {
+      return session;
+    } catch (error) {
+      console.error('Stripe checkout session作成エラー:', error);
       throw error;
     }
-  } catch (error) {
-    console.error('支払い処理エラー:', error);
-    throw error;
-  }
+  },
+
+  createCustomer: async (email: string, name: string) => {
+    try {
+      const customer = await stripe.customers.create({
+        email,
+        name,
+      });
+
+      return customer;
+    } catch (error) {
+      console.error('Stripe customer作成エラー:', error);
+      throw error;
+    }
+  },
+
+  getSubscription: async (subscriptionId: string) => {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      return subscription;
+    } catch (error) {
+      console.error('Stripe subscription取得エラー:', error);
+      throw error;
+    }
+  },
+
+  cancelSubscription: async (subscriptionId: string) => {
+    try {
+      const subscription = await stripe.subscriptions.cancel(subscriptionId);
+      return subscription;
+    } catch (error) {
+      console.error('Stripe subscriptionキャンセルエラー:', error);
+      throw error;
+    }
+  },
+
+  updateSubscription: async (subscriptionId: string, priceId: string) => {
+    try {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const updatedSubscription = await stripe.subscriptions.update(subscriptionId, {
+        items: [
+          {
+            id: subscription.items.data[0].id,
+            price: priceId,
+          },
+        ],
+      });
+      return updatedSubscription;
+    } catch (error) {
+      console.error('Stripe subscription更新エラー:', error);
+      throw error;
+    }
+  },
+
+  handleWebhookEvent: async (payload: string, signature: string) => {
+    try {
+      const event = stripe.webhooks.constructEvent(
+        payload,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET!
+      );
+      return event;
+    } catch (error) {
+      console.error('Stripe webhookイベント処理エラー:', error);
+      throw error;
+    }
+  },
 };
 
 export const createCustomerPortalSession = async () => {

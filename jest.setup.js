@@ -35,6 +35,19 @@ jest.mock('@/utils/supabase', () => ({
 // fetch のモック
 global.fetch = jest.fn();
 
+// テスト環境用の環境変数設定
+process.env.STRIPE_SECRET_KEY = 'test_key';
+process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'test_publishable_key';
+process.env.STRIPE_WEBHOOK_SECRET = 'test_webhook_secret';
+
+// グローバルなモックの設定
+global.console = {
+  ...console,
+  error: jest.fn(),
+  warn: jest.fn(),
+  log: jest.fn(),
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
 }); 
