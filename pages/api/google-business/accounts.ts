@@ -54,6 +54,65 @@ const rateLimiter = {
   }
 };
 
+// キャッシュの有効期限（24時間）
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+// キャッシュが有効かどうかを確認する関数
+const isCacheValid = (records: any[] | null): boolean => {
+  if (!records || records.length === 0) {
+    return false;
+  }
+  
+  // 最も新しいレコードのタイムスタンプを取得
+  const latestRecord = records[0];
+  const updatedAt = new Date(latestRecord.created_at).getTime();
+  const now = Date.now();
+  
+  // 現在時刻とキャッシュ時刻の差がTTL以内かどうかを確認
+  return (now - updatedAt) < CACHE_TTL;
+};
+
+// アカウント情報をキャッシュに保存する関数
+async function saveAccountsToCache(userId: string, accounts: any[]): Promise<void> {
+  if (!accounts || accounts.length === 0) {
+    console.log('[GoogleBusinessAPI] キャッシュするアカウントがありません');
+    return;
+  }
+  
+  try {
+    // 既存のキャッシュを削除
+    await supabase
+      .from('google_business_accounts')
+      .delete()
+      .eq('tenant_id', userId);
+    
+    // 新しいアカウント情報を保存
+    const cacheData = accounts.map(account => ({
+      tenant_id: userId,
+      account_id: account.name.split('/').pop() || '',
+      account_name: account.accountName || '',
+      display_name: account.displayName || '',
+      primary_owner: account.primaryOwner || '',
+      type: account.accountType || 'LOCATION_GROUP',
+      role: account.role || '',
+      location_count: account.locationCount || 0,
+      created_at: new Date().toISOString()
+    }));
+    
+    const { error } = await supabase
+      .from('google_business_accounts')
+      .insert(cacheData);
+      
+    if (error) {
+      console.error('[GoogleBusinessAPI] キャッシュ保存エラー:', error);
+    } else {
+      console.log('[GoogleBusinessAPI] キャッシュを更新しました:', cacheData.length + '件');
+    }
+  } catch (error) {
+    console.error('[GoogleBusinessAPI] キャッシュ保存中にエラーが発生しました:', error);
+  }
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -63,15 +122,6 @@ export default async function handler(
   }
 
   try {
-    // レート制限をチェック
-    if (rateLimiter.isLimited()) {
-      console.log('[GoogleBusinessAPI] レート制限によりAPIリクエストをブロック');
-      return res.status(429).json({ 
-        error: '短期間に多くのリクエストが送信されました。しばらく待ってから再試行してください。',
-        retryAfter: rateLimiter.getRetryAfter()
-      });
-    }
-    
     // 開発環境かどうかを確認
     const isDevEnv = process.env.NODE_ENV === 'development';
     
@@ -95,128 +145,140 @@ export default async function handler(
     }
 
     console.log('[GoogleBusinessAPI] ユーザーID:', userId);
-
-    // トークンを確認
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('google_auth_tokens')
-      .select('access_token')
-      .eq('tenant_id', userId)
-      .single();
     
-    console.log('[GoogleBusinessAPI] トークン確認結果:', {
-      found: Boolean(tokenData),
-      error: tokenError ? tokenError.message : null,
-      tokenPrefix: tokenData?.access_token ? tokenData.access_token.substring(0, 10) + '...' : null
-    });
-
-    if (!tokenData || !tokenData.access_token) {
-      return res.status(400).json({ error: 'Google Business Profileとの連携が必要です' });
-    }
-
-    // まずはキャッシュされたアカウント情報を確認
-    const { data: cachedAccounts } = await supabase
-      .from('google_business_accounts')
-      .select('*')
-      .eq('tenant_id', userId);
-
-    const isCacheValid = cachedAccounts && cachedAccounts.length > 0;
-    
-    if (isCacheValid) {
-      // キャッシュが見つかった場合はそれを使用
-      console.log('[GoogleBusinessAPI] キャッシュからアカウント情報を返します:', cachedAccounts.length);
+    // レート制限をチェック
+    if (rateLimiter.isLimited()) {
+      console.log('[GoogleBusinessAPI] レート制限により実行をスキップします');
+      console.log(`[GoogleBusinessAPI] 次のリクエストまで待機: ${rateLimiter.getRetryAfter()}秒`);
       
-      // キャッシュを返しつつ、バックグラウンドで最新データを取得（レート制限を考慮）
-      if (!rateLimiter.isLimited()) {
-        try {
-          rateLimiter.increment();
-          // 非同期でアカウント情報を更新（結果は待たない）
-          getAccounts(userId).then(async (accounts) => {
-            if (accounts && accounts.length > 0) {
-              // 既存のアカウント情報を削除
-              await supabase
-                .from('google_business_accounts')
-                .delete()
-                .eq('tenant_id', userId);
-              
-              // 新しいアカウント情報を保存
-              await supabase
-                .from('google_business_accounts')
-                .insert(
-                  accounts.map(account => ({
-                    tenant_id: userId,
-                    account_id: account.name.split('/').pop(),
-                    account_name: account.accountName,
-                    display_name: account.displayName,
-                    primary_owner: account.primaryOwner,
-                    type: account.type,
-                    role: account.role,
-                    created_at: new Date().toISOString()
-                  }))
-                );
-              console.log('[GoogleBusinessAPI] バックグラウンドでキャッシュを更新しました');
-            }
-          }).catch(err => {
-            // クォータ制限エラーの場合は制限フラグを設定
-            if (err.message && err.message.includes('Quota exceeded')) {
-              rateLimiter.setQuotaLimited();
-            }
-            console.error('[GoogleBusinessAPI] バックグラウンド更新エラー:', err);
-          });
-        } catch (err) {
-          // バックグラウンド処理のエラーは無視
-          console.error('[GoogleBusinessAPI] バックグラウンド処理エラー:', err);
-        }
+      // キャッシュされたデータが存在するか確認
+      const { data: cachedAccounts, error: cacheError } = await supabase
+        .from('google_business_accounts')
+        .select('*')
+        .eq('tenant_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (cacheError) {
+        console.error('[GoogleBusinessAPI] キャッシュ取得エラー:', cacheError);
+        return res.status(500).json({ error: 'キャッシュの取得に失敗しました' });
       }
       
-      // キャッシュされたデータを返す
-      return res.status(200).json({ 
-        accounts: cachedAccounts,
-        cached: true
+      const cacheValid = isCacheValid(cachedAccounts);
+      
+      // キャッシュがある場合はそれを返す
+      if (cacheValid && cachedAccounts) {
+        console.log('[GoogleBusinessAPI] レート制限中のためキャッシュを使用します:',  
+          cachedAccounts.length + '件');
+        
+        return res.status(200).json({ 
+          accounts: cachedAccounts.map(account => ({
+            name: `accounts/${account.account_id}`,
+            displayName: account.display_name,
+            accountName: account.account_name,
+            accountType: account.type || 'LOCATION_GROUP',
+            locationCount: account.location_count || 0,
+            primaryOwner: account.primary_owner,
+            role: account.role,
+            cached: true,
+            lastUpdated: account.created_at
+          })),
+          cached: true,
+          retryAfter: rateLimiter.getRetryAfter()
+        });
+      }
+      
+      // キャッシュがない場合はレート制限エラーを返す
+      return res.status(429).json({
+        error: 'APIレート制限に達しました。しばらく待ってから再試行してください。',
+        retryAfter: rateLimiter.getRetryAfter()
       });
     }
 
+    // 通常のAPIリクエストでGoogleからデータを取得
     try {
-      // レート制限をインクリメント
-      rateLimiter.increment();
+      // ログ出力
+      console.log('[GoogleBusinessAPI] Google Business APIを呼び出します');
       
-      // アカウント情報を取得
-      console.log('[GoogleBusinessAPI] アカウント情報取得開始');
-      const accounts = await getAccounts(userId);
-      console.log('[GoogleBusinessAPI] アカウント情報取得成功:', accounts.length + '件');
-      
-      // アカウント情報をキャッシュ
-      if (accounts.length > 0) {
-        // 既存のアカウント情報を削除
-        await supabase
-          .from('google_business_accounts')
-          .delete()
-          .eq('tenant_id', userId);
+      // キャッシュを確認
+      const { data: cachedAccounts, error: cacheError } = await supabase
+        .from('google_business_accounts')
+        .select('*')
+        .eq('tenant_id', userId)
+        .order('created_at', { ascending: false });
         
-        // 新しいアカウント情報を保存
-        await supabase
-          .from('google_business_accounts')
-          .insert(
-            accounts.map(account => ({
-              tenant_id: userId,
-              account_id: account.name.split('/').pop(),
-              account_name: account.accountName,
-              display_name: account.displayName,
-              primary_owner: account.primaryOwner,
-              type: account.type,
-              role: account.role,
-              created_at: new Date().toISOString()
-            }))
-          );
+      const cacheValid = isCacheValid(cachedAccounts);
+      console.log('[GoogleBusinessAPI] キャッシュ状態:', { 
+        exists: Boolean(cachedAccounts && cachedAccounts.length > 0),
+        valid: cacheValid,
+        count: cachedAccounts?.length || 0,
+        age: cachedAccounts && cachedAccounts.length > 0 
+          ? Math.round((Date.now() - new Date(cachedAccounts[0].created_at).getTime()) / (60 * 1000)) + '分前'
+          : 'なし'
+      });
+      
+      // APIが制限されている場合や最大試行回数を超えた場合はキャッシュを返す
+      if (rateLimiter.isLimited() && cacheValid && cachedAccounts) {
+        return res.status(200).json({ 
+          accounts: cachedAccounts.map(account => ({
+            name: `accounts/${account.account_id}`,
+            displayName: account.display_name,
+            accountName: account.account_name,
+            accountType: account.type || 'LOCATION_GROUP',
+            locationCount: account.location_count || 0,
+            primaryOwner: account.primary_owner,
+            role: account.role,
+            cached: true,
+            lastUpdated: account.created_at
+          })),
+          cached: true,
+          cacheAge: cachedAccounts.length > 0 
+            ? Math.round((Date.now() - new Date(cachedAccounts[0].created_at).getTime()) / (60 * 1000))
+            : null
+        });
       }
       
-      return res.status(200).json({ accounts });
+      // 通常のAPIリクエスト処理（レート制限されていない場合）
+      rateLimiter.increment();
+      
+      // Google Business ProfileからAPIを使用してアカウントを取得
+      const accounts = await getAccounts(userId);
+      
+      // APIで取得したアカウント情報をキャッシュ（バックグラウンド処理）
+      saveAccountsToCache(userId, accounts).catch(error => {
+        console.error('[GoogleBusinessAPI] キャッシュ保存エラー:', error);
+      });
+      
+      // APIレスポンスを先に返す（キャッシュ保存を待たない）
+      return res.status(200).json({ 
+        accounts,
+        cached: false,
+        fromApi: true,
+        timestamp: new Date().toISOString()
+      });
     } catch (error: any) {
       console.error('[GoogleBusinessAPI] アカウント情報取得エラー:', error);
       
       // キャッシュされたアカウント情報を返す
-      if (isCacheValid) {
+      const { data: cachedAccounts } = await supabase
+        .from('google_business_accounts')
+        .select('*')
+        .eq('tenant_id', userId);
+        
+      const cacheValid = isCacheValid(cachedAccounts);
+        
+      if (cacheValid && cachedAccounts) {
         return res.status(200).json({ 
-          accounts: cachedAccounts,
+          accounts: cachedAccounts.map(account => ({
+            name: `accounts/${account.account_id}`,
+            displayName: account.display_name,
+            accountName: account.account_name,
+            accountType: account.type || 'LOCATION_GROUP',
+            locationCount: account.location_count || 0,
+            primaryOwner: account.primary_owner,
+            role: account.role,
+            cached: true,
+            lastUpdated: account.created_at
+          })),
           cached: true,
           error: error.message
         });

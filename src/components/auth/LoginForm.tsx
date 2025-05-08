@@ -41,7 +41,7 @@ export default function LoginForm() {
       }
 
       console.log('[LoginForm] ログイン成功:', data.user.email);
-      router.push('/tenants');
+      router.push('/dashboard');
     } catch (error) {
       console.error('[LoginForm] 予期せぬエラー:', error);
       setError('ログイン処理中にエラーが発生しました');

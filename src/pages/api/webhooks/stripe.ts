@@ -2,6 +2,8 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { serverApi } from '@/utils/stripe';
 import { supabase } from '@/utils/supabase';
 import Stripe from 'stripe';
+import { securityMiddleware } from '@/utils/security';
+import { errorMonitoringMiddleware, logError } from '@/utils/monitoring';
 
 // カスタムエラークラスの定義
 class WebhookError extends Error {
@@ -36,44 +38,36 @@ type ErrorLog = {
 };
 
 // エラーログを記録する関数
-async function logError(error: WebhookError, event?: StripeWebhookEvent, req?: NextApiRequest) {
-  const errorLog: ErrorLog = {
-    timestamp: new Date().toISOString(),
-    error: {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      details: error.details,
-    },
-  };
-
-  if (event) {
-    errorLog.event = {
+async function logWebhookError(
+  error: Error,
+  event: StripeWebhookEvent | undefined,
+  req: NextApiRequest
+) {
+  await logError(error, {
+    event: event ? {
       type: event.type,
-      id: (event.data.object as any).id,
-    };
-  }
-
-  if (req) {
-    errorLog.request = {
-      method: req.method || '',
-      headers: req.headers as Record<string, string>,
-    };
-  }
-
-  // エラーログをデータベースに保存
-  await supabase.from('error_logs').insert(errorLog);
-  console.error('Webhook error:', errorLog);
+      id: event.id,
+    } : undefined,
+    request: {
+      method: req.method,
+      headers: req.headers,
+    },
+  });
 }
 
 // リトライ可能なエラーかどうかを判定する関数
-function isRetryableError(error: any): boolean {
-  return (
-    error instanceof Stripe.errors.StripeConnectionError ||
-    error instanceof Stripe.errors.StripeAPIError ||
-    error.code === 'ECONNRESET' ||
-    error.code === 'ETIMEDOUT'
-  );
+function isRetryableError(error: Error): boolean {
+  if (error instanceof WebhookError) {
+    return error.statusCode === 503;
+  }
+
+  const code = (error as any).code;
+  if (code === 'ECONNRESET' || code === 'ETIMEDOUT') {
+    return true;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes('timeout') || message.includes('connection');
 }
 
 export const config = {
@@ -82,10 +76,12 @@ export const config = {
   },
 };
 
-type StripeWebhookEvent = {
+// Stripeのイベント型定義
+type StripeWebhookEvent = Stripe.Event & {
+  id: string;
   type: string;
   data: {
-    object: Stripe.Event.Data.Object;
+    object: any;
   };
 };
 
@@ -98,182 +94,228 @@ type CheckoutSession = Stripe.Checkout.Session & {
 
 type Invoice = Stripe.Invoice & {
   subscription: string;
+  last_payment_error?: {
+    message: string;
+  };
+  amount_paid: number;
+  amount_due: number;
 };
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+async function webhookHandler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' });
+    res.status(405).json({
+      error: 'Method not allowed',
+      code: 'METHOD_NOT_ALLOWED',
+    });
+    return;
   }
 
   const signature = req.headers['stripe-signature'] as string;
   if (!signature) {
-    return res.status(400).json({ error: 'No signature provided', code: 'NO_SIGNATURE' });
+    res.status(400).json({
+      error: 'No signature provided',
+      code: 'NO_SIGNATURE',
+    });
+    return;
   }
 
+  let event: StripeWebhookEvent | undefined;
+
   try {
-    const event = await serverApi.handleWebhookEvent(req.body, signature);
+    event = await serverApi.handleWebhookEvent(req.body, signature);
 
     switch (event.type) {
       case 'checkout.session.completed': {
-        const session = event.data.object as any;
-        const { userId, planId } = session.metadata || {};
-
-        if (!userId || !planId) {
-          throw new Error('Missing required metadata');
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (!session.metadata?.userId) {
+          res.status(400).json({
+            error: 'Missing required metadata',
+            code: 'INVALID_METADATA',
+            details: { userId: session.metadata?.userId },
+          });
+          return;
         }
 
-        const { error } = await supabase.from('subscriptions').insert({
-          user_id: userId,
-          plan_id: planId,
-          stripe_subscription_id: session.subscription,
-          status: 'active',
-          current_period_start: new Date().toISOString(),
-          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          cancel_at_period_end: false,
-        });
-
-        if (error) {
-          throw new Error('Failed to save subscription');
+        try {
+          await supabase.from('subscriptions').insert({
+            userId: session.metadata.userId,
+            status: 'active',
+            priceId: session.metadata.priceId,
+            customerId: session.customer as string,
+            subscriptionId: session.subscription as string,
+          });
+        } catch (error) {
+          throw new WebhookError(
+            'Failed to save subscription',
+            500,
+            'DATABASE_ERROR',
+            { error }
+          );
         }
         break;
       }
 
       case 'customer.subscription.updated': {
-        const subscription = event.data.object as any;
-        
-        const { error } = await supabase
-          .from('subscriptions')
-          .update({
-            status: subscription.status,
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            cancel_at_period_end: subscription.cancel_at_period_end,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('stripe_subscription_id', subscription.id);
+        const subscription = event.data.object as Stripe.Subscription;
+        try {
+          const { error } = await supabase
+            .from('subscriptions')
+            .update({
+              status: subscription.status,
+              updatedAt: new Date().toISOString(),
+            })
+            .eq('subscriptionId', subscription.id);
 
-        if (error) {
-          throw new Error('Failed to update subscription');
+          if (error) {
+            throw new WebhookError(
+              'Failed to update subscription',
+              500,
+              'DATABASE_ERROR',
+              { error }
+            );
+          }
+        } catch (error) {
+          throw new WebhookError(
+            'Failed to update subscription',
+            500,
+            'DATABASE_ERROR',
+            { error }
+          );
         }
         break;
       }
 
       case 'customer.subscription.deleted': {
-        const subscription = event.data.object as any;
-        
-        const { error } = await supabase
-          .from('subscriptions')
-          .update({
-            status: 'canceled',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('stripe_subscription_id', subscription.id);
+        const subscription = event.data.object as Stripe.Subscription;
+        try {
+          const { error } = await supabase
+            .from('subscriptions')
+            .update({
+              status: 'canceled',
+              canceledAt: new Date().toISOString(),
+            })
+            .eq('subscriptionId', subscription.id);
 
-        if (error) {
-          throw new Error('Failed to cancel subscription');
+          if (error) {
+            throw new WebhookError(
+              'Failed to cancel subscription',
+              500,
+              'DATABASE_ERROR',
+              { error }
+            );
+          }
+        } catch (error) {
+          throw new WebhookError(
+            'Failed to cancel subscription',
+            500,
+            'DATABASE_ERROR',
+            { error }
+          );
         }
         break;
       }
 
       case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as any;
-        
-        if (!invoice.subscription) {
-          throw new Error('Missing subscription ID');
-        }
+        const invoice = event.data.object as Invoice;
+        try {
+          const { error } = await supabase.from('payments').insert({
+            subscriptionId: invoice.subscription,
+            amount: invoice.amount_paid,
+            status: 'succeeded',
+            invoiceId: invoice.id,
+          });
 
-        const { error } = await supabase.from('payments').insert({
-          subscription_id: invoice.subscription,
-          amount: invoice.amount_paid,
-          currency: invoice.currency,
-          status: 'succeeded',
-          payment_date: new Date().toISOString(),
-        });
-
-        if (error) {
-          throw new Error('Failed to record payment');
+          if (error) {
+            throw new WebhookError(
+              'Failed to record payment',
+              500,
+              'DATABASE_ERROR',
+              { error }
+            );
+          }
+        } catch (error) {
+          throw new WebhookError(
+            'Failed to record payment',
+            500,
+            'DATABASE_ERROR',
+            { error }
+          );
         }
         break;
       }
 
       case 'invoice.payment_failed': {
-        const invoice = event.data.object as any;
-        
-        if (!invoice.subscription) {
-          throw new Error('Missing subscription ID');
-        }
+        const invoice = event.data.object as Invoice;
+        try {
+          const { error } = await supabase.from('payments').insert({
+            subscriptionId: invoice.subscription,
+            amount: invoice.amount_due,
+            status: 'failed',
+            invoiceId: invoice.id,
+            failureReason: invoice.last_payment_error?.message,
+          });
 
-        const { error } = await supabase.from('payments').insert({
-          subscription_id: invoice.subscription,
-          amount: invoice.amount_due,
-          currency: invoice.currency,
-          status: 'failed',
-          payment_date: new Date().toISOString(),
-        });
-
-        if (error) {
-          throw new Error('Failed to record failed payment');
+          if (error) {
+            throw new WebhookError(
+              'Failed to record failed payment',
+              500,
+              'DATABASE_ERROR',
+              { error }
+            );
+          }
+        } catch (error) {
+          throw new WebhookError(
+            'Failed to record failed payment',
+            500,
+            'DATABASE_ERROR',
+            { error }
+          );
         }
         break;
+      }
+
+      default: {
+        throw new WebhookError(
+          `Unhandled event type: ${event.type}`,
+          400,
+          'UNHANDLED_EVENT'
+        );
       }
     }
 
     res.json({ received: true });
   } catch (error: any) {
-    console.error('Webhook error:', error);
+    // エラーログを記録
+    await logWebhookError(error, event, req);
 
-    if (error.message === 'Missing required metadata') {
-      return res.status(400).json({
-        error: error.message,
-        code: 'INVALID_METADATA',
-        details: { userId: undefined, planId: undefined },
-      });
-    }
-
-    if (error.message === 'Missing subscription ID') {
-      return res.status(400).json({
-        error: error.message,
-        code: 'INVALID_INVOICE',
-        details: { error },
-      });
-    }
-
-    if (error.type === 'StripeSignatureVerificationError') {
-      return res.status(400).json({
-        error: 'Invalid signature',
-        code: 'INVALID_SIGNATURE',
-      });
-    }
-
-    // リトライ可能なエラーの処理
-    if (
-      error.code === 'ECONNRESET' ||
-      error.code === 'ETIMEDOUT' ||
-      error instanceof Stripe.errors.StripeConnectionError ||
-      error instanceof Stripe.errors.StripeAPIError
-    ) {
-      return res.status(503).json({
-        error: 'Service temporarily unavailable',
-        code: 'SERVICE_UNAVAILABLE',
-        retryAfter: 30,
-      });
-    }
-
-    // データベースエラーの処理
-    if (error.message.startsWith('Failed to')) {
-      return res.status(500).json({
+    // データベースエラーの場合
+    if (error instanceof WebhookError && error.code === 'DATABASE_ERROR') {
+      res.status(500).json({
         error: error.message,
         code: 'DATABASE_ERROR',
-        details: { error },
+        details: error.details,
       });
+      return;
     }
 
-    res.status(500).json({
-      error: 'Internal server error',
-      code: 'INTERNAL_ERROR',
-      details: { error },
+    // リトライ可能なエラーの場合は503を返す
+    if (isRetryableError(error)) {
+      res.status(503).json({
+        error: 'Service temporarily unavailable',
+        code: 'SERVICE_UNAVAILABLE',
+        details: { retryAfter: 30 },
+      });
+      return;
+    }
+
+    // その他のエラー
+    res.status(error.statusCode || 500).json({
+      error: error.message,
+      code: error.code || 'INTERNAL_ERROR',
     });
   }
-} 
+}
+
+// webhookHandlerをexportに変更
+export { webhookHandler };
+export default securityMiddleware(errorMonitoringMiddleware(webhookHandler)); 

@@ -1,10 +1,6 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import Stripe from 'stripe';
+import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-04-30.basil',
-});
+import { cancelStripeSubscription } from '@/services/stripe/StripeService';
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,66 +12,85 @@ export default async function handler(
 
   try {
     // セッションからユーザー情報を取得
-    const { data: { session: authSession } } = await supabase.auth.getSession();
-
-    if (!authSession) {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
       return res.status(401).json({ error: '認証されていません' });
     }
-
-    const userId = authSession.user.id;
-    const { subscriptionId } = req.body;
-
-    if (!subscriptionId) {
-      return res.status(400).json({ error: '必須パラメータが不足しています' });
+    
+    const userId = session.user.id;
+    
+    // リクエストボディから必要な情報を取得
+    const { subscriptionId, organizationId, cancelAtPeriodEnd = true } = req.body;
+    
+    if (!subscriptionId || !organizationId) {
+      return res.status(400).json({ error: 'パラメータが不足しています' });
     }
-
-    // テナント情報を取得
-    const { data: tenant, error: tenantError } = await supabase
-      .from('tenants')
-      .select('id, stripe_customer_id')
-      .eq('id', userId)
+    
+    // ユーザーが組織に所属しているか確認
+    const { data: orgUser, error: orgError } = await supabase
+      .from('organization_users')
+      .select('role_id')
+      .eq('organization_id', organizationId)
+      .eq('user_id', userId)
       .single();
-
-    if (tenantError) {
-      return res.status(400).json({ error: 'テナント情報の取得に失敗しました' });
+    
+    if (orgError || !orgUser) {
+      return res.status(403).json({ error: 'この組織へのアクセス権がありません' });
     }
-
-    // サブスクリプション情報を取得
-    const { data: subscription, error: subscriptionError } = await supabase
+    
+    // サブスクリプションがこの組織のものであるか確認
+    const { data: subscription, error: subError } = await supabase
       .from('subscriptions')
       .select('*')
-      .eq('stripe_subscription_id', subscriptionId)
-      .eq('tenant_id', userId)
+      .eq('id', subscriptionId)
+      .eq('organization_id', organizationId)
       .single();
-
-    if (subscriptionError) {
-      return res.status(400).json({ error: 'サブスクリプション情報の取得に失敗しました' });
+    
+    if (subError || !subscription) {
+      return res.status(404).json({ error: 'サブスクリプションが見つかりません' });
     }
-
-    // サブスクリプションをキャンセル
-    await stripe.subscriptions.cancel(subscriptionId);
-
-    // データベースのサブスクリプション情報を更新
-    await supabase
+    
+    // Stripeでサブスクリプションをキャンセル
+    if (subscription.payment_provider === 'stripe' && subscription.payment_provider_subscription_id) {
+      const success = await cancelStripeSubscription(
+        subscriptionId,
+        cancelAtPeriodEnd
+      );
+      
+      if (!success) {
+        return res.status(500).json({ error: 'Stripeでのキャンセルに失敗しました' });
+      }
+    }
+    
+    // 自社データベースのサブスクリプションをキャンセル
+    const { error: updateError } = await supabase
       .from('subscriptions')
-      .update({
-        status: 'canceled',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('stripe_subscription_id', subscriptionId);
-
-    // テナント情報を更新
-    await supabase
-      .from('tenants')
-      .update({
-        plan: 'free',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-
-    return res.status(200).json({ success: true });
-  } catch (error) {
+      .update(
+        cancelAtPeriodEnd
+          ? {
+              cancel_at_period_end: true,
+              updated_at: new Date().toISOString()
+            }
+          : {
+              status: 'canceled',
+              updated_at: new Date().toISOString()
+            }
+      )
+      .eq('id', subscriptionId);
+    
+    if (updateError) {
+      return res.status(500).json({ error: 'サブスクリプションの更新に失敗しました' });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: cancelAtPeriodEnd
+        ? '現在の期間終了時にサブスクリプションはキャンセルされます。'
+        : 'サブスクリプションは即時キャンセルされました。'
+    });
+  } catch (error: any) {
     console.error('サブスクリプションキャンセルエラー:', error);
-    return res.status(500).json({ error: 'サブスクリプションのキャンセルに失敗しました' });
+    return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

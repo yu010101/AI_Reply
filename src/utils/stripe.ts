@@ -5,7 +5,7 @@ import Stripe from 'stripe';
 // StripeのAPIキー
 const STRIPE_PUBLIC_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil',
 });
 
@@ -208,18 +208,12 @@ export const serverApi = {
     }
   },
 
-  handleWebhookEvent: async (payload: string, signature: string) => {
-    try {
-      const event = stripe.webhooks.constructEvent(
-        payload,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET!
-      );
-      return event;
-    } catch (error) {
-      console.error('Stripe webhookイベント処理エラー:', error);
-      throw error;
-    }
+  handleWebhookEvent: async (body: Buffer, signature: string) => {
+    return stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
   },
 };
 

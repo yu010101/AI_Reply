@@ -1,0 +1,268 @@
+import { useState, useEffect } from 'react';
+import { Box, Typography, Button, CircularProgress, Paper, Alert, List, ListItem, ListItemText, Divider, Chip } from '@mui/material';
+import GoogleIcon from '@mui/icons-material/Google';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+import { supabase } from '@/utils/supabase';
+import { useAuth } from '@/hooks/useAuth';
+
+export default function GoogleBusinessIntegration() {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [authenticating, setAuthenticating] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'not_connected' | 'error'>('not_connected');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [tokenInfo, setTokenInfo] = useState<{
+    access_token: string;
+    refresh_token: string;
+    expiry_date: string;
+    updated_at: string;
+  } | null>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      checkConnectionStatus();
+    }
+  }, [user]);
+
+  const checkConnectionStatus = async () => {
+    try {
+      setLoading(true);
+      console.log('[GoogleBI] 連携状態確認開始, ユーザーID:', user?.id);
+      
+      // テーブル一覧を取得して確認（デバッグ用）
+      const { data: tableList, error: tableError } = await supabase
+        .from('_metadata')
+        .select('tablename')
+        .eq('tableowner', 'postgres');
+      
+      console.log('[GoogleBI] テーブル一覧確認:', { tableList, tableError });
+      
+      // Google認証トークンを確認
+      const { data, error } = await supabase
+        .from('google_auth_tokens')
+        .select('*')
+        .eq('tenant_id', user?.id)
+        .single();
+
+      console.log('[GoogleBI] トークン確認結果:', { data, error, userId: user?.id });
+
+      if (error || !data) {
+        console.log('[GoogleBI] トークンなし、未連携状態');
+        setConnectionStatus('not_connected');
+        return;
+      }
+
+      // トークンの有効期限を確認
+      const expiryDate = new Date(data.expiry_date);
+      const now = new Date();
+      
+      setTokenInfo({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expiry_date: data.expiry_date,
+        updated_at: data.updated_at
+      });
+
+      if (now >= expiryDate) {
+        // トークンの有効期限切れ（ただし自動更新されるはず）
+        setConnectionStatus('error');
+        setErrorMessage('トークンの有効期限が切れています。再認証してください。');
+      } else {
+        setConnectionStatus('connected');
+        fetchAccounts();
+      }
+    } catch (error) {
+      console.error('認証状態確認エラー:', error);
+      setConnectionStatus('error');
+      setErrorMessage('認証状態の確認中にエラーが発生しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startGoogleAuth = async () => {
+    try {
+      setAuthenticating(true);
+      console.log('[GoogleBI] Google認証開始');
+      
+      // 開発環境では認証スキップパラメータを追加
+      const isDevEnv = process.env.NODE_ENV === 'development';
+      const authUrl = `/api/auth/google-auth${isDevEnv ? '?skipAuth=true' : ''}`;
+      
+      console.log('[GoogleBI] リクエストURL:', authUrl);
+      
+      // 認証URLを取得
+      const response = await fetch(authUrl);
+      
+      // レスポンスのステータスコードをチェック
+      if (!response.ok) {
+        console.error('[GoogleBI] API応答エラー:', response.status, response.statusText);
+        
+        try {
+          const errorData = await response.json();
+          setErrorMessage(`Google認証の開始に失敗しました: ${errorData.error || response.statusText}${errorData.details ? ` (${errorData.details})` : ''}`);
+        } catch (parseError) {
+          // JSONではない場合、テキストとして読み込む
+          const errorText = await response.text();
+          console.error('[GoogleBI] レスポンステキスト:', errorText);
+          setErrorMessage(`Google認証の開始に失敗しました: サーバーエラー (${response.status} ${response.statusText})`);
+        }
+        
+        setConnectionStatus('error');
+        setAuthenticating(false);
+        return;
+      }
+      
+      // 正常なレスポンスの処理
+      let data;
+      try {
+        data = await response.json();
+        console.log('[GoogleBI] 認証URL取得結果:', data);
+      } catch (parseError) {
+        console.error('[GoogleBI] JSONパースエラー:', parseError);
+        const errorText = await response.text();
+        console.error('[GoogleBI] レスポンステキスト:', errorText.substring(0, 200)); // 最初の200文字だけ表示
+        setErrorMessage('Google認証の開始に失敗しました: レスポンスが不正なJSONフォーマットです');
+        setConnectionStatus('error');
+        setAuthenticating(false);
+        return;
+      }
+      
+      if (data.error) {
+        console.error('Google認証エラー:', data);
+        setErrorMessage(`Google認証の開始に失敗しました: ${data.error}${data.details ? ` (${data.details})` : ''}`);
+        setConnectionStatus('error');
+        setAuthenticating(false);
+        return;
+      }
+      
+      if (data.url) {
+        // 認証ページに遷移
+        window.location.href = data.url;
+      } else {
+        throw new Error('認証URLの取得に失敗しました');
+      }
+    } catch (error) {
+      console.error('Google認証エラー:', error);
+      setErrorMessage(`Google認証の開始に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`);
+      setConnectionStatus('error');
+      setAuthenticating(false);
+    }
+  };
+
+  const disconnectGoogle = async () => {
+    try {
+      setLoading(true);
+      
+      // トークンを削除
+      await supabase
+        .from('google_auth_tokens')
+        .delete()
+        .eq('tenant_id', user?.id);
+      
+      setConnectionStatus('not_connected');
+      setTokenInfo(null);
+      setAccounts([]);
+    } catch (error) {
+      console.error('切断エラー:', error);
+      setErrorMessage('Googleアカウントの切断に失敗しました');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      setLoadingAccounts(true);
+      
+      // アカウント一覧を取得
+      const response = await fetch('/api/google-business/accounts');
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      setAccounts(data.accounts || []);
+    } catch (error) {
+      console.error('アカウント取得エラー:', error);
+      setErrorMessage('Google Business Profileアカウントの取得に失敗しました');
+    } finally {
+      setLoadingAccounts(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" my={4}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="h6" gutterBottom>
+        Google Business Profile連携
+      </Typography>
+      
+      {errorMessage && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {errorMessage}
+        </Alert>
+      )}
+      
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="body1" gutterBottom>
+          Google Business Profileと連携することで、Googleに投稿されたレビューの取得と返信が可能になります。
+        </Typography>
+      </Box>
+      
+      {connectionStatus === 'not_connected' ? (
+        <Button
+          variant="contained"
+          startIcon={<GoogleIcon />}
+          onClick={startGoogleAuth}
+          disabled={authenticating}
+        >
+          {authenticating ? <CircularProgress size={24} /> : 'Googleアカウントと連携する'}
+        </Button>
+      ) : connectionStatus === 'connected' ? (
+        <Box>
+          <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 2 }}>
+            Google Business Profileと連携しています
+          </Alert>
+          
+          {tokenInfo && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="body2" color="text.secondary">
+                最終更新日時: {new Date(tokenInfo.updated_at).toLocaleString('ja-JP')}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                有効期限: {new Date(tokenInfo.expiry_date).toLocaleString('ja-JP')}
+              </Typography>
+            </Box>
+          )}
+          
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" gutterBottom>
+              連携アカウント
+            </Typography>
+            
+            {loadingAccounts ? (
+              <CircularProgress size={24} />
+            ) : accounts.length > 0 ? (
+              <List>
+                {accounts.map((account) => (
+                  <ListItem key={account.name} divider>
+                    <ListItemText
+                      primary={account.displayName || account.name}
+                      secondary={account.accountName || ''}
+                    />
+                    <Chip 
+                      icon={<StorefrontIcon />} 
+                      label={`${account.locationCount || 0} 店舗`

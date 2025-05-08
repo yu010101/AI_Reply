@@ -65,7 +65,7 @@ export default function Dashboard() {
   const [recentReviews, setRecentReviews] = useState<RecentReview[]>([]);
 
   const fetchDashboardData = useCallback(async () => {
-    if (!user) return;
+        if (!user) return;
     setLoading(true);
     
     try {
@@ -82,12 +82,12 @@ export default function Dashboard() {
           .from('locations')
           .select('*', { count: 'exact', head: true })
           .eq('tenant_id', user.id),
-        
+
         // レビュー数
         supabase
           .from('reviews')
           .select('*', { count: 'exact', head: true }),
-        
+
         // 保留中のレビュー数
         supabase
           .from('reviews')
@@ -121,7 +121,7 @@ export default function Dashboard() {
         : 0;
 
       // 統計情報を設定
-      setStats({
+        setStats({
         totalLocations: locationsResult.count || 0,
         totalReviews: reviewsResult.count || 0,
         pendingReviews: pendingReviewsResult.count || 0,
@@ -139,11 +139,11 @@ export default function Dashboard() {
 
       // 最近のレビューを取得
       await fetchRecentReviews();
-    } catch (error) {
+      } catch (error) {
       console.error('ダッシュボードデータの取得に失敗しました:', error);
-    } finally {
-      setLoading(false);
-    }
+      } finally {
+        setLoading(false);
+      }
   }, [user]);
 
   useEffect(() => {
