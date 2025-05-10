@@ -54,23 +54,45 @@ const rateLimiter = {
   }
 };
 
-// キャッシュの有効期限（24時間）
-const CACHE_TTL = 24 * 60 * 60 * 1000;
+// キャッシュの有効期限（48時間）
+const CACHE_TTL = 48 * 60 * 60 * 1000;
 
-// キャッシュが有効かどうかを確認する関数
-const isCacheValid = (records: any[] | null): boolean => {
-  if (!records || records.length === 0) {
+// キャッシュの有効性をチェック
+function isCacheValid(cachedAccounts: any[] | null): boolean {
+  if (!cachedAccounts || cachedAccounts.length === 0) {
     return false;
   }
-  
-  // 最も新しいレコードのタイムスタンプを取得
-  const latestRecord = records[0];
-  const updatedAt = new Date(latestRecord.created_at).getTime();
+
   const now = Date.now();
-  
-  // 現在時刻とキャッシュ時刻の差がTTL以内かどうかを確認
-  return (now - updatedAt) < CACHE_TTL;
-};
+  const oldestCache = Math.min(...cachedAccounts.map(account => new Date(account.created_at).getTime()));
+  return now - oldestCache < CACHE_TTL;
+}
+
+// キャッシュの状態をチェック
+async function checkCacheStatus(userId: string) {
+  const { data: cachedAccounts, error: cacheError } = await supabase
+    .from('google_business_accounts')
+    .select('*')
+    .eq('tenant_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (cacheError) {
+    console.error('[GoogleBusinessAPI] キャッシュ取得エラー:', cacheError);
+    return { exists: false, valid: false };
+  }
+
+  const valid = isCacheValid(cachedAccounts);
+  console.log('[GoogleBusinessAPI] キャッシュ状態:', { 
+    exists: Boolean(cachedAccounts && cachedAccounts.length > 0),
+    valid,
+    count: cachedAccounts?.length || 0,
+    age: cachedAccounts && cachedAccounts.length > 0 
+      ? Math.round((Date.now() - new Date(cachedAccounts[0].created_at).getTime()) / (60 * 1000)) + '分前'
+      : 'なし'
+  });
+
+  return { exists: Boolean(cachedAccounts && cachedAccounts.length > 0), valid };
+}
 
 // アカウント情報をキャッシュに保存する関数
 async function saveAccountsToCache(userId: string, accounts: any[]): Promise<void> {

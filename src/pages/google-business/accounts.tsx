@@ -4,61 +4,36 @@ const [isRequesting, setIsRequesting] = useState(false);
 const requestTimeoutRef = useRef<NodeJS.Timeout>();
 
 const fetchAccounts = async () => {
+  if (isRequesting) {
+    console.log('[GoogleBusinessAPI] リクエスト処理中です');
+    return;
+  }
+
+  if (requestTimeoutRef.current) {
+    console.log('[GoogleBusinessAPI] 前回のリクエストから1分経過していません');
+    return;
+  }
+
   try {
-    // 既にリクエスト中の場合は処理をスキップ
-    if (isRequesting) {
-      console.log('[GoogleBusinessAccounts] リクエスト中です。処理をスキップします');
-      return;
-    }
-
-    // 前回のリクエストから1分以内の場合は処理をスキップ
-    if (requestTimeoutRef.current) {
-      console.log('[GoogleBusinessAccounts] 前回のリクエストから1分以内です。処理をスキップします');
-      return;
-    }
-
-    console.log('[GoogleBusinessAccounts] アカウント情報の取得を開始します');
-    setLoading(true);
-    setError(null);
     setIsRequesting(true);
-
     const response = await fetch('/api/google-business/accounts');
-    console.log('[GoogleBusinessAccounts] API応答:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
-    });
+    const data = await response.json();
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('[GoogleBusinessAccounts] APIエラー:', {
-        status: response.status,
-        error: errorData
-      });
-      throw new Error(errorData.message || 'アカウント情報の取得に失敗しました');
+    if (response.status === 429) {
+      console.log('[GoogleBusinessAPI] レート制限により待機します:', data.retryAfter);
+      requestTimeoutRef.current = setTimeout(() => {
+        requestTimeoutRef.current = undefined;
+      }, data.retryAfter * 1000);
+      return;
     }
 
-    const data = await response.json();
-    console.log('[GoogleBusinessAccounts] 取得したアカウント情報:', {
-      count: data.length,
-      accounts: data
-    });
-
-    setAccounts(data);
-
-    // 1分間のクールダウンを設定
-    requestTimeoutRef.current = setTimeout(() => {
-      requestTimeoutRef.current = undefined;
-    }, 60000);
-
-  } catch (err: any) {
-    console.error('[GoogleBusinessAccounts] エラー発生:', {
-      message: err.message,
-      stack: err.stack
-    });
-    setError(err.message);
+    if (data.accounts) {
+      setAccounts(data.accounts);
+    }
+  } catch (error) {
+    console.error('[GoogleBusinessAPI] エラー:', error);
+    setError('アカウント情報の取得に失敗しました');
   } finally {
-    setLoading(false);
     setIsRequesting(false);
   }
 };

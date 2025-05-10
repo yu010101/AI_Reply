@@ -6,141 +6,342 @@ import { getCache, setCache, CACHE_TTL } from './cache';
 
 // API制限用の設定
 const API_LIMITS = {
-  MAX_REQUESTS_PER_MINUTE: 60,
+  MAX_REQUESTS_PER_MINUTE: 3,     // 1分あたりのリクエスト数を3に制限
   MAX_REQUESTS_PER_DAY: 5000,
-  COOLDOWN_TIME: 60 * 1000, // 1分のクールダウン時間（ミリ秒）
-  MAX_RETRIES: 5, // 最大リトライ回数
-  INITIAL_RETRY_DELAY: 1000, // 初回リトライ時の遅延（ミリ秒）
-  MAX_RETRY_DELAY: 30000, // 最大リトライ遅延（30秒）
-  QUOTA_BACKOFF_TIME: 60 * 1000, // クォータ制限時の待機時間（1分）
-  QUOTA_ERROR_PATTERN: /Quota exceeded/i // クォータエラーの検出パターン
+  COOLDOWN_TIME: 1800 * 1000,     // クールダウン時間を30分に延長
+  MAX_RETRIES: 3,                 // 最大リトライ回数
+  INITIAL_RETRY_DELAY: 120000,    // 初回リトライ時の遅延を2分に設定
+  MAX_RETRY_DELAY: 3600000,       // 最大リトライ遅延を1時間に設定
+  QUOTA_BACKOFF_TIME: 1800 * 1000, // クォータ制限時の待機時間を30分に設定
+  QUOTA_ERROR_PATTERN: /Quota exceeded/i
 };
 
-// キャッシュキー
-const CACHE_KEYS = {
-  ACCOUNTS: (tenantId: string) => `accounts:${tenantId}`,
-  LOCATIONS: (tenantId: string, accountId: string) => `locations:${tenantId}:${accountId}`,
-  REVIEWS: (tenantId: string, locationId: string, pageSize: number, pageToken?: string) => 
-    `reviews:${tenantId}:${locationId}:${pageSize}:${pageToken || 'initial'}`
+// クライアントIDの設定
+const CLIENT_CONFIG = {
+  MAX_CLIENTS: 5,           // 最大クライアント数
+  ROTATION_INTERVAL: 300000, // ローテーション間隔を5分に短縮
+  COOLDOWN_PERIOD: 1800000,  // クールダウン期間を30分に延長
+  MIN_USAGE_INTERVAL: 30000, // 同一クライアントの最小使用間隔（30秒）
+  MAX_CONSECUTIVE_FAILURES: 3, // 連続失敗の最大回数を3回に制限
+  INITIAL_BACKOFF: 300000,   // 初回バックオフ時間（5分）
+  MAX_BACKOFF: 3600000,    // 最大バックオフ時間（1時間）
+  GLOBAL_COOLDOWN: 3600000, // グローバルクールダウン時間（1時間）
+  REQUEST_INTERVAL: 30000   // リクエスト間隔（30秒）
 };
 
-// レート制限のための状態管理
-class RateLimiter {
-  private requestCount: number = 0;
-  private dailyRequestCount: number = 0;
-  private lastResetTime: number = Date.now();
-  private dailyResetTime: number = new Date().setHours(0, 0, 0, 0) + 24 * 60 * 60 * 1000; // 翌日の0時
-  private isLimited: boolean = false;
-  private quotaLimitedUntil: number = 0;
-  private retryAttempts: number = 0;
-  private clientIdIndex: number = 0;
-  private clientIds: string[] = [];
+// キャッシュの設定
+const CACHE_CONFIG = {
+  TTL: {
+    SHORT: 5 * 60 * 1000,    // 5分
+    MEDIUM: 30 * 60 * 1000,  // 30分
+    LONG: 24 * 60 * 60 * 1000 // 24時間
+  },
+  KEYS: {
+    ACCOUNTS: (tenantId: string) => `accounts:${tenantId}`,
+    LOCATIONS: (tenantId: string, accountId: string) => `locations:${tenantId}:${accountId}`,
+    REVIEWS: (tenantId: string, locationId: string, pageSize: number, pageToken?: string) => 
+      `reviews:${tenantId}:${locationId}:${pageSize}:${pageToken || 'initial'}`
+  },
+  STRATEGIES: {
+    ACCOUNTS: {
+      TTL: 30 * 60 * 1000,    // 30分
+      PRIORITY: 'high'
+    },
+    LOCATIONS: {
+      TTL: 30 * 60 * 1000,    // 30分
+      PRIORITY: 'high'
+    },
+    REVIEWS: {
+      TTL: 5 * 60 * 1000,     // 5分
+      PRIORITY: 'low'
+    }
+  }
+};
+
+// バッチ処理の設定
+const BATCH_CONFIG = {
+  MAX_BATCH_SIZE: 1,         // 1回のバッチで処理する最大リクエスト数を1に削減
+  BATCH_DELAY: 120000,       // バッチ間の待機時間を2分に延長
+  MAX_CONCURRENT_BATCHES: 1, // 同時に実行できるバッチの最大数
+  RETRY_DELAY: 120000,       // エラー時のリトライ待機時間を2分に延長
+  MAX_RETRIES: 3            // 最大リトライ回数
+};
+
+// バッチ処理用のキュー
+class BatchQueue {
+  private queue: Array<() => Promise<any>> = [];
+  private processing: boolean = false;
+  private activeBatches: number = 0;
+  private retryCount: number = 0;
+
+  async add<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const result = await task();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      this.process();
+    });
+  }
+
+  private async process() {
+    if (this.processing || this.queue.length === 0) return;
+    this.processing = true;
+
+    while (this.queue.length > 0 && this.activeBatches < BATCH_CONFIG.MAX_CONCURRENT_BATCHES) {
+      const batch = this.queue.splice(0, BATCH_CONFIG.MAX_BATCH_SIZE);
+      this.activeBatches++;
+
+      try {
+        console.log(`[BatchQueue] バッチ処理開始: ${batch.length}件のリクエスト`);
+        await Promise.all(batch.map(task => task()));
+        this.retryCount = 0; // 成功したらリトライカウントをリセット
+        console.log(`[BatchQueue] バッチ処理完了: ${batch.length}件のリクエスト`);
+      } catch (error) {
+        console.error('[BatchQueue] バッチ処理エラー:', error);
+        this.retryCount++;
+        
+        if (this.retryCount <= BATCH_CONFIG.MAX_RETRIES) {
+          console.log(`[BatchQueue] リトライ ${this.retryCount}/${BATCH_CONFIG.MAX_RETRIES}: ${BATCH_CONFIG.RETRY_DELAY}ms後に再試行します`);
+          await new Promise(resolve => setTimeout(resolve, BATCH_CONFIG.RETRY_DELAY));
+          // 失敗したバッチを再度キューに追加
+          this.queue.unshift(...batch);
+        } else {
+          console.error('[BatchQueue] 最大リトライ回数に達しました');
+          // エラーを上位に伝播
+          throw error;
+        }
+      } finally {
+        this.activeBatches--;
+        // バッチ間の待機
+        if (this.queue.length > 0) {
+          console.log(`[BatchQueue] 次のバッチまで ${BATCH_CONFIG.BATCH_DELAY}ms 待機します`);
+          await new Promise(resolve => setTimeout(resolve, BATCH_CONFIG.BATCH_DELAY));
+        }
+      }
+    }
+
+    this.processing = false;
+    if (this.queue.length > 0) {
+      setTimeout(() => this.process(), BATCH_CONFIG.BATCH_DELAY);
+    }
+  }
+}
+
+// バッチキューインスタンス
+const batchQueue = new BatchQueue();
+
+// APIリクエストをバッチ処理で実行
+async function executeBatchRequest<T>(apiCall: () => Promise<T>): Promise<T> {
+  return batchQueue.add(apiCall);
+}
+
+interface Client {
+  id: string;
+  secret: string;
+  lastUsed: number;
+  quotaLimited: boolean;
+  quotaLimitedUntil: number;
+  consecutiveFailures: number;
+  requestCount: number;
+  quotaResetTime: number;
+}
+
+class ClientManager {
+  private clients: Client[] = [];
+  private currentIndex: number = 0;
+  private lastRotation: number = 0;
+  private rotationInterval: number = 5 * 60 * 1000; // 5分
 
   constructor() {
-    // 日次リセットタイマーを設定
-    setInterval(() => {
-      const now = Date.now();
-      if (now >= this.dailyResetTime) {
-        this.dailyRequestCount = 0;
-        this.dailyResetTime = new Date().setHours(0, 0, 0, 0) + 24 * 60 * 60 * 1000;
-      }
-    }, 60 * 1000); // 1分ごとにチェック
-
-    // 環境変数から複数のクライアントIDを読み込み
-    this.loadClientIds();
+    this.initializeClients();
   }
 
-  // クライアントIDのローテーション
-  private loadClientIds() {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (clientId) {
-      this.clientIds.push(clientId);
-    }
+  private initializeClients() {
+    console.log('[ClientManager] クライアントIDの初期化を開始します');
     
-    // 追加のクライアントIDを環境変数から読み込む
+    // 環境変数の状態をログ出力
+    console.log('[ClientManager] 環境変数の状態:', {
+      GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ? '設定済み' : '未設定',
+      GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ? '設定済み' : '未設定',
+      GOOGLE_CLIENT_ID_2: process.env.GOOGLE_CLIENT_ID_2 ? '設定済み' : '未設定',
+      GOOGLE_CLIENT_SECRET_2: process.env.GOOGLE_CLIENT_SECRET_2 ? '設定済み' : '未設定',
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+      NODE_ENV: process.env.NODE_ENV
+    });
+
+    // メインクライアントIDの追加
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      const mainClientId = process.env.GOOGLE_CLIENT_ID;
+      console.log('[ClientManager] メインクライアントIDを追加:', mainClientId.substring(0, 10) + '....com');
+      this.clients.push({
+        id: mainClientId,
+        secret: process.env.GOOGLE_CLIENT_SECRET,
+        lastUsed: 0,
+        quotaLimited: false,
+        quotaLimitedUntil: 0,
+        consecutiveFailures: 0,
+        requestCount: 0,
+        quotaResetTime: 0
+      });
+    }
+
+    // 追加クライアントIDの追加（重複チェックを改善）
     for (let i = 2; i <= 5; i++) {
-      const additionalClientId = process.env[`GOOGLE_CLIENT_ID_${i}`];
-      const additionalClientSecret = process.env[`GOOGLE_CLIENT_SECRET_${i}`];
-      if (additionalClientId && additionalClientSecret) {
-        this.clientIds.push(additionalClientId);
+      const clientId = process.env[`GOOGLE_CLIENT_ID_${i}`];
+      const clientSecret = process.env[`GOOGLE_CLIENT_SECRET_${i}`];
+      
+      if (clientId && clientSecret) {
+        // 重複チェック（より詳細なログを追加）
+        const isDuplicate = this.clients.some(client => {
+          const isDuplicate = client.id === clientId;
+          if (isDuplicate) {
+            console.log(`[ClientManager] 重複検出: クライアントID ${i} は既に登録済みのIDと重複しています`);
+            console.log(`[ClientManager] 重複詳細:`, {
+              newClientId: clientId.substring(0, 10) + '....com',
+              existingClientId: client.id.substring(0, 10) + '....com'
+            });
+          }
+          return isDuplicate;
+        });
+
+        if (isDuplicate) {
+          console.log(`[ClientManager] 警告: クライアントID ${i} は重複しているためスキップします`);
+          continue;
+        }
+        
+        // クライアントIDの形式チェック
+        if (!clientId.includes('.apps.googleusercontent.com')) {
+          console.log(`[ClientManager] 警告: クライアントID ${i} の形式が不正です`);
+          continue;
+        }
+
+        // クライアントシークレットの形式チェック
+        if (!clientSecret.startsWith('GOCSPX-')) {
+          console.log(`[ClientManager] 警告: クライアントシークレット ${i} の形式が不正です`);
+          continue;
+        }
+        
+        console.log(`[ClientManager] 追加クライアントID ${i} を追加:`, clientId.substring(0, 10) + '....com');
+        this.clients.push({
+          id: clientId,
+          secret: clientSecret,
+          lastUsed: 0,
+          quotaLimited: false,
+          quotaLimitedUntil: 0,
+          consecutiveFailures: 0,
+          requestCount: 0,
+          quotaResetTime: 0
+        });
+      } else {
+        console.log(`[ClientManager] 追加クライアントID ${i} が見つかりません`);
       }
     }
 
-    console.log(`[RateLimiter] ${this.clientIds.length}個のクライアントIDを読み込みました`);
+    // 最終的なクライアントIDの状態をログ出力
+    console.log('[ClientManager] クライアントIDの最終状態:', {
+      totalClients: this.clients.length,
+      clientIds: this.clients.map(client => ({
+        id: client.id.substring(0, 10) + '....com',
+        lastUsed: new Date(client.lastUsed).toISOString(),
+        quotaLimited: client.quotaLimited
+      }))
+    });
   }
 
-  // 次のクライアントIDとシークレットを取得
-  getNextClientCredentials(): { clientId: string, clientSecret: string } {
-    if (this.clientIds.length <= 1) {
-      // デフォルトのクレデンシャルを返す
-      return { 
-        clientId: process.env.GOOGLE_CLIENT_ID || '',
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET || ''
-      };
-    }
-
-    // クライアントIDをローテーション
-    this.clientIdIndex = (this.clientIdIndex + 1) % this.clientIds.length;
-    const nextClientId = this.clientIds[this.clientIdIndex];
-    
-    let clientSecret = '';
-    if (this.clientIdIndex === 0) {
-      clientSecret = process.env.GOOGLE_CLIENT_SECRET || '';
-    } else {
-      clientSecret = process.env[`GOOGLE_CLIENT_SECRET_${this.clientIdIndex + 1}`] || '';
-    }
-
-    console.log(`[RateLimiter] クライアントID ${this.clientIdIndex + 1}/${this.clientIds.length} を使用します`);
-    return { clientId: nextClientId, clientSecret };
-  }
-
-  async recordRequest(): Promise<boolean> {
+  getNextClient(): { id: string; secret: string } {
     const now = Date.now();
-    
-    // クォータ制限中の場合
-    if (now < this.quotaLimitedUntil) {
-      this.isLimited = true;
-      const remainingTime = Math.ceil((this.quotaLimitedUntil - now) / 1000);
-      console.log(`[RateLimiter] クォータ制限中: あと${remainingTime}秒待機します`);
-      return false;
-    }
-    
-    // 1分ごとにリセット
-    if (now - this.lastResetTime >= 60 * 1000) {
-      this.requestCount = 0;
-      this.lastResetTime = now;
-      this.isLimited = false;
+    console.log(`[ClientManager] クライアント選択開始: 現在のインデックス=${this.currentIndex}, クライアント数=${this.clients.length}`);
+
+    // ローテーション間隔をチェック
+    if (now - this.lastRotation >= this.rotationInterval) {
+      this.currentIndex = (this.currentIndex + 1) % this.clients.length;
+      this.lastRotation = now;
+      console.log(`[ClientManager] ローテーション間隔到達: 新しいインデックス=${this.currentIndex}`);
     }
 
-    // リミットチェック
-    if (this.requestCount >= API_LIMITS.MAX_REQUESTS_PER_MINUTE || 
-        this.dailyRequestCount >= API_LIMITS.MAX_REQUESTS_PER_DAY) {
-      this.isLimited = true;
+    // 現在のクライアントを取得
+    let selectedClient = this.clients[this.currentIndex];
+    console.log(`[ClientManager] 現在のクライアント状態: ID=${selectedClient.id}, クォータ制限=${selectedClient.quotaLimited}, 連続失敗=${selectedClient.consecutiveFailures}`);
+
+    // クライアントの使用間隔をチェック
+    if (now - selectedClient.lastUsed < CLIENT_CONFIG.MIN_USAGE_INTERVAL) {
+      console.log(`[ClientManager] 最小使用間隔未到達: 経過時間=${now - selectedClient.lastUsed}ms, 必要時間=${CLIENT_CONFIG.MIN_USAGE_INTERVAL}ms`);
+      // 別のクライアントを探す
+      for (let i = 0; i < this.clients.length; i++) {
+        const nextIndex = (this.currentIndex + i) % this.clients.length;
+        const nextClient = this.clients[nextIndex];
+        if (now - nextClient.lastUsed >= CLIENT_CONFIG.MIN_USAGE_INTERVAL) {
+          this.currentIndex = nextIndex;
+          selectedClient = nextClient;
+          console.log(`[ClientManager] 使用間隔のためクライアントIDを切り替え: 新しいインデックス=${this.currentIndex}`);
+          break;
+        }
+      }
+    }
+
+    // クォータ制限をチェック
+    if (selectedClient.quotaLimited && now < selectedClient.quotaLimitedUntil) {
+      console.log(`[ClientManager] クォータ制限中: 解除まで${selectedClient.quotaLimitedUntil - now}ms`);
+      // 別のクライアントを探す
+      for (let i = 0; i < this.clients.length; i++) {
+        const nextIndex = (this.currentIndex + i) % this.clients.length;
+        const nextClient = this.clients[nextIndex];
+        if (!nextClient.quotaLimited || now >= nextClient.quotaLimitedUntil) {
+          this.currentIndex = nextIndex;
+          selectedClient = nextClient;
+          console.log(`[ClientManager] クォータ制限のためクライアントIDを切り替え: 新しいインデックス=${this.currentIndex}`);
+          break;
+        }
+      }
+    }
+
+    // 使用時間を更新
+    selectedClient.lastUsed = now;
+    console.log(`[ClientManager] 選択されたクライアント: ID=${selectedClient.id}, 最終使用時間=${new Date(now).toISOString()}`);
+    return { id: selectedClient.id, secret: selectedClient.secret };
+  }
+
+  setQuotaLimited(clientId: string) {
+    const client = this.clients.find(c => c.id === clientId);
+    if (client) {
+      client.quotaLimited = true;
+      client.consecutiveFailures++;
       
-      // リミット超過をログに記録
-      await supabase
-        .from('api_limit_logs')
-        .insert({
-          api_name: 'Google Business Profile API',
-          limit_type: this.requestCount >= API_LIMITS.MAX_REQUESTS_PER_MINUTE ? 'minute' : 'daily',
-          request_count: this.requestCount >= API_LIMITS.MAX_REQUESTS_PER_MINUTE ? this.requestCount : this.dailyRequestCount,
-          limit_value: this.requestCount >= API_LIMITS.MAX_REQUESTS_PER_MINUTE ? API_LIMITS.MAX_REQUESTS_PER_MINUTE : API_LIMITS.MAX_REQUESTS_PER_DAY,
-          timestamp: new Date().toISOString()
+      // 連続失敗回数に応じて待機時間を指数関数的に延長
+      const backoffTime = Math.min(
+        CLIENT_CONFIG.INITIAL_BACKOFF * Math.pow(2, client.consecutiveFailures - 1),
+        CLIENT_CONFIG.MAX_BACKOFF
+      );
+      
+      // 連続失敗回数が上限に達した場合、より長い待機時間を設定
+      if (client.consecutiveFailures >= CLIENT_CONFIG.MAX_CONSECUTIVE_FAILURES) {
+        // すべてのクライアントにグローバルクールダウンを適用
+        this.clients.forEach(c => {
+          c.quotaLimited = true;
+          c.quotaLimitedUntil = Date.now() + CLIENT_CONFIG.GLOBAL_COOLDOWN;
         });
+        console.log(`[ClientManager] 連続失敗回数が上限(${CLIENT_CONFIG.MAX_CONSECUTIVE_FAILURES}回)に達しました。グローバルクールダウンを設定します。`);
+      } else {
+        client.quotaLimitedUntil = Date.now() + backoffTime;
+      }
       
-      return false;
+      console.log(`[ClientManager] クライアントID ${clientId} にクォータ制限を設定しました（${new Date(client.quotaLimitedUntil).toISOString()}まで、連続失敗: ${client.consecutiveFailures}回、待機時間: ${backoffTime}ms）`);
     }
-
-    // リクエストカウントを増加
-    this.requestCount++;
-    this.dailyRequestCount++;
-    return true;
   }
 
-  isRateLimited(): boolean {
-    const now = Date.now();
-    // クォータ制限またはレート制限のいずれかがアクティブ
-    return this.isLimited || now < this.quotaLimitedUntil;
+  resetQuotaLimited(clientId: string) {
+    const client = this.clients.find(c => c.id === clientId);
+    if (client) {
+      client.quotaLimited = false;
+      client.quotaLimitedUntil = 0;
+      client.consecutiveFailures = 0;
+      console.log(`[ClientManager] クライアントID ${clientId} のクォータ制限を解除しました`);
+    }
   }
 
   // API呼び出しを行う関数をラップして自動リトライを実装
@@ -150,107 +351,105 @@ class RateLimiter {
 
     while (retryCount <= API_LIMITS.MAX_RETRIES) {
       try {
-        // APIリクエスト記録
-        if (!await this.recordRequest()) {
-          // レート制限中の場合は待機
-          await this.waitForCooldown();
-          continue; // 再試行
-        }
-
+        // リクエスト間隔を確保
+        await new Promise(resolve => setTimeout(resolve, CLIENT_CONFIG.REQUEST_INTERVAL));
+        
         // API呼び出しを実行
         const result = await apiCall();
         
         // 成功したらリトライカウントをリセット
-        this.retryAttempts = 0;
         return result;
       } catch (error: any) {
         lastError = error;
         
         // クォータエラーかどうか確認
         if (error.message && API_LIMITS.QUOTA_ERROR_PATTERN.test(error.message)) {
-          console.log(`[RateLimiter] クォータ制限エラーを検出しました: ${error.message}`);
-          this.setQuotaLimited();
+          console.log(`[ClientManager] クォータ制限エラーを検出しました: ${error.message}`);
+          const currentClient = this.clients[this.currentIndex];
+          this.setQuotaLimited(currentClient.id);
           
-          // 複数のクライアントIDがある場合は切り替える
-          if (this.clientIds.length > 1) {
-            this.getNextClientCredentials();
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒待機
-            continue; // 別のクライアントIDで再試行
-          }
-          
-          // クォータ制限の場合は待機してから再試行
-          await this.waitForCooldown();
+          // 別のクライアントを試す
+          this.getNextClient();
+          await new Promise(resolve => setTimeout(resolve, CLIENT_CONFIG.REQUEST_INTERVAL));
           continue;
         }
         
         // その他のエラーの場合、指数バックオフで再試行
         retryCount++;
         if (retryCount <= API_LIMITS.MAX_RETRIES) {
-          // 指数バックオフ計算
           const delay = Math.min(
             API_LIMITS.INITIAL_RETRY_DELAY * Math.pow(2, retryCount - 1),
             API_LIMITS.MAX_RETRY_DELAY
           );
-          console.log(`[RateLimiter] リトライ ${retryCount}/${API_LIMITS.MAX_RETRIES}: ${delay}ms後に再試行します`);
+          console.log(`[ClientManager] リトライ ${retryCount}/${API_LIMITS.MAX_RETRIES}: ${delay}ms後に再試行します`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
     
     // 最大リトライ回数に達した場合
-    console.error(`[RateLimiter] 最大リトライ回数(${API_LIMITS.MAX_RETRIES})に達しました`);
+    console.error(`[ClientManager] 最大リトライ回数(${API_LIMITS.MAX_RETRIES})に達しました`);
     throw lastError || new Error('APIリクエストが繰り返し失敗しました');
   }
 
-  setQuotaLimited() {
-    // クォータ制限が発生した場合、一定時間リクエストをブロック
-    this.quotaLimitedUntil = Date.now() + API_LIMITS.QUOTA_BACKOFF_TIME;
-    console.log(`[RateLimiter] クォータ制限を設定しました。${new Date(this.quotaLimitedUntil).toISOString()}まで待機します`);
-  }
-
-  async waitForCooldown(): Promise<void> {
+  private async rotateClient() {
     const now = Date.now();
-    
-    // クォータ制限がアクティブな場合
-    if (now < this.quotaLimitedUntil) {
-      const waitTime = Math.min(this.quotaLimitedUntil - now, API_LIMITS.QUOTA_BACKOFF_TIME);
-      console.log(`[RateLimiter] クォータ制限のため ${waitTime}ms 待機します`);
-      return new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-    
-    // 通常のレート制限の場合
-    if (this.isLimited) {
-      console.log(`[RateLimiter] レート制限のため ${API_LIMITS.COOLDOWN_TIME}ms 待機します`);
-      return new Promise(resolve => setTimeout(resolve, API_LIMITS.COOLDOWN_TIME));
-    }
-  }
+    console.log('[ClientManager] クライアントローテーション開始:', {
+      currentClientIndex: this.currentIndex,
+      totalClients: this.clients.length,
+      lastRotation: this.lastRotation,
+      timeSinceLastRotation: now - this.lastRotation
+    });
 
-  getRetryAfter(): number {
-    const now = Date.now();
-    
-    // クォータ制限中の場合
-    if (now < this.quotaLimitedUntil) {
-      return Math.ceil((this.quotaLimitedUntil - now) / 1000);
+    // 現在のクライアントの使用状況をログ
+    if (this.clients[this.currentIndex]) {
+      console.log('[ClientManager] 現在のクライアント使用状況:', {
+        clientId: this.clients[this.currentIndex].id.substring(0, 10) + '....com',
+        requestCount: this.clients[this.currentIndex].requestCount,
+        lastUsed: this.clients[this.currentIndex].lastUsed,
+        quotaResetTime: this.clients[this.currentIndex].quotaResetTime
+      });
     }
-    
-    // 通常のレート制限の場合
-    return Math.ceil(API_LIMITS.COOLDOWN_TIME / 1000);
+
+    // ローテーション条件のチェック
+    const shouldRotate = now - this.lastRotation >= this.rotationInterval;
+    console.log('[ClientManager] ローテーション条件:', {
+      shouldRotate,
+      timeSinceLastRotation: now - this.lastRotation,
+      rotationInterval: this.rotationInterval
+    });
+
+    if (shouldRotate) {
+      this.currentIndex = (this.currentIndex + 1) % this.clients.length;
+      this.lastRotation = now;
+      console.log('[ClientManager] クライアントをローテーション:', {
+        newClientIndex: this.currentIndex,
+        newClientId: this.clients[this.currentIndex].id.substring(0, 10) + '....com'
+      });
+    }
   }
 }
 
-// シングルトンインスタンス
-const rateLimiter = new RateLimiter();
+// クライアントマネージャーのインスタンス
+const clientManager = new ClientManager();
 
 // OAuth2クライアントの作成
 export const createOAuth2Client = (): OAuth2Client => {
-  // クライアントIDとシークレットをローテーション
-  const { clientId, clientSecret } = rateLimiter.getNextClientCredentials();
-  
-  return new google.auth.OAuth2(
-    clientId,
-    clientSecret,
-    `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-callback`
-  );
+  try {
+    const { id, secret } = clientManager.getNextClient();
+    console.log('[ClientManager] OAuth2クライアントを作成:', {
+      clientId: `${id.substring(0, 8)}...${id.substring(id.length - 4)}`,
+      redirectUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-callback`
+    });
+    return new google.auth.OAuth2(
+      id,
+      secret,
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google-callback`
+    );
+  } catch (error) {
+    console.error('[ClientManager] OAuth2クライアントの作成に失敗:', error);
+    throw error;
+  }
 };
 
 // トークンを取得
@@ -324,86 +523,90 @@ export const initializeBusinessProfileApi = async (tenantId: string) => {
   return google.mybusinessqanda({ version: 'v1', auth });
 };
 
-// アカウント一覧を取得（キャッシュ機能付き）
+// アカウント一覧を取得（バッチ処理対応）
 export const getAccounts = async (tenantId: string, useCache: boolean = true): Promise<any[]> => {
   // キャッシュから取得を試みる
   if (useCache) {
-    const cacheKey = CACHE_KEYS.ACCOUNTS(tenantId);
-    const cachedAccounts = await getCache<any[]>(cacheKey);
+    const cacheKey = CACHE_CONFIG.KEYS.ACCOUNTS(tenantId);
+    const cachedAccounts = await fetchCache<any[]>(cacheKey, 'ACCOUNTS');
     if (cachedAccounts) {
       console.log(`[Cache] ${cacheKey} からキャッシュデータを使用します`);
       return cachedAccounts;
     }
   }
 
-  // キャッシュにない場合はAPIから取得
-  const accounts = await rateLimiter.executeWithRetry(async () => {
-    const auth = createOAuth2Client();
-    const { token, isValid } = await getAuthToken(tenantId);
-    
-    if (!isValid) {
-      throw new Error('Google認証が必要です');
-    }
-    
-    auth.setCredentials({ access_token: token });
-    const businessAccountsService = google.mybusinessaccountmanagement({ version: 'v1', auth });
-    
-    const response = await businessAccountsService.accounts.list();
-    return response.data.accounts || [];
+  // キャッシュにない場合はAPIから取得（バッチ処理を使用）
+  const accounts = await executeBatchRequest(async () => {
+    return clientManager.executeWithRetry(async () => {
+      const auth = createOAuth2Client();
+      const { token, isValid } = await getAuthToken(tenantId);
+      
+      if (!isValid) {
+        throw new Error('Google認証が必要です');
+      }
+      
+      auth.setCredentials({ access_token: token });
+      const businessAccountsService = google.mybusinessaccountmanagement({ version: 'v1', auth });
+      
+      const response = await businessAccountsService.accounts.list();
+      return response.data.accounts || [];
+    });
   });
 
-  // 取得したデータをキャッシュに保存（1時間有効）
+  // 取得したデータをキャッシュに保存
   if (useCache && accounts.length > 0) {
-    const cacheKey = CACHE_KEYS.ACCOUNTS(tenantId);
-    await setCache(cacheKey, accounts, CACHE_TTL.MEDIUM);
+    const cacheKey = CACHE_CONFIG.KEYS.ACCOUNTS(tenantId);
+    await storeCache(cacheKey, accounts, 'ACCOUNTS');
     console.log(`[Cache] ${cacheKey} にデータをキャッシュしました`);
   }
 
   return accounts;
 };
 
-// 場所一覧を取得（キャッシュ機能付き）
+// 場所一覧を取得（バッチ処理対応）
 export const getLocations = async (tenantId: string, accountId: string, useCache: boolean = true): Promise<any[]> => {
   // キャッシュから取得を試みる
   if (useCache) {
-    const cacheKey = CACHE_KEYS.LOCATIONS(tenantId, accountId);
-    const cachedLocations = await getCache<any[]>(cacheKey);
+    const cacheKey = CACHE_CONFIG.KEYS.LOCATIONS(tenantId, accountId);
+    const cachedLocations = await fetchCache<any[]>(cacheKey, 'LOCATIONS');
     if (cachedLocations) {
       console.log(`[Cache] ${cacheKey} からキャッシュデータを使用します`);
       return cachedLocations;
     }
   }
 
-  // キャッシュにない場合はAPIから取得
-  const locations = await rateLimiter.executeWithRetry(async () => {
-    const auth = createOAuth2Client();
-    const { token, isValid } = await getAuthToken(tenantId);
-    
-    if (!isValid) {
-      throw new Error('Google認証が必要です');
-    }
-    
-    auth.setCredentials({ access_token: token });
-    const businessLocationsService = google.mybusinessbusinessinformation({ version: 'v1', auth });
-    
-    const response = await businessLocationsService.accounts.locations.list({
-      parent: `accounts/${accountId}`
+  // キャッシュにない場合はAPIから取得（バッチ処理を使用）
+  const locations = await executeBatchRequest(async () => {
+    return clientManager.executeWithRetry(async () => {
+      const auth = createOAuth2Client();
+      const { token, isValid } = await getAuthToken(tenantId);
+      
+      if (!isValid) {
+        throw new Error('Google認証が必要です');
+      }
+      
+      auth.setCredentials({ access_token: token });
+      const businessLocationsService = google.mybusinessbusinessinformation({ version: 'v1', auth });
+      
+      const response = await businessLocationsService.accounts.locations.list({
+        parent: `accounts/${accountId}`
+      });
+      
+      return response.data.locations || [];
     });
-    
-    return response.data.locations || [];
   });
 
-  // 取得したデータをキャッシュに保存（1時間有効）
+  // 取得したデータをキャッシュに保存
   if (useCache && locations.length > 0) {
-    const cacheKey = CACHE_KEYS.LOCATIONS(tenantId, accountId);
-    await setCache(cacheKey, locations, CACHE_TTL.MEDIUM);
+    const cacheKey = CACHE_CONFIG.KEYS.LOCATIONS(tenantId, accountId);
+    await storeCache(cacheKey, locations, 'LOCATIONS');
     console.log(`[Cache] ${cacheKey} にデータをキャッシュしました`);
   }
 
   return locations;
 };
 
-// レビュー一覧を取得（キャッシュ機能付き）
+// レビュー一覧を取得（バッチ処理対応）
 export const getReviews = async (
   tenantId: string, 
   locationId: string, 
@@ -413,78 +616,82 @@ export const getReviews = async (
 ): Promise<any> => {
   // キャッシュから取得を試みる
   if (useCache) {
-    const cacheKey = CACHE_KEYS.REVIEWS(tenantId, locationId, pageSize, pageToken);
-    const cachedReviews = await getCache<any>(cacheKey);
+    const cacheKey = CACHE_CONFIG.KEYS.REVIEWS(tenantId, locationId, pageSize, pageToken);
+    const cachedReviews = await fetchCache<any>(cacheKey, 'REVIEWS');
     if (cachedReviews) {
       console.log(`[Cache] ${cacheKey} からキャッシュデータを使用します`);
       return cachedReviews;
     }
   }
 
-  // キャッシュにない場合はAPIから取得
-  const reviews = await rateLimiter.executeWithRetry(async () => {
-    const auth = createOAuth2Client();
-    const { token, isValid } = await getAuthToken(tenantId);
-    
-    if (!isValid) {
-      throw new Error('Google認証が必要です');
-    }
-    
-    auth.setCredentials({ access_token: token });
-    const businessReviewsService = google.mybusinessplaceactions({ version: 'v1', auth });
-    
-    const response = await businessReviewsService.locations.reviews.list({
-      parent: locationId,
-      pageSize,
-      pageToken
+  // キャッシュにない場合はAPIから取得（バッチ処理を使用）
+  const reviews = await executeBatchRequest(async () => {
+    return clientManager.executeWithRetry(async () => {
+      const auth = createOAuth2Client();
+      const { token, isValid } = await getAuthToken(tenantId);
+      
+      if (!isValid) {
+        throw new Error('Google認証が必要です');
+      }
+      
+      auth.setCredentials({ access_token: token });
+      const businessReviewsService = google.mybusinessplaceactions({ version: 'v1', auth });
+      
+      const response = await businessReviewsService.locations.reviews.list({
+        parent: locationId,
+        pageSize,
+        pageToken
+      });
+      
+      return response.data;
     });
-    
-    return response.data;
   });
 
-  // 取得したデータをキャッシュに保存（短時間のみ有効）
+  // 取得したデータをキャッシュに保存
   if (useCache && reviews) {
-    const cacheKey = CACHE_KEYS.REVIEWS(tenantId, locationId, pageSize, pageToken);
+    const cacheKey = CACHE_CONFIG.KEYS.REVIEWS(tenantId, locationId, pageSize, pageToken);
     // レビューは頻繁に更新される可能性があるので短めのTTLを設定
-    await setCache(cacheKey, reviews, CACHE_TTL.SHORT);
+    await storeCache(cacheKey, reviews, 'REVIEWS');
     console.log(`[Cache] ${cacheKey} にデータをキャッシュしました`);
   }
 
   return reviews;
 };
 
-// レビューに返信（リトライ機能付き）
+// レビューに返信（バッチ処理対応）
 export const replyToReview = async (tenantId: string, reviewId: string, replyText: string): Promise<any> => {
-  return rateLimiter.executeWithRetry(async () => {
-    const auth = createOAuth2Client();
-    const { token, isValid } = await getAuthToken(tenantId);
-    
-    if (!isValid) {
-      throw new Error('Google認証が必要です');
-    }
-    
-    auth.setCredentials({ access_token: token });
-    const businessReviewsService = google.mybusinessplaceactions({ version: 'v1', auth });
-    
-    const response = await businessReviewsService.locations.reviews.updateReply({
-      name: reviewId,
-      requestBody: {
-        comment: replyText
+  return executeBatchRequest(async () => {
+    return clientManager.executeWithRetry(async () => {
+      const auth = createOAuth2Client();
+      const { token, isValid } = await getAuthToken(tenantId);
+      
+      if (!isValid) {
+        throw new Error('Google認証が必要です');
       }
-    });
-    
-    // 返信ログを記録
-    await supabase
-      .from('reply_logs')
-      .insert({
-        tenant_id: tenantId,
-        review_id: reviewId,
-        reply_content: replyText,
-        is_successful: true,
-        reply_date: new Date().toISOString()
+      
+      auth.setCredentials({ access_token: token });
+      const businessReviewsService = google.mybusinessplaceactions({ version: 'v1', auth });
+      
+      const response = await businessReviewsService.locations.reviews.updateReply({
+        name: reviewId,
+        requestBody: {
+          comment: replyText
+        }
       });
-    
-    return response.data;
+      
+      // 返信ログを記録
+      await supabase
+        .from('reply_logs')
+        .insert({
+          tenant_id: tenantId,
+          review_id: reviewId,
+          reply_content: replyText,
+          is_successful: true,
+          reply_date: new Date().toISOString()
+        });
+      
+      return response.data;
+    });
   }).catch(async (error) => {
     // エラーログを記録
     await supabase
@@ -500,4 +707,67 @@ export const replyToReview = async (tenantId: string, reviewId: string, replyTex
     
     throw error;
   });
-}; 
+};
+
+// キャッシュの取得
+async function fetchCache<T>(key: string, strategy: keyof typeof CACHE_CONFIG.STRATEGIES): Promise<T | null> {
+  try {
+    const { data, error } = await supabase
+      .from('api_cache')
+      .select('*')
+      .eq('cache_key', key)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    // キャッシュの有効期限をチェック
+    const expiryDate = new Date(data.expiry_date);
+    if (new Date() >= expiryDate) {
+      // 期限切れのキャッシュを削除
+      await supabase
+        .from('api_cache')
+        .delete()
+        .eq('cache_key', key);
+      return null;
+    }
+
+    // キャッシュの有効性をチェック
+    const cacheAge = Date.now() - new Date(data.created_at).getTime();
+    const strategyConfig = CACHE_CONFIG.STRATEGIES[strategy];
+    
+    if (cacheAge > strategyConfig.TTL) {
+      console.log(`[Cache] ${key} のキャッシュが古いため無効化します（経過時間: ${cacheAge}ms）`);
+      return null;
+    }
+
+    console.log(`[Cache] ${key} からキャッシュデータを使用します（経過時間: ${cacheAge}ms）`);
+    return data.cache_data as T;
+  } catch (error) {
+    console.error('[Cache] キャッシュ取得エラー:', error);
+    return null;
+  }
+}
+
+// キャッシュの保存
+async function storeCache<T>(key: string, data: T, strategy: keyof typeof CACHE_CONFIG.STRATEGIES): Promise<void> {
+  try {
+    const strategyConfig = CACHE_CONFIG.STRATEGIES[strategy];
+    const expiryDate = new Date(Date.now() + strategyConfig.TTL);
+    
+    await supabase
+      .from('api_cache')
+      .upsert({
+        cache_key: key,
+        cache_data: data,
+        expiry_date: expiryDate.toISOString(),
+        created_at: new Date().toISOString(),
+        priority: strategyConfig.PRIORITY
+      });
+      
+    console.log(`[Cache] ${key} にデータをキャッシュしました（有効期限: ${expiryDate.toISOString()}）`);
+  } catch (error) {
+    console.error('[Cache] キャッシュ保存エラー:', error);
+  }
+} 

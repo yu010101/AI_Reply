@@ -74,13 +74,13 @@ export default function GoogleBusinessIntegration() {
   }, [connectionStatus, tokenInfo, loading]);
 
   useEffect(() => {
-    if (user) {
-      console.log('[GoogleBI検証] ユーザー変更によるチェック開始:', user.id);
+    if (user?.id) {
+      console.log('[GoogleBI検証] ユーザーID変更によるチェック開始:', user.id);
       checkConnectionStatus();
     } else {
-      console.log('[GoogleBI検証] ユーザーなし、チェックスキップ');
+      console.log('[GoogleBI検証] ユーザーIDなし、チェックスキップ');
     }
-  }, [user]);
+  }, [user?.id]);
 
   // トークンが有効期限切れの場合の処理
   const handleTokenExpired = () => {
@@ -415,7 +415,7 @@ export default function GoogleBusinessIntegration() {
           console.log('[GoogleBI] トークンが有効です');
           setConnectionStatus('connected');
           clearError(); // エラーをクリア
-          fetchAccounts();
+          // fetchAccounts();
         }
       } catch (dbError) {
         // 予期せぬエラー
@@ -432,6 +432,16 @@ export default function GoogleBusinessIntegration() {
       setLoading(false);
     }
   };
+
+  // 新しいuseEffect: 接続状態が 'connected' になり、アカウント情報がまだない場合にアカウント情報を取得
+  useEffect(() => {
+    // 自動的にAPIを呼び出すのではなく、ユーザーが明示的に「更新」ボタンを押した時だけデータを取得するよう変更
+    // ただし接続状態が変わった場合だけ、フラグをリセット
+    if (connectionStatus === 'connected') {
+      console.log('[GoogleBI] 接続状態が変更されました。「更新」ボタンでアカウント情報を取得できます。');
+      setLoadingAccounts(false);
+    }
+  }, [connectionStatus]); // 依存配列を修正 - アカウント情報の自動取得をやめる
 
   const startGoogleAuth = async () => {
     try {
@@ -570,8 +580,8 @@ export default function GoogleBusinessIntegration() {
 
   const fetchAccounts = async () => {
     try {
-      setLoading(true);
       setError(null);
+      setLoadingAccounts(true); // ロード中フラグを設定
       console.log('[GoogleBusinessIntegration] アカウント情報を取得します');
 
       // 開発環境の場合、ユーザーIDをクエリパラメータとして追加
@@ -582,13 +592,38 @@ export default function GoogleBusinessIntegration() {
 
       console.log('[GoogleBusinessIntegration] API呼び出し:', apiEndpoint);
 
-      const response = await fetch(apiEndpoint);
-      const data = await response.json();
-
+      // キャッシュ制御ヘッダーを追加してキャッシュを活用
+      const response = await fetch(apiEndpoint, {
+        headers: {
+          'Cache-Control': 'max-age=300', // 5分間のキャッシュを許可
+        }
+      });
+      
+      // レスポンスが成功でない場合、エラー処理
       if (!response.ok) {
-        console.error('[GoogleBusinessIntegration] APIエラー:', data.error);
-        throw new Error(data.error || 'アカウント情報の取得に失敗しました');
+        const errorData = await response.json();
+        console.error('[GoogleBusinessIntegration] APIエラー:', errorData);
+        
+        // クォータ制限エラーの場合は特別に処理
+        if (response.status === 429) {
+          const retryAfter = errorData.retryAfter || 60;
+          handleQuotaLimitError(retryAfter);
+          
+          // クールダウン時間や次回更新可能時間が含まれている場合は表示
+          if (errorData.nextRefreshAvailable) {
+            const nextTime = new Date(errorData.nextRefreshAvailable);
+            const message = `次回更新可能: ${nextTime.toLocaleString('ja-JP')}（あと約${Math.ceil(errorData.cooldownSeconds / 60)}分）`;
+            setErrorMessage(`API制限に達しました。${message}`);
+          } else {
+            setErrorMessage(`API制限に達しました。${retryAfter}秒後に再試行できます。`);
+          }
+          throw new Error(errorData.error || 'APIリクエスト制限に達しました');
+        }
+        
+        throw new Error(errorData.error || 'アカウント情報の取得に失敗しました');
       }
+
+      const data = await response.json();
 
       if (!data.accounts || data.accounts.length === 0) {
         console.log('[GoogleBusinessIntegration] アカウントが見つかりません');
@@ -596,13 +631,28 @@ export default function GoogleBusinessIntegration() {
         return;
       }
 
-      console.log('[GoogleBusinessIntegration] アカウント情報を取得しました:', data.accounts.length + '件');
+      // 取得元（API or キャッシュ）を表示
+      console.log('[GoogleBusinessIntegration] アカウント情報を取得しました:', 
+        data.accounts.length + '件', 
+        'ソース:', data.source || 'api'
+      );
+      
+      // forced-cacheの場合は次回更新可能時間を表示
+      if (data.source === 'forced-cache' && data.nextRefreshAvailable) {
+        const nextTime = new Date(data.nextRefreshAvailable);
+        const message = `次回更新可能: ${nextTime.toLocaleString('ja-JP')}（あと約${Math.ceil(data.cooldownSeconds / 60)}分）`;
+        setErrorMessage(message);
+      } else {
+        // エラーメッセージをクリア
+        setErrorMessage('');
+      }
+      
       setAccounts(data.accounts);
     } catch (error: any) {
       console.error('[GoogleBusinessIntegration] エラー:', error);
       setError(error.message || 'アカウント情報の取得に失敗しました');
     } finally {
-      setLoading(false);
+      setLoadingAccounts(false);
     }
   };
 
