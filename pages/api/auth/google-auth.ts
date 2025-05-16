@@ -38,6 +38,12 @@ const createOAuth2Client = (): OAuth2Client => {
   );
 };
 
+const _extractUserId = (req: NextApiRequest): string | undefined => {
+  const queryId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+  const headerId = typeof req.headers['x-user-id'] === 'string' ? req.headers['x-user-id'] : undefined;
+  return queryId || headerId;
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -77,27 +83,32 @@ export default async function handler(
     
     console.log('[API] 実行環境:', { isDevEnv, useMockAuth });
 
-    let userId;
+    // Determine user id (prefer explicit parameter/header, otherwise fall back to Supabase session)
+    let userId = _extractUserId(req);
 
-    // 開発環境の場合、セッションチェックをスキップ
-    if (isDevEnv) {
-      console.log('[API] 開発環境のためセッションチェックをスキップします');
-      // リクエストからユーザーIDを取得（クエリパラメータまたはヘッダー）
-      userId = req.query.userId || req.headers['x-user-id'] || 'dev-user-id';
-      console.log('[API] 開発環境用ユーザーID:', userId);
-    } else {
-      // 本番環境では通常通りセッションチェック
+    if (!userId) {
+      // As a fallback, try to obtain user id from Supabase session (if available)
       const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        return res.status(401).json({ error: '認証されていません' });
+      if (session?.user?.id) {
+        userId = session.user.id;
       }
-
-      userId = session.user.id;
     }
 
-    // CSRFトークンとして使用するランダムなstate値を生成
-    const state = crypto.randomBytes(16).toString('hex');
+    if (!userId) {
+      return res.status(401).json({ error: 'ユーザーIDが特定できません (未認証)' });
+    }
+
+    // Create a unique state that encodes the user id so that we can recover it in the callback without extra DB look-ups
+    const state = `${userId}-${crypto.randomBytes(16).toString('hex')}`;
+
+    // Optionally persist the state for audit/debugging (non blocking)
+    try {
+      await supabase
+        .from('oauth_states')
+        .insert({ tenant_id: userId, state, created_at: new Date().toISOString() });
+    } catch (_) {
+      // Failure to save state should not block auth flow – continue silently
+    }
 
     // 開発環境ではデータベース操作をスキップするオプション
     if (!isDevEnv) {
