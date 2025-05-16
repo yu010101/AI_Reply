@@ -10,11 +10,10 @@ const limiter = process.env.NODE_ENV === 'test'
       const count = (global as any).rateLimitCount = ((global as any).rateLimitCount || 0) + 1;
 
       if (count > 100) {
-        res.status(429).json({
-          error: 'Too many requests',
-          code: 'RATE_LIMIT_EXCEEDED',
-        });
-        return;
+        const err: any = new Error('Too many requests');
+        err.statusCode = 429;
+        err.code = 'RATE_LIMIT_EXCEEDED';
+        return next(err);
       }
 
       next();
