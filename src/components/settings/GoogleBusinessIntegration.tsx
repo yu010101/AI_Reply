@@ -447,14 +447,8 @@ export default function GoogleBusinessIntegration() {
     try {
       setAuthenticating(true);
       
-      // アクセストークンを取得するURLを作成
       const authUrl = '/api/auth/google-auth';
-      
-      // 開発環境の場合、ユーザーIDをクエリパラメータとして追加
-      const isDevEnv = process.env.NODE_ENV === 'development';
-      const apiEndpoint = isDevEnv && user?.id 
-        ? `${authUrl}?userId=${user.id}` 
-        : authUrl;
+      const apiEndpoint = user?.id ? `${authUrl}?userId=${user.id}` : authUrl;
       
       console.log('[GoogleBI] API呼び出し:', apiEndpoint);
       
@@ -478,8 +472,7 @@ export default function GoogleBusinessIntegration() {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',
-          // 開発環境の場合、ヘッダーにもユーザーIDを含める
-          ...(isDevEnv && user?.id ? { 'X-User-ID': user.id } : {})
+          ...(user?.id ? { 'X-User-ID': user.id } : {})
         }
       });
       console.log('[GoogleBI] リクエスト終了時刻:', new Date().toISOString());

@@ -98,8 +98,9 @@ export default async function handler(
       return res.status(401).json({ error: 'ユーザーIDが特定できません (未認証)' });
     }
 
-    // Create a unique state that encodes the user id so that we can recover it in the callback without extra DB look-ups
-    const state = `${userId}-${crypto.randomBytes(16).toString('hex')}`;
+    // Create a unique state value that safely embeds the userId (base64url) + random suffix
+    const base64User = Buffer.from(userId).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const state = `${base64User}.${crypto.randomBytes(16).toString('hex')}`;
 
     // Optionally persist the state for audit/debugging (non blocking)
     try {
@@ -108,18 +109,6 @@ export default async function handler(
         .insert({ tenant_id: userId, state, created_at: new Date().toISOString() });
     } catch (_) {
       // Failure to save state should not block auth flow – continue silently
-    }
-
-    // 開発環境ではデータベース操作をスキップするオプション
-    if (!isDevEnv) {
-      // stateをデータベースに保存
-      await supabase
-        .from('oauth_states')
-        .insert({
-          tenant_id: userId,
-          state,
-          created_at: new Date().toISOString()
-        });
     }
 
     // モック認証が有効な場合
