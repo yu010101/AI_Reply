@@ -1,17 +1,28 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-console.log('[Supabase] URL:', supabaseUrl ? '設定済み' : '未設定');
-console.log('[Supabase] Anon Key:', supabaseAnonKey ? '設定済み' : '未設定');
+// テスト環境またはSupabase設定が無い場合のダミーURL
+const DUMMY_SUPABASE_URL = 'https://test-project.supabase.co';
+const DUMMY_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QtcHJvamVjdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNjQwOTk1MjAwLCJleHAiOjE5NTY1NzEyMDB9.test-key';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[Supabase] 環境変数が設定されていません');
-  throw new Error('Supabaseの設定が正しくありません');
+const isConfigured = supabaseUrl && supabaseAnonKey;
+
+if (typeof window === 'undefined') {
+  // サーバーサイドでのログ出力
+  console.log('[Supabase] URL:', supabaseUrl ? '設定済み' : '未設定（ダミー使用）');
+  console.log('[Supabase] Anon Key:', supabaseAnonKey ? '設定済み' : '未設定（ダミー使用）');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 環境変数が設定されていない場合はダミー値を使用（テスト用）
+const finalUrl = isConfigured ? supabaseUrl : DUMMY_SUPABASE_URL;
+const finalKey = isConfigured ? supabaseAnonKey : DUMMY_SUPABASE_KEY;
+
+export const supabase: SupabaseClient = createClient(finalUrl, finalKey);
+
+// Supabaseが設定されているかどうかを確認するフラグ
+export const isSupabaseConfigured = isConfigured;
 
 // 認証関連の関数
 export const signIn = async (email: string, password: string) => {

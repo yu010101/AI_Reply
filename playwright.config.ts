@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Read from default .env file
+// Read from .env.test file for testing (fallback to .env)
+dotenv.config({ path: path.resolve(__dirname, '.env.test') });
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 export default defineConfig({

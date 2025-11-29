@@ -1,0 +1,48 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - navigation [ref=e4]:
+      - generic [ref=e6]:
+        - heading "RevAI Concierge" [level=6] [ref=e8]
+        - separator [ref=e9]
+        - list [ref=e10]:
+          - listitem [ref=e11]:
+            - button "ダッシュボード" [ref=e12] [cursor=pointer]:
+              - img [ref=e14]
+              - generic [ref=e17]: ダッシュボード
+          - listitem [ref=e18]:
+            - button "店舗管理" [ref=e19] [cursor=pointer]:
+              - img [ref=e21]
+              - generic [ref=e24]: 店舗管理
+          - listitem [ref=e25]:
+            - button "レビュー管理" [ref=e26] [cursor=pointer]:
+              - img [ref=e28]
+              - generic [ref=e31]: レビュー管理
+              - img [ref=e32]
+          - listitem [ref=e34]:
+            - button "AI返信" [ref=e35] [cursor=pointer]:
+              - img [ref=e37]
+              - generic [ref=e40]: AI返信
+              - img [ref=e41]
+          - listitem [ref=e43]:
+            - button "請求・プラン" [ref=e44] [cursor=pointer]:
+              - img [ref=e46]
+              - generic [ref=e49]: 請求・プラン
+              - img [ref=e50]
+          - listitem [ref=e52]:
+            - button "設定" [ref=e53] [cursor=pointer]:
+              - img [ref=e55]
+              - generic [ref=e58]: 設定
+        - separator [ref=e59]
+        - list [ref=e60]:
+          - listitem [ref=e61]:
+            - button "ログアウト" [ref=e62] [cursor=pointer]:
+              - img [ref=e64]
+              - generic [ref=e67]: ログアウト
+    - main [ref=e68]:
+      - progressbar [ref=e70]:
+        - img [ref=e71]
+  - alert [ref=e73]: /dashboard
+```
