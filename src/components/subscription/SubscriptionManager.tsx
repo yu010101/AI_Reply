@@ -88,18 +88,25 @@ export default function SubscriptionManager() {
       const plan = plans.find(p => p.id === planId);
       if (!plan) throw new Error('プランが見つかりません');
 
-      const session = await createCheckoutSession({
-        priceId: plan.stripe_price_id,
-        successUrl: `${window.location.origin}/subscription/success`,
-        cancelUrl: `${window.location.origin}/subscription/cancel`,
-        metadata: {
-          userId: user?.id || '',
-          planId: plan.id,
-        },
+      // Stripe checkout sessionをAPI経由で作成
+      const response = await fetch('/api/subscriptions/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          priceId: plan.stripe_price_id,
+          successUrl: `${window.location.origin}/subscription/success`,
+          cancelUrl: `${window.location.origin}/subscription/cancel`,
+          metadata: {
+            userId: user?.id || '',
+            planId: plan.id,
+          },
+        }),
       });
-
-      if (session.url) {
-        window.location.href = session.url;
+      const { url } = await response.json();
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error('チェックアウトセッションの作成に失敗しました');
       }
     } catch (error) {
       console.error('サブスクリプション作成エラー:', error);
