@@ -101,7 +101,7 @@ async function logError(error: Error, context?: Record<string, any>, severity?: 
   // Sentryにエラーを送信
   try {
     Sentry.captureException(error, {
-      level: determinedSeverity === 'critical' ? 'fatal' : determinedSeverity,
+      level: (determinedSeverity === 'critical' ? 'fatal' : determinedSeverity) as any,
       tags: {
         severity: determinedSeverity,
         ...(context?.requestId && { requestId: context.requestId }),

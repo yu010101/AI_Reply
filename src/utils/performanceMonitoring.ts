@@ -77,6 +77,23 @@ export function performanceMonitoringMiddleware(
     // レスポンス終了時にメトリクスを記録
     const originalEnd = res.end;
     res.end = function (chunk?: any, encoding?: any): NextApiResponse {
+      const duration = Date.now() - startTime;
+      const statusCode = res.statusCode;
+
+      // 非同期でメトリクスを記録（レスポンスをブロックしない）
+      recordPerformanceMetric(
+        endpoint,
+        method,
+        duration,
+        statusCode,
+        (req as any).user?.id
+      ).catch(error => {
+        logger.error('パフォーマンスメトリクスの記録に失敗', { error });
+      });
+
+      // 元のendメソッドを呼び出し
+      return originalEnd.call(this, chunk, encoding);
+    } as any;
 
       const duration = Date.now() - startTime;
       const statusCode = res.statusCode;
