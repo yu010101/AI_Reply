@@ -293,7 +293,7 @@ export default function GoogleBusinessIntegration() {
           
         console.log('[GoogleBI] テーブル内レコード:', {
           count: allRecords?.length || 0,
-          records: allRecords?.map(record => ({
+          records: allRecords?.map((record: any) => ({
             id: record.id,
             tenant_id: record.tenant_id,
             createdAt: record.created_at,
@@ -316,11 +316,13 @@ export default function GoogleBusinessIntegration() {
         // 各IDでトークンを検索
         for (const testId of testIds) {
           console.log(`[GoogleBI] ID形式 "${testId.substring(0, 8)}..." でトークンを検索します`);
-          const { data: testData, error: testError } = await supabase
+          const testResult: any = await (supabase as any)
             .from('google_auth_tokens')
             .select('id, tenant_id, access_token, updated_at')
             .eq('tenant_id', testId)
             .limit(1);
+          const testData = testResult.data;
+          const testError = testResult.error;
             
           console.log(`[GoogleBI] ID形式 "${testId.substring(0, 8)}..." の検索結果:`, {
             found: Boolean(testData && testData.length > 0),
@@ -339,11 +341,13 @@ export default function GoogleBusinessIntegration() {
           });
         }
         
-        const { data, error } = await supabase
+        const mainResult: any = await (supabase as any)
           .from('google_auth_tokens')
           .select('access_token, refresh_token, expiry_date, updated_at, tenant_id')
           .eq('tenant_id', user.id)
           .limit(1);
+        const data = mainResult.data;
+        const error = mainResult.error;
         
         console.log(`[GoogleBI] ID:${user.id.substring(0, 8)}...でのトークン確認:`, {
           found: Boolean(data && data.length > 0),
