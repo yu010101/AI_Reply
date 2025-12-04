@@ -17,6 +17,7 @@ import {
   TextField,
 } from '@mui/material';
 import { Subscription, CreateSubscriptionRequest, UpdateSubscriptionRequest } from '@/types';
+import { Plan } from '@/constants/plan';
 import axios from 'axios';
 
 export const SubscriptionManagement = () => {

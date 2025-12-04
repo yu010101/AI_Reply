@@ -16,7 +16,7 @@ import {
 import { useRouter } from 'next/router';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/utils/supabase';
-import { createCheckoutSession } from '@/utils/stripe';
+// Stripe checkout sessionはAPI経由で作成
 
 interface Plan {
   id: string;
