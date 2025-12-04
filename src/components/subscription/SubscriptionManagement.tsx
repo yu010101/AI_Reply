@@ -74,8 +74,9 @@ export const SubscriptionManagement = () => {
               ステータス: {subscription.status}
             </Typography>
             <Typography color="textSecondary">
-              有効期間: {new Date(subscription.current_period_start).toLocaleDateString()} -{' '}
-              {new Date(subscription.current_period_end).toLocaleDateString()}
+              有効期間: {subscription.current_period_start && subscription.current_period_end
+                ? `${new Date(subscription.current_period_start).toLocaleDateString()} - ${new Date(subscription.current_period_end).toLocaleDateString()}`
+                : '未設定'}
             </Typography>
             <Box sx={{ mt: 2 }}>
               <Button
