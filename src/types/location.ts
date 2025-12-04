@@ -14,4 +14,5 @@ export interface LocationFormData {
   name: string;
   tone: string;
   line_user_id?: string;
+  google_place_id?: string;
 }
