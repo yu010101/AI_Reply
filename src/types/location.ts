@@ -4,6 +4,7 @@ export interface Location {
   name: string;
   tone: string;
   line_user_id?: string;
+  google_place_id?: string;
   tenant_id?: string;
   created_at?: string;
   updated_at?: string;

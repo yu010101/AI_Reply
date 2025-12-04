@@ -8,3 +8,4 @@ export const TONE_OPTIONS = [
 ] as const;
 
 export type ToneOption = typeof TONE_OPTIONS[number]['value'];
+export type Tone = ToneOption; // エイリアス

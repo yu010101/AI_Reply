@@ -2,38 +2,14 @@
 
 export type { Tenant, CreateTenantRequest, UpdateTenantRequest } from './tenant';
 
-// Location型の定義
-export interface Location {
-  id: string;
-  name: string;
-  tone: string;
-  line_user_id?: string;
-  tenant_id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+// Location型の定義（location.tsから再エクスポート）
+export type { Location, LocationFormData } from './location';
 
-// Review型の定義
-export interface Review {
-  id: string;
-  location_id: string;
-  author: string;
-  rating: number;
-  comment: string;
-  status: 'pending' | 'responded' | 'ignored';
-  created_at?: string;
-  updated_at?: string;
-}
+// Review型の定義（review.tsから再エクスポート）
+export type { Review, ReviewStatus } from './review';
 
-// Reply型の定義
-export interface Reply {
-  id: string;
-  review_id: string;
-  content: string;
-  status: 'draft' | 'sent';
-  created_at?: string;
-  updated_at?: string;
-}
+// Reply型の定義（reply.tsから再エクスポート）
+export type { Reply, ReplyFormData } from './reply';
 
 // Subscription型の定義
 export interface Subscription {
