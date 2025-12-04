@@ -81,13 +81,15 @@ interface CachedAccountTableRow {
 async function checkCacheStatus(userId: string): Promise<{ exists: boolean; valid: boolean; count: number; age: string }> {
   try {
     // 1. キャッシュされたアカウントの最新のupdated_atを取得
-    const { data: latestCacheEntry, error: latestCacheError } = await supabase
+    const latestCacheResult: any = await (supabase as any)
       .from('google_business_accounts')
       .select('updated_at')
       .eq('tenant_id', userId)
       .order('updated_at', { ascending: false })
       .limit(1)
-      .single() as any;
+      .single();
+    const latestCacheEntry = latestCacheResult.data;
+    const latestCacheError = latestCacheResult.error;
 
     if (latestCacheError) {
       console.error('[GoogleBusinessAPI] 最新キャッシュエントリ取得エラー(checkCacheStatus):', latestCacheError.message);

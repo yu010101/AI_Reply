@@ -49,10 +49,12 @@ export default async function handler(
         let googleAuthTableFields: string[] = [];
         
         try {
-          const { data: tableInfo, error: tableError } = await supabase
+          const tableResult: any = await (supabase as any)
             .from('google_auth_tokens')
             .select('*')
             .limit(0);
+          const tableInfo = tableResult.data;
+          const tableError = tableResult.error;
             
           hasGoogleAuthTable = !tableError;
           
