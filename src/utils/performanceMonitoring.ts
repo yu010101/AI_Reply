@@ -95,24 +95,6 @@ export function performanceMonitoringMiddleware(
       return originalEnd.call(this, chunk, encoding);
     } as any;
 
-      const duration = Date.now() - startTime;
-      const statusCode = res.statusCode;
-
-      // 非同期でメトリクスを記録（レスポンスをブロックしない）
-      recordPerformanceMetric(
-        endpoint,
-        method,
-        duration,
-        statusCode,
-        (req as any).user?.id
-      ).catch(error => {
-        logger.error('パフォーマンスメトリクスの記録に失敗', { error });
-      });
-
-      // 元のendメソッドを呼び出し
-      originalEnd.call(this, chunk, encoding);
-    };
-
     return handler(req, res);
   };
 }
