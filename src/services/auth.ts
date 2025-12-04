@@ -16,7 +16,7 @@ export class AuthService {
 
   async signUp(data: SignUpData): Promise<AuthResponse> {
     try {
-      const { user, error } = await supabase.auth.signUp({
+      const signUpResult: any = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -26,6 +26,8 @@ export class AuthService {
           },
         },
       });
+      const user = signUpResult.user;
+      const error = signUpResult.error;
 
       if (error) throw error;
 
@@ -50,10 +52,12 @@ export class AuthService {
 
   async signIn(data: SignInData): Promise<AuthResponse> {
     try {
-      const { user, error } = await supabase.auth.signInWithPassword({
+      const signInResult: any = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
+      const user = signInResult.user;
+      const error = signInResult.error;
 
       if (error) throw error;
 
