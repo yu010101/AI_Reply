@@ -64,7 +64,7 @@ export default function UserRoleManagement({ tenantId }: { tenantId: string }) {
 
       if (error) throw error;
 
-      setUsers(data || []);
+      setUsers((data || []) as any);
     } catch (error) {
       console.error('ユーザー取得エラー:', error);
       setError('ユーザー情報の取得に失敗しました');
