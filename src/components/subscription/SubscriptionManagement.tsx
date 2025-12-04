@@ -44,7 +44,7 @@ export const SubscriptionManagement = () => {
     try {
       await axios.post<{ data: Subscription }>('/api/subscriptions', formData);
       setOpen(false);
-      setFormData({ plan: '' });
+      setFormData({ plan: 'free' });
       fetchSubscription();
     } catch (error) {
       console.error('サブスクリプションの作成に失敗しました:', error);
