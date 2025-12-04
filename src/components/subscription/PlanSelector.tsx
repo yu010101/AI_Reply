@@ -27,7 +27,18 @@ export default function PlanSelector({ currentPlan, onSubmit }: PlanSelectorProp
         if (!priceId) {
           throw new Error('価格IDが見つかりません');
         }
-        await createCheckoutSession(priceId);
+        // Stripe checkout sessionをAPI経由で作成
+        const response = await fetch('/api/subscriptions/create-checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ priceId }),
+        });
+        const { url } = await response.json();
+        if (url) {
+          window.location.href = url;
+        } else {
+          throw new Error('チェックアウトセッションの作成に失敗しました');
+        }
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'エラーが発生しました');
@@ -55,7 +66,7 @@ export default function PlanSelector({ currentPlan, onSubmit }: PlanSelectorProp
 
       <form onSubmit={handleSubmit} className="mt-12 space-y-8">
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {(['free', 'standard', 'premium'] as Plan[]).map((plan) => (
+          {(['free', 'basic', 'pro', 'enterprise'] as Plan[]).map((plan) => (
             <div
               key={plan}
               className={`relative rounded-lg border ${
