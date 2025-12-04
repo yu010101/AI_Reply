@@ -87,7 +87,7 @@ async function checkCacheStatus(userId: string): Promise<{ exists: boolean; vali
       .eq('tenant_id', userId)
       .order('updated_at', { ascending: false })
       .limit(1)
-      .single();
+      .single() as any;
 
     if (latestCacheError) {
       console.error('[GoogleBusinessAPI] 最新キャッシュエントリ取得エラー(checkCacheStatus):', latestCacheError.message);
