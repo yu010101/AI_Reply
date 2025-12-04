@@ -75,7 +75,7 @@ export function performanceMonitoringMiddleware(
     const method = req.method || 'unknown';
 
     // レスポンス終了時にメトリクスを記録
-    const originalEnd = res.end;
+    const originalEnd = res.end.bind(res);
     res.end = function (chunk?: any, encoding?: any): NextApiResponse {
       const duration = Date.now() - startTime;
       const statusCode = res.statusCode;
@@ -92,7 +92,7 @@ export function performanceMonitoringMiddleware(
       });
 
       // 元のendメソッドを呼び出し
-      return originalEnd.call(this, chunk, encoding);
+      return originalEnd(chunk, encoding);
     } as any;
 
     return handler(req, res);
