@@ -283,7 +283,7 @@ export default function GoogleBusinessIntegration() {
       try {
         // テーブル内の最新レコードを確認
         console.log('[GoogleBI] テーブル内の最新レコードを確認します...');
-        const recordsResult: any = await supabase
+        const recordsResult: any = await (supabase as any)
           .from('google_auth_tokens')
           .select('id, tenant_id, created_at, updated_at')
           .order('created_at', { ascending: false })
