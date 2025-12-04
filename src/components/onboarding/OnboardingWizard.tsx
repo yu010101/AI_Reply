@@ -81,27 +81,59 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   const handleComplete = async () => {
     try {
       setLoading(true);
+      setError(null);
       
       // オンボーディング完了フラグを更新
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        const { error: updateError } = await supabase
+        // まずプロファイルが存在するか確認
+        const { data: existingProfile } = await supabase
           .from('profiles')
-          .update({ 
-            onboarding_completed: true,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
+          .select('id')
+          .eq('id', user.id)
+          .single();
 
-        if (updateError) {
-          console.error('オンボーディング完了フラグの更新エラー:', updateError);
+        if (existingProfile) {
+          // プロファイルが存在する場合は更新
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ 
+              onboarding_completed: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id);
+
+          if (updateError) {
+            console.error('オンボーディング完了フラグの更新エラー:', updateError);
+            // エラーでも続行（プロファイルが存在しない場合など）
+          }
+        } else {
+          // プロファイルが存在しない場合は作成
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email,
+              onboarding_completed: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (insertError) {
+            console.error('プロファイル作成エラー:', insertError);
+            // エラーでも続行
+          }
         }
       }
 
       onComplete();
     } catch (err: any) {
       console.error('オンボーディング完了エラー:', err);
-      setError('オンボーディングの完了処理に失敗しました');
+      setError('オンボーディングの完了処理に失敗しましたが、続行します');
+      // エラーでもonCompleteを呼び出す（ユーザー体験を優先）
+      setTimeout(() => {
+        onComplete();
+      }, 1000);
     } finally {
       setLoading(false);
     }

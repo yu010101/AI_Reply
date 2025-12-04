@@ -166,13 +166,19 @@ export default function Dashboard() {
 
         if (error) {
           console.error('オンボーディング状態の取得エラー:', error);
-          // エラーの場合はオンボーディング未完了として扱う
+          // テーブルが存在しない、またはプロファイルが存在しない場合は
+          // オンボーディング未完了として扱う（マイグレーション未実行の可能性）
+          if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+            console.warn('profilesテーブルが存在しないか、プロファイルが作成されていません。マイグレーションを実行してください。');
+          }
           setOnboardingCompleted(false);
         } else {
+          // プロファイルが存在する場合
           setOnboardingCompleted(data?.onboarding_completed ?? false);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('オンボーディング状態のチェックエラー:', error);
+        // 予期しないエラーの場合もオンボーディング未完了として扱う
         setOnboardingCompleted(false);
       } finally {
         setCheckingOnboarding(false);
@@ -338,7 +344,7 @@ export default function Dashboard() {
       : <Chip size="small" label="返信済" color="success" />;
   };
 
-  // オンボーディング未完了の場合はウィザードを表示
+  // ローディング中はスピナーを表示
   if (checkingOnboarding || isLoading) {
     return (
       <AuthGuard>
@@ -351,6 +357,8 @@ export default function Dashboard() {
     );
   }
 
+  // オンボーディング未完了の場合はウィザードを表示
+  // onboardingCompletedがnullの場合はfalseとして扱う（エラー時もfalseになる）
   if (onboardingCompleted === false) {
     return (
       <AuthGuard>
@@ -361,7 +369,8 @@ export default function Dashboard() {
     );
   }
 
-  if (loading) {
+  // オンボーディング完了済みの場合のみダッシュボードデータを読み込む
+  if (loading && onboardingCompleted !== true) {
     return (
       <AuthGuard>
         <Layout>
