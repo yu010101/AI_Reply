@@ -101,10 +101,12 @@ async function checkCacheStatus(userId: string): Promise<{ exists: boolean; vali
     }
 
     // 2. キャッシュされたアカウントの総数を取得
-    const { data, error: countError } = await supabase
+    const countResult: any = await (supabase as any)
         .from('google_business_accounts')
         .select('*')
         .eq('tenant_id', userId);
+    const data = countResult.data;
+    const countError = countResult.error;
 
     if (countError) {
         console.error('[GoogleBusinessAPI] キャッシュ件数取得エラー(checkCacheStatus):', countError.message);
