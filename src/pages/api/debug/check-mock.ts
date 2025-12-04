@@ -46,7 +46,7 @@ export default async function handler(
         
         // google_auth_tokensテーブルの有無を確認
         let hasGoogleAuthTable = false;
-        let googleAuthTableFields = [];
+        let googleAuthTableFields: string[] = [];
         
         try {
           const { data: tableInfo, error: tableError } = await supabase
