@@ -76,7 +76,8 @@ export function performanceMonitoringMiddleware(
 
     // レスポンス終了時にメトリクスを記録
     const originalEnd = res.end;
-    res.end = function (chunk?: any, encoding?: any) {
+    res.end = function (chunk?: any, encoding?: any): NextApiResponse {
+
       const duration = Date.now() - startTime;
       const statusCode = res.statusCode;
 
