@@ -19,7 +19,7 @@ BEGIN
 END $$;
 
 -- UPDATEポリシー: 組織管理者は自分の組織を更新可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者は自分の組織を更新可能" ON organizations
+CREATE POLICY IF NOT EXISTS "組織管理者は自分の組織を更新可能" ON organizations
   FOR UPDATE 
   USING (
     EXISTS (
@@ -31,7 +31,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- DELETEポリシー: 組織管理者は自分の組織を削除可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者は自分の組織を削除可能" ON organizations
+CREATE POLICY IF NOT EXISTS "組織管理者は自分の組織を削除可能" ON organizations
   FOR DELETE 
   USING (
     EXISTS (
@@ -47,7 +47,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- INSERTポリシー: 組織管理者はユーザーを追加可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者はユーザーを追加可能" ON organization_users
+CREATE POLICY IF NOT EXISTS "組織管理者はユーザーを追加可能" ON organization_users
   FOR INSERT 
   WITH CHECK (
     EXISTS (
@@ -59,7 +59,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- UPDATEポリシー: 組織管理者はユーザー情報を更新可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者はユーザー情報を更新可能" ON organization_users
+CREATE POLICY IF NOT EXISTS "組織管理者はユーザー情報を更新可能" ON organization_users
   FOR UPDATE 
   USING (
     EXISTS (
@@ -71,7 +71,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- DELETEポリシー: 組織管理者はユーザーを削除可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者はユーザーを削除可能" ON organization_users
+CREATE POLICY IF NOT EXISTS "組織管理者はユーザーを削除可能" ON organization_users
   FOR DELETE 
   USING (
     EXISTS (
@@ -87,7 +87,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- INSERTポリシー: 組織管理者はサブスクリプションを作成可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者はサブスクリプションを作成可能" ON subscriptions
+CREATE POLICY IF NOT EXISTS "組織管理者はサブスクリプションを作成可能" ON subscriptions
   FOR INSERT 
   WITH CHECK (
     EXISTS (
@@ -99,7 +99,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- UPDATEポリシー: 組織管理者はサブスクリプションを更新可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者はサブスクリプションを更新可能" ON subscriptions
+CREATE POLICY IF NOT EXISTS "組織管理者はサブスクリプションを更新可能" ON subscriptions
   FOR UPDATE 
   USING (
     EXISTS (
@@ -111,7 +111,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- DELETEポリシー: 組織管理者はサブスクリプションを削除可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者はサブスクリプションを削除可能" ON subscriptions
+CREATE POLICY IF NOT EXISTS "組織管理者はサブスクリプションを削除可能" ON subscriptions
   FOR DELETE 
   USING (
     EXISTS (
@@ -127,7 +127,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- SELECTポリシー: ユーザーは自分の所属組織の支払い履歴を表示可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "ユーザーは自分の所属組織の支払い履歴を表示可能" ON payment_history
+CREATE POLICY IF NOT EXISTS "ユーザーは自分の所属組織の支払い履歴を表示可能" ON payment_history
   FOR SELECT 
   USING (
     subscription_id IN (
@@ -138,7 +138,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- INSERTポリシー: サービスロールのみが支払い履歴を作成可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールは支払い履歴を作成可能" ON payment_history
+CREATE POLICY IF NOT EXISTS "サービスロールは支払い履歴を作成可能" ON payment_history
   FOR INSERT 
   WITH CHECK (auth.role() = 'service_role');
 
@@ -150,7 +150,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- SELECTポリシー: ユーザーは自分の所属組織のStripe顧客情報を表示可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "ユーザーは自分の所属組織のStripe顧客情報を表示可能" ON stripe_customers
+CREATE POLICY IF NOT EXISTS "ユーザーは自分の所属組織のStripe顧客情報を表示可能" ON stripe_customers
   FOR SELECT 
   USING (
     organization_id IN (
@@ -160,17 +160,17 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- INSERTポリシー: サービスロールのみがStripe顧客情報を作成可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールはStripe顧客情報を作成可能" ON stripe_customers
+CREATE POLICY IF NOT EXISTS "サービスロールはStripe顧客情報を作成可能" ON stripe_customers
   FOR INSERT 
   WITH CHECK (auth.role() = 'service_role');
 
 -- UPDATEポリシー: サービスロールのみがStripe顧客情報を更新可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールはStripe顧客情報を更新可能" ON stripe_customers
+CREATE POLICY IF NOT EXISTS "サービスロールはStripe顧客情報を更新可能" ON stripe_customers
   FOR UPDATE 
   USING (auth.role() = 'service_role');
 
 -- DELETEポリシー: サービスロールのみがStripe顧客情報を削除可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールはStripe顧客情報を削除可能" ON stripe_customers
+CREATE POLICY IF NOT EXISTS "サービスロールはStripe顧客情報を削除可能" ON stripe_customers
   FOR DELETE 
   USING (auth.role() = 'service_role');
 
@@ -179,7 +179,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- INSERTポリシー: 組織管理者は招待を作成可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者は招待を作成可能" ON invitations
+CREATE POLICY IF NOT EXISTS "組織管理者は招待を作成可能" ON invitations
   FOR INSERT 
   WITH CHECK (
     EXISTS (
@@ -191,7 +191,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- UPDATEポリシー: 組織管理者は招待を更新可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者は招待を更新可能" ON invitations
+CREATE POLICY IF NOT EXISTS "組織管理者は招待を更新可能" ON invitations
   FOR UPDATE 
   USING (
     EXISTS (
@@ -203,7 +203,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- DELETEポリシー: 組織管理者は招待を削除可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "組織管理者は招待を削除可能" ON invitations
+CREATE POLICY IF NOT EXISTS "組織管理者は招待を削除可能" ON invitations
   FOR DELETE 
   USING (
     EXISTS (
@@ -219,7 +219,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- SELECTポリシー: ユーザーは自分の所属組織の使用量制限を表示可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "ユーザーは自分の所属組織の使用量制限を表示可能" ON usage_limits
+CREATE POLICY IF NOT EXISTS "ユーザーは自分の所属組織の使用量制限を表示可能" ON usage_limits
   FOR SELECT 
   USING (
     organization_id IN (
@@ -229,17 +229,17 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- INSERTポリシー: サービスロールのみが使用量制限を作成可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールは使用量制限を作成可能" ON usage_limits
+CREATE POLICY IF NOT EXISTS "サービスロールは使用量制限を作成可能" ON usage_limits
   FOR INSERT 
   WITH CHECK (auth.role() = 'service_role');
 
 -- UPDATEポリシー: サービスロールのみが使用量制限を更新可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールは使用量制限を更新可能" ON usage_limits
+CREATE POLICY IF NOT EXISTS "サービスロールは使用量制限を更新可能" ON usage_limits
   FOR UPDATE 
   USING (auth.role() = 'service_role');
 
 -- DELETEポリシー: サービスロールのみが使用量制限を削除可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールは使用量制限を削除可能" ON usage_limits
+CREATE POLICY IF NOT EXISTS "サービスロールは使用量制限を削除可能" ON usage_limits
   FOR DELETE 
   USING (auth.role() = 'service_role');
 
@@ -248,7 +248,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- ============================================
 
 -- SELECTポリシー: ユーザーは自分の所属組織のイベントログを表示可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "ユーザーは自分の所属組織のイベントログを表示可能" ON event_logs
+CREATE POLICY IF NOT EXISTS "ユーザーは自分の所属組織のイベントログを表示可能" ON event_logs
   FOR SELECT 
   USING (
     organization_id IN (
@@ -258,7 +258,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
   );
 
 -- INSERTポリシー: サービスロールのみがイベントログを作成可能
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "サービスロールはイベントログを作成可能" ON event_logs
+CREATE POLICY IF NOT EXISTS "サービスロールはイベントログを作成可能" ON event_logs
   FOR INSERT 
   WITH CHECK (auth.role() = 'service_role');
 
@@ -274,7 +274,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- より厳格なポリシーに変更（テナントIDによる制限）
 DROP POLICY IF EXISTS "認証済みユーザーはアクセス可能" ON public.google_auth_tokens;
 
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "ユーザーは自分のトークンのみアクセス可能" ON public.google_auth_tokens
+CREATE POLICY IF NOT EXISTS "ユーザーは自分のトークンのみアクセス可能" ON public.google_auth_tokens
   FOR ALL 
   USING (tenant_id = auth.uid())
   WITH CHECK (tenant_id = auth.uid());
@@ -291,7 +291,7 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organiza
 -- より厳格なポリシーに変更（テナントIDによる制限）
 DROP POLICY IF EXISTS "認証済みユーザーはアクセス可能" ON public.oauth_states;
 
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'organizations' AND policyname = 'ポリシー名') THEN CREATE POLICY "ユーザーは自分のOAuth状態のみアクセス可能" ON public.oauth_states
+CREATE POLICY IF NOT EXISTS "ユーザーは自分のOAuth状態のみアクセス可能" ON public.oauth_states
   FOR ALL 
   USING (tenant_id = auth.uid())
   WITH CHECK (tenant_id = auth.uid());
