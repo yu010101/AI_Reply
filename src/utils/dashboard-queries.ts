@@ -168,7 +168,7 @@ export async function getRecentReviews(tenantId: string, limit = 5) {
 
     if (error) throw error;
 
-    return (data as Review[]).map(review => ({
+    return (data as unknown as Review[]).map(review => ({
       id: review.id,
       rating: review.rating,
       comment: review.comment,
