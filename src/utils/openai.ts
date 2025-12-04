@@ -16,7 +16,9 @@ export const generateReply = async (
       formal: '丁寧で礼儀正しい口調で',
       casual: 'カジュアルで親しみやすい口調で',
       friendly: 'フレンドリーで温かみのある口調で',
-    }[tone];
+      professional: 'プロフェッショナルで信頼感のある口調で',
+      polite: '丁寧で上品な口調で',
+    }[tone] || '丁寧で礼儀正しい口調で';
 
     const response = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
