@@ -19,7 +19,7 @@ export default async function handler(
     };
     
     // DB情報の収集（テーブル確認）
-    let dbInfo = { error: '認証が必要です' };
+    let dbInfo: any = { error: '認証が必要です' };
     
     if (session) {
       try {
