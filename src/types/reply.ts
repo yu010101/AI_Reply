@@ -10,6 +10,7 @@ export interface Reply {
 
 // ReplyFormData型の定義
 export interface ReplyFormData {
+  review_id?: string;
   content: string;
   tone?: string;
 }
