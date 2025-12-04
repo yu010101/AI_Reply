@@ -372,5 +372,5 @@ export const getUserOrganizationRole = async (
     return null;
   }
 
-  return data.role as Role;
+  return data.role as unknown as Role;
 }; 
