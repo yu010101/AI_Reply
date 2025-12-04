@@ -107,6 +107,26 @@ ORDER BY tablename, indexname;
 
 ## マイグレーションファイル一覧
 
+### パフォーマンスメトリクステーブル
+
+**ファイル**: `supabase/migrations/20250127000001_create_performance_metrics.sql`
+
+**説明**: APIリクエストのパフォーマンスメトリクスを記録するテーブルを作成します。
+
+**実行方法**:
+```bash
+# Supabase CLIを使用
+supabase db push
+
+# または、SupabaseダッシュボードのSQLエディタで実行
+```
+
+**注意事項**:
+- このテーブルは大量のデータを記録する可能性があるため、定期的なクリーンアップを推奨します
+- パーティショニングを使用する場合は、月ごとのパーティションを作成してください
+
+---
+
 ### 1. `20240320000000_create_google_business_accounts.sql`
 
 **目的**: Google Businessアカウント情報を保存するテーブルを作成
