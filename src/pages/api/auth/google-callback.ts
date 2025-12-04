@@ -92,7 +92,7 @@ export default async function handler(
         
         console.log('[GoogleCallback] 既存トークン確認結果:', { 
           exists: Boolean(existingToken), 
-          error: queryError ? `${queryError.code}: ${queryError.message}` : null
+          error: queryError ? `${(queryError as any).code}: ${queryError.message}` : null
         });
         
         if (queryError && queryError.code !== 'PGRST116') {
