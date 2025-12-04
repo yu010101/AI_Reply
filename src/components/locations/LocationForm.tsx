@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/utils/supabase';
-import { TONE_OPTIONS } from '@/constants/tone';
+import { TONE_OPTIONS, ToneOption } from '@/constants/tone';
 import { Location, LocationFormData } from '@/types/location';
 
 type LocationFormProps = {
@@ -98,7 +98,7 @@ export default function LocationForm({ location, onClose, onSuccess }: LocationF
               <select
                 id="tone"
                 value={formData.tone}
-                onChange={(e) => setFormData({ ...formData, tone: e.target.value as Tone })}
+                onChange={(e) => setFormData({ ...formData, tone: e.target.value as ToneOption })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 required
               >
