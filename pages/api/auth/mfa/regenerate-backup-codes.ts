@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import crypto from 'crypto';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -61,7 +62,7 @@ export default async function handler(
       .eq('user_id', userId);
     
     if (updateError) {
-      console.error('バックアップコード更新エラー:', updateError);
+      logger.error('バックアップコード更新エラー', { error: updateError });
       return res.status(500).json({ error: 'バックアップコードの更新中にエラーが発生しました' });
     }
     
@@ -81,7 +82,7 @@ export default async function handler(
       backupCodes
     });
   } catch (error: any) {
-    console.error('バックアップコード再生成エラー:', error);
+    logger.error('バックアップコード再生成エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

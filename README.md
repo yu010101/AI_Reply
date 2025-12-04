@@ -14,14 +14,16 @@ RevAI Conciergeは、Googleレビュー管理とAI返信生成機能を提供す
 
 ## 技術スタック
 
-- **フロントエンド**: Next.js, React, TypeScript, Material UI
-- **バックエンド**: Next.js API Routes
+- **フロントエンド**: Next.js 14, React 18, TypeScript, Material UI, Tailwind CSS
+- **バックエンド**: Next.js API Routes, Express.js
 - **データベース**: Supabase (PostgreSQL)
-- **認証**: Supabase Auth
+- **認証**: Supabase Auth, Google OAuth 2.0, MFA (2FA)
 - **決済**: Stripe
 - **AI**: OpenAI (GPT-4)
 - **メール**: Nodemailer
 - **データ可視化**: Chart.js
+- **監視**: Sentry, カスタムロガー
+- **テスト**: Jest, Playwright
 
 ## 開発環境のセットアップ
 
@@ -46,7 +48,11 @@ npm install
 ```
 
 3. 環境変数を設定
-`.env.local`ファイルを作成し、以下の変数を設定：
+`.env.local`ファイルを作成し、必要な環境変数を設定します。
+
+詳細な環境変数の説明は`docs/ENV_VARIABLES.md`を参照してください。
+
+**必須環境変数**:
 ```
 # Supabase設定
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -61,19 +67,15 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
 STRIPE_SECRET_KEY=your_stripe_secret_key
 STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
 
-# メール設定
-SMTP_HOST=your_smtp_host
-SMTP_PORT=587
-SMTP_USER=your_smtp_user
-SMTP_PASSWORD=your_smtp_password
-SMTP_SECURE=false
-
-# アプリ設定
+# Google OAuth設定
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NOTIFICATION_API_KEY=your_notification_api_key
+```
 
-# Google API
-GOOGLE_API_KEY=your_google_api_key
+環境変数のバリデーションを実行：
+```bash
+npm run validate-env
 ```
 
 4. 開発サーバーを起動
@@ -103,12 +105,24 @@ Supabaseで以下のテーブルを作成する必要があります：
 
 ## 本番デプロイ
 
+詳細なデプロイ手順は`docs/deployment.md`を参照してください。
+
 ### Vercelへのデプロイ
 
 1. [Vercel](https://vercel.com)にアカウントを作成
 2. GitHubリポジトリと連携
-3. 環境変数を設定
-4. デプロイ
+3. 環境変数を設定（`docs/ENV_VARIABLES.md`を参照）
+4. データベースマイグレーションを実行（`docs/DATABASE_MIGRATION.md`を参照）
+5. デプロイ
+
+### デプロイ前のチェックリスト
+
+- [ ] 環境変数のバリデーション（`npm run validate-env`）
+- [ ] ビルドの成功確認（`npm run build`）
+- [ ] テストの実行（`npm test`）
+- [ ] E2Eテストの実行（`npx playwright test`）
+- [ ] データベースマイグレーションの準備
+- [ ] RLSポリシーの確認
 
 ## テスト
 
@@ -118,7 +132,37 @@ npm test
 
 # テストカバレッジレポートを生成
 npm run test:coverage
+
+# E2Eテストを実行
+npx playwright test
+
+# E2Eテストレポートを表示
+npx playwright show-report
 ```
+
+詳細なテスト情報は`docs/TEST_COVERAGE.md`を参照してください。
+
+## 監視とアラート
+
+アプリケーションには以下の監視機能が実装されています：
+
+- **エラートラッキング**: Sentry統合
+- **パフォーマンス監視**: レスポンスタイムの記録と警告
+- **ヘルスチェック**: `/api/health`エンドポイント
+- **ログ管理**: 構造化ログと機密情報フィルタリング
+
+詳細は`docs/MONITORING_AND_ALERTING.md`を参照してください。
+
+## ドキュメント
+
+- [セットアップガイド](docs/setup.md)
+- [デプロイメントガイド](docs/deployment.md)
+- [APIリファレンス](docs/api.md)
+- [環境変数リファレンス](docs/ENV_VARIABLES.md)
+- [セキュリティガイド](docs/security.md)
+- [監視とアラート](docs/MONITORING_AND_ALERTING.md)
+- [パフォーマンステスト](docs/PERFORMANCE_TESTING.md)
+- [テストカバレッジ](docs/TEST_COVERAGE.md)
 
 ## ライセンス
 

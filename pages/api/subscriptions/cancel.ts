@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { cancelStripeSubscription } from '@/services/stripe/StripeService';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -90,7 +91,7 @@ export default async function handler(
         : 'サブスクリプションは即時キャンセルされました。'
     });
   } catch (error: any) {
-    console.error('サブスクリプションキャンセルエラー:', error);
+    logger.error('サブスクリプションキャンセルエラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

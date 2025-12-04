@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 // バッチサイズとAPIリクエスト間の遅延（ミリ秒）
 const BATCH_SIZE = 5;
@@ -27,7 +28,7 @@ async function syncLocationReviews(placeId: string, locationId: string, location
     const result = await response.json();
     return { success: true, result };
   } catch (error: any) {
-    console.error(`Location ${locationId} sync error:`, error);
+    logger.error(`Location ${locationId} sync error`, { error, locationId });
     return { 
       success: false, 
       error: error.message || 'レビュー同期に失敗しました' 
@@ -178,7 +179,7 @@ export default async function handler(
       results
     });
   } catch (error: any) {
-    console.error('Server error:', error);
+    logger.error('Server error', { error });
     return res.status(500).json({ 
       error: 'サーバーエラーが発生しました', 
       message: error.message || '不明なエラー'

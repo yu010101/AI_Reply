@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { replyToReview } from '@/utils/googleBusinessProfile';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -82,7 +83,7 @@ export default async function handler(
         .single();
 
       if (replyError) {
-        console.error('返信保存エラー:', replyError);
+        logger.error('返信保存エラー', { error: replyError });
         return res.status(500).json({ error: '返信の保存に失敗しました' });
       }
 
@@ -100,7 +101,7 @@ export default async function handler(
         replyId: replyData?.id
       });
     } catch (error: any) {
-      console.error('Google返信エラー:', error);
+      logger.error('Google返信エラー', { error });
       
       // Googleへの投稿は失敗したが、システム内には保存したい場合
       if (req.body.saveOnFailure) {
@@ -128,7 +129,7 @@ export default async function handler(
       return res.status(500).json({ error: error.message || 'Googleへの返信に失敗しました' });
     }
   } catch (error: any) {
-    console.error('返信エラー:', error);
+    logger.error('返信エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

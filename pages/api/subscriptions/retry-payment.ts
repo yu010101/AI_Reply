@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import Stripe from 'stripe';
 import { logAuditEvent } from '@/utils/auditLogger';
+import { logger } from '@/utils/logger';
 
 // Stripeインスタンスの初期化
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -43,7 +44,7 @@ export default async function handler(
         .single();
       
       if (subError) {
-        console.error('サブスクリプション取得エラー:', subError);
+        logger.error('サブスクリプション取得エラー', { error: subError });
         return res.status(404).json({ error: 'サブスクリプションが見つかりません' });
       }
       
@@ -172,7 +173,7 @@ export default async function handler(
       });
     }
   } catch (error: any) {
-    console.error('支払い再試行エラー:', error);
+    logger.error('支払い再試行エラー', { error });
     
     // Stripeエラーの場合は詳細を返す
     if (error.type && error.type.startsWith('Stripe')) {

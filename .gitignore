@@ -48,3 +48,8 @@ temp/
 
 # ログファイル
 *.log
+
+# 機密情報ファイル
+google_credentials.txt
+*_credentials.txt
+*_secrets.txt

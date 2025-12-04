@@ -174,7 +174,17 @@ export default function AdminUsersPage() {
         return;
       }
 
-      setUsers(userData || []);
+      // Supabaseのクエリ結果を適切な型に変換
+      const formattedUsers: OrganizationUser[] = (userData || []).map((item: any) => ({
+        id: item.id,
+        organization_id: item.organization_id,
+        user_id: item.user_id,
+        role_id: item.role_id,
+        created_at: item.created_at,
+        user: Array.isArray(item.user) ? item.user[0] : item.user,
+      }));
+
+      setUsers(formattedUsers);
 
       // 招待を取得
       const { data: inviteData, error: inviteError } = await supabase

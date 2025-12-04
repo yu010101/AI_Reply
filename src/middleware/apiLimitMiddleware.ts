@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { checkUsageLimit, ResourceType } from '@/models/UsageLimit';
+import { logger } from '@/utils/logger';
 
 type ApiHandler = (req: NextApiRequest, res: NextApiResponse) => Promise<void>;
 
@@ -73,7 +74,7 @@ export const withApiLimit = (handler: ApiHandler) => {
       // すべてのチェックが通過したら元のハンドラーを実行
       return handler(req, res);
     } catch (error) {
-      console.error('API制限ミドルウェアエラー:', error);
+      logger.error('API制限ミドルウェアエラー', { error });
       return res.status(500).json({ error: 'サーバーエラーが発生しました' });
     }
   };
@@ -169,7 +170,7 @@ export const withBusinessProfileApiLimit = (handler: ApiHandler) => {
       // すべてのチェックが通過したら元のハンドラーを実行
       return handler(req, res);
     } catch (error) {
-      console.error('Business Profile API制限ミドルウェアエラー:', error);
+      logger.error('Business Profile API制限ミドルウェアエラー', { error });
       return res.status(500).json({ error: 'サーバーエラーが発生しました' });
     }
   };

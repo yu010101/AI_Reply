@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import speakeasy from 'speakeasy';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -63,7 +64,7 @@ export default async function handler(
       });
     
     if (setupError) {
-      console.error('MFAセットアップエラー:', setupError);
+      logger.error('MFAセットアップエラー', { error: setupError });
       return res.status(500).json({ error: 'MFAの設定中にエラーが発生しました' });
     }
     
@@ -84,7 +85,7 @@ export default async function handler(
       secret: secret.base32
     });
   } catch (error: any) {
-    console.error('MFA設定エラー:', error);
+    logger.error('MFA設定エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

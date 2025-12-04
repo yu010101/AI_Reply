@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import Stripe from 'stripe';
+import { logger } from '@/utils/logger';
 
 // Stripeインスタンスの初期化
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -114,7 +115,7 @@ export default async function handler(
     });
     
     // すぐに送信する場合
-    if (sendImmediately) {
+    if (sendImmediately && invoice.id) {
       await stripe.invoices.sendInvoice(invoice.id);
     }
     
@@ -139,7 +140,7 @@ export default async function handler(
       .single();
     
     if (invoiceError) {
-      console.error('請求書データベース保存エラー:', invoiceError);
+      logger.error('請求書データベース保存エラー', { error: invoiceError });
       // 保存に失敗しても請求書自体は作成されているので処理を続行
     }
     
@@ -169,7 +170,7 @@ export default async function handler(
       }
     });
   } catch (error: any) {
-    console.error('請求書作成エラー:', error);
+    logger.error('請求書作成エラー', { error });
     
     // Stripeエラーの場合は詳細を返す
     if (error.type && error.type.startsWith('Stripe')) {

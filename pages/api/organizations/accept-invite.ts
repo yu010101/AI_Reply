@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -88,7 +89,7 @@ export default async function handler(
       }]);
     
     if (memberError) {
-      console.error('組織メンバー追加エラー:', memberError);
+      logger.error('組織メンバー追加エラー', { error: memberError });
       return res.status(500).json({ error: '組織への参加に失敗しました' });
     }
     
@@ -122,7 +123,7 @@ export default async function handler(
       organizationId: invitation.organization_id
     });
   } catch (error: any) {
-    console.error('招待受諾エラー:', error);
+    logger.error('招待受諾エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

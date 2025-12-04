@@ -25,7 +25,7 @@ import {
   FormControlLabel,
 } from '@mui/material';
 import axios from 'axios';
-import QRCode from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 
 export default function SecuritySettingsPage() {
   const { user } = useAuth();
@@ -381,7 +381,7 @@ export default function SecuritySettingsPage() {
                             </ol>
                             
                             <Box display="flex" justifyContent="center" my={3}>
-                              {qrCodeUrl && <QRCode value={qrCodeUrl} size={200} />}
+                              {qrCodeUrl && <QRCodeSVG value={qrCodeUrl} size={200} />}
                             </Box>
                             
                             <Typography variant="body2" gutterBottom>

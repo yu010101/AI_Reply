@@ -3,6 +3,7 @@ import { supabase } from '@/utils/supabase';
 import speakeasy from 'speakeasy';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -74,7 +75,7 @@ export default async function handler(
       });
     
     if (mfaError) {
-      console.error('MFA登録エラー:', mfaError);
+      logger.error('MFA登録エラー', { error: mfaError });
       return res.status(500).json({ error: 'MFAの登録中にエラーが発生しました' });
     }
     
@@ -100,7 +101,7 @@ export default async function handler(
       backupCodes
     });
   } catch (error: any) {
-    console.error('MFA検証エラー:', error);
+    logger.error('MFA検証エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

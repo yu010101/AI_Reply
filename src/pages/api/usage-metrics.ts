@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSession } from 'next-auth/react';
-import { db } from '@/lib/db';
+import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -8,28 +8,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const session = await getSession({ req });
-    if (!session?.user?.tenantId) {
+    // セッションからユーザー情報を取得
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
+
+    const userId = session.user.id;
 
     const currentDate = new Date();
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
     const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
-    const metrics = await db.query(
-      `SELECT type, SUM(count) as total
-       FROM usage_metrics
-       WHERE tenant_id = $1
-       AND period_start = $2
-       AND period_end = $3
-       GROUP BY type`,
-      [session.user.tenantId, startOfMonth, endOfMonth]
-    );
+    // Supabaseクライアントを使用してメトリクスを取得
+    const { data: metrics, error } = await supabase
+      .from('usage_metrics')
+      .select('type')
+      .eq('tenant_id', userId)
+      .gte('period_start', startOfMonth.toISOString())
+      .lte('period_end', endOfMonth.toISOString());
 
-    res.status(200).json(metrics.rows);
+    if (error) {
+      logger.error('使用量メトリクスの取得に失敗しました', { error });
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+
+    // タイプごとに集計
+    const aggregatedMetrics = metrics?.reduce((acc: any, metric: any) => {
+      const type = metric.type;
+      if (!acc[type]) {
+        acc[type] = { type, total: 0 };
+      }
+      acc[type].total += metric.count || 0;
+      return acc;
+    }, {});
+
+    const result = aggregatedMetrics ? Object.values(aggregatedMetrics) : [];
+
+    res.status(200).json(result);
   } catch (error) {
-    console.error('使用量メトリクスの取得に失敗しました:', error);
+    logger.error('使用量メトリクスの取得に失敗しました', { error });
     res.status(500).json({ error: 'Internal server error' });
   }
 } 

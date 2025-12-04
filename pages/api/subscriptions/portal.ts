@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import Stripe from 'stripe';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil',
@@ -43,7 +44,7 @@ export default async function handler(
 
     return res.status(200).json({ url: portalSession.url });
   } catch (error) {
-    console.error('顧客ポータルリンク生成エラー:', error);
+    logger.error('顧客ポータルリンク生成エラー', { error });
     return res.status(500).json({ error: '顧客ポータルリンクの生成に失敗しました' });
   }
 } 

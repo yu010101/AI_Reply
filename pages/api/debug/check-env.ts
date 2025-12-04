@@ -24,7 +24,7 @@ export default async function handler(
       '.env.production',
     ];
     
-    const fileStatus = {};
+    const fileStatus: Record<string, any> = {};
     
     for (const file of envFiles) {
       const filePath = path.join(rootDir, file);
@@ -38,7 +38,7 @@ export default async function handler(
           // 機密情報なしでキー一覧を取得
           const keys = lines
             .filter(line => !line.startsWith('#') && line.includes('='))
-            .map(line => line.split('=')[0].trim());
+            .map((line: string) => line.split('=')[0].trim());
           
           fileStatus[file] = {
             exists,
@@ -52,8 +52,8 @@ export default async function handler(
         } else {
           fileStatus[file] = { exists: false };
         }
-      } catch (error) {
-        fileStatus[file] = { exists: false, error: error.message };
+      } catch (error: any) {
+        fileStatus[file] = { exists: false, error: error?.message || String(error) };
       }
     }
     

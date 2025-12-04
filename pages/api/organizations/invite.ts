@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import nodemailer from 'nodemailer';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -90,7 +91,7 @@ export default async function handler(
       .single();
     
     if (inviteError) {
-      console.error('招待作成エラー:', inviteError);
+      logger.error('招待作成エラー', { error: inviteError });
       return res.status(500).json({ error: '招待の作成に失敗しました' });
     }
     
@@ -142,7 +143,7 @@ export default async function handler(
       invitation
     });
   } catch (error: any) {
-    console.error('招待エラー:', error);
+    logger.error('招待エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import nodemailer from 'nodemailer';
 import { NextApiRequest, NextApiResponse } from 'next';
+import * as Sentry from '@sentry/nextjs';
+import { logger } from './logger';
 
 type ErrorSeverity = 'low' | 'medium' | 'high' | 'critical';
 
@@ -96,8 +98,26 @@ async function logError(error: Error, context?: Record<string, any>, severity?: 
     severity: determinedSeverity,
   };
 
+  // Sentryにエラーを送信
+  try {
+    Sentry.captureException(error, {
+      level: determinedSeverity === 'critical' ? 'fatal' : determinedSeverity,
+      tags: {
+        severity: determinedSeverity,
+        ...(context?.requestId && { requestId: context.requestId }),
+      },
+      extra: context,
+    });
+  } catch (sentryError) {
+    logger.warn('Sentryへのエラー送信に失敗', { error: sentryError });
+  }
+
   // エラーログをデータベースに保存
-  await supabase.from('error_logs').insert(errorLog);
+  try {
+    await supabase.from('error_logs').insert(errorLog);
+  } catch (dbError) {
+    logger.error('エラーログのデータベース保存に失敗', { error: dbError });
+  }
 
   // 重要度が高い場合は管理者に通知
   if (determinedSeverity === 'high' || determinedSeverity === 'critical') {
@@ -128,12 +148,17 @@ Stack Trace:
 ${errorLog.error.stack || 'N/A'}
 `;
 
-  await transporter.sendMail({
-    from: process.env.SMTP_USER,
-    to: process.env.ADMIN_EMAIL,
-    subject,
-    text,
-  });
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: process.env.ADMIN_EMAIL,
+      subject,
+      text,
+    });
+    logger.info('管理者にエラー通知を送信', { severity: errorLog.severity });
+  } catch (emailError) {
+    logger.error('管理者へのエラー通知送信に失敗', { error: emailError });
+  }
 }
 
 // エラーモニタリングミドルウェア
@@ -144,8 +169,35 @@ function errorMonitoringMiddleware(
     const startTime = Date.now();
     const requestId = Math.random().toString(36).substring(2, 8);
 
+    // Sentryにリクエスト情報を設定
+    Sentry.setContext('request', {
+      method: req.method,
+      path: req.url,
+      headers: {
+        'user-agent': req.headers?.['user-agent'],
+        'content-type': req.headers?.['content-type'],
+      },
+    });
+
     try {
       await handler(req, res);
+      
+      // レスポンスタイムを記録（成功時）
+      const duration = Date.now() - startTime;
+      
+      // レスポンスタイムが長い場合は警告
+      if (duration > 5000) {
+        logger.warn('レスポンスタイムが長い', {
+          duration,
+          method: req.method,
+          path: req.url,
+          requestId,
+        });
+      }
+      
+      // レスポンスタイムをヘッダーに追加（デバッグ用）
+      res.setHeader('X-Response-Time', `${duration}ms`);
+      res.setHeader('X-Request-ID', requestId);
     } catch (error: any) {
       const duration = Date.now() - startTime;
 
@@ -156,8 +208,9 @@ function errorMonitoringMiddleware(
         requestId,
         method: req.method,
         path: req.url,
-        userId: req.user?.id,
+        userId: (req as any).user?.id,
         duration,
+        statusCode: error.statusCode,
       });
 
       // エラーレスポンスを返す

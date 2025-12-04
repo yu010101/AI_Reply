@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { PLAN_LIMITS } from '@/constants/plan';
 import { Plan } from '@/constants/plan';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -59,7 +60,7 @@ async function getUserMetrics(req: NextApiRequest, res: NextApiResponse) {
 
     return res.status(200).json(data);
   } catch (error) {
-    console.error('使用量メトリクス取得エラー:', error);
+    logger.error('使用量メトリクス取得エラー', { error });
     return res.status(500).json({ error: '使用量メトリクスの取得に失敗しました' });
   }
 }
@@ -184,7 +185,7 @@ async function recordUsage(req: NextApiRequest, res: NextApiResponse) {
       limit: maxAllowed
     });
   } catch (error) {
-    console.error('使用量記録エラー:', error);
+    logger.error('使用量記録エラー', { error });
     return res.status(500).json({ error: '使用量の記録に失敗しました' });
   }
 } 

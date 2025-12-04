@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 // @ts-ignore
 import { google } from 'googleapis';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -18,13 +19,13 @@ export default async function handler(
   // 常にモックモードを無効化
   const useMockAuth = false;
   
-  console.log('[GoogleCallback] 実行環境:', { isDevEnv, useMockAuth });
-  console.log('[GoogleCallback] クエリパラメータ:', req.query);
+  logger.debug('GoogleCallback: 実行環境', { isDevEnv, useMockAuth });
+  logger.debug('GoogleCallback: クエリパラメータ', { query: req.query });
 
   try {
     // モック認証は無効化するので、この部分はスキップされる
     if (isDevEnv && useMockAuth && req.query.mock === 'true') {
-      console.log('[GoogleCallback] モック認証モードを使用します');
+      logger.info('GoogleCallback: モック認証モードを使用します');
       
       // セッションからユーザー情報を取得
       const { data: { session } } = await supabase.auth.getSession();
@@ -32,11 +33,11 @@ export default async function handler(
       
       if (session) {
         userId = session.user.id;
-        console.log('[GoogleCallback] セッションからユーザーID取得:', userId);
+        logger.debug('GoogleCallback: セッションからユーザーID取得', { userId });
       } else {
         // クエリパラメータからユーザーIDを取得
         userId = req.query.userId || req.query.state?.toString().split('-')[0] || 'mock-user-id';
-        console.log('[GoogleCallback] モック認証用ユーザーID:', userId);
+        logger.debug('GoogleCallback: モック認証用ユーザーID', { userId });
       }
       
       // 本物のユーザーIDを使う
@@ -54,11 +55,11 @@ export default async function handler(
           .eq('tenant_id', realUserId)
           .single();
         
-        console.log('[GoogleCallback] 既存トークン確認:', { existingToken, error: tokenError });
+        logger.debug('GoogleCallback: 既存トークン確認', { hasToken: !!existingToken, error: tokenError });
         
         // テーブルが存在しない場合はローカルストレージにモックデータを保存する
-        if (tokenError && tokenError.code === '42P01') {
-          console.log('[GoogleCallback] テーブルが存在しないため、ローカルストレージを使用します');
+        if (tokenError && (tokenError as any).code === '42P01') {
+          logger.warn('GoogleCallback: テーブルが存在しないため、ローカルストレージを使用します');
           
           // ブラウザでレンダリングする際にローカルストレージに保存するためのスクリプトを含める
           const redirectUrl = '/settings?google_auth=success&mock=true&storage=true';
@@ -94,7 +95,7 @@ export default async function handler(
 
         if (existingToken) {
           // 既存のトークンを更新
-          const { data, error } = await supabase
+          const updateResult = await supabase
             .from('google_auth_tokens')
             .update({
               access_token: 'mock-access-token',
@@ -104,10 +105,10 @@ export default async function handler(
             })
             .eq('id', existingToken.id);
           
-          console.log('[GoogleCallback] トークン更新結果:', { data, error });
+          logger.debug('GoogleCallback: トークン更新結果', { success: !!updateResult });
         } else {
           // 新しいトークンを作成
-          const { data, error } = await supabase
+          const insertResult = await supabase
             .from('google_auth_tokens')
             .insert({
               tenant_id: realUserId,
@@ -118,10 +119,10 @@ export default async function handler(
               updated_at: new Date().toISOString()
             });
           
-          console.log('[GoogleCallback] 新規トークン作成結果:', { data, error });
+          logger.debug('GoogleCallback: 新規トークン作成結果', { success: !!insertResult });
         }
         
-        console.log('[GoogleCallback] モックデータを保存しました');
+        logger.info('GoogleCallback: モックデータを保存しました');
       } catch (dbError) {
         console.error('[GoogleCallback] データベース操作エラー:', dbError);
       }
@@ -135,33 +136,33 @@ export default async function handler(
     // 通常の認証フロー
     // セッションからユーザー情報を取得
     const { data: { session } } = await supabase.auth.getSession();
-    console.log('[GoogleCallback] セッション情報:', session ? '取得成功' : '取得失敗', session?.user?.id);
+    logger.debug('GoogleCallback: セッション情報', { hasSession: !!session, userId: session?.user?.id });
 
     // データベース接続を確認
     try {
-      const { data: tableCheck, error: tableError } = await supabase
+      const tableCheckResult: any = await supabase
         .from('google_auth_tokens')
-        .select('*', { count: 'exact', head: true });
+        .select('id');
       
-      console.log('[GoogleCallback] DBテーブル確認:', {
-        accessible: !tableError,
-        error: tableError ? tableError.message : null,
-        count: tableCheck ? tableCheck.length : 0
+      logger.debug('GoogleCallback: DBテーブル確認', {
+        accessible: !tableCheckResult.error,
+        error: tableCheckResult.error ? tableCheckResult.error.message : null,
+        count: tableCheckResult.data ? tableCheckResult.data.length : 0
       });
     } catch (dbCheckError) {
-      console.error('[GoogleCallback] DB接続確認エラー:', dbCheckError);
+      logger.error('GoogleCallback: DB接続確認エラー', { error: dbCheckError });
     }
 
     // 開発環境では認証を強制的にバイパス
     if (!session && isDevEnv) {
-      console.log('[GoogleCallback] 開発環境のため認証をバイパスします');
+      logger.info('GoogleCallback: 開発環境のため認証をバイパスします');
       // 固定のユーザーIDを使用（開発環境用）
       const developmentUserId = 'ce223858-240b-4888-9087-fddf947dd020';
       
       // 認証コードを使用してトークンを取得
       try {
         const { code, state } = req.query;
-        console.log('[GoogleCallback] 認証コード:', code ? '取得成功' : '取得失敗');
+        logger.debug('GoogleCallback: 認証コード', { hasCode: !!code });
         
         // OAuth2クライアントの設定
         const oauth2Client = new google.auth.OAuth2(
@@ -172,7 +173,7 @@ export default async function handler(
 
         // 認証コードを使用してトークンを取得
         const { tokens } = await oauth2Client.getToken(code as string);
-        console.log('[GoogleCallback] トークン取得成功:', tokens ? '成功' : '失敗');
+        logger.debug('GoogleCallback: トークン取得', { success: !!tokens });
         
         if (tokens.access_token) {
           // トークン情報を保存
@@ -184,12 +185,10 @@ export default async function handler(
             // リフレッシュトークンがなければデフォルト値を設定
             const refreshToken = tokens.refresh_token || 'dummy-refresh-token';
             
-            console.log('[GoogleCallback] 保存するトークン情報:', {
+            logger.debug('GoogleCallback: 保存するトークン情報', {
               userId: developmentUserId,
-              accessTokenPrefix: tokens.access_token ? tokens.access_token.substring(0, 10) + '...' : null,
+              hasAccessToken: !!tokens.access_token,
               hasRefreshToken: Boolean(refreshToken),
-              expiryDateRaw: expiryMillis,
-              expiryDateIso: expiryDate
             });
             
             const { data: existingToken, error: findError } = await supabase
@@ -198,18 +197,18 @@ export default async function handler(
               .eq('tenant_id', developmentUserId)
               .single();
             
-            console.log('[GoogleCallback] 既存トークン検索結果:', {
+            logger.debug('GoogleCallback: 既存トークン検索結果', {
               found: Boolean(existingToken),
               error: findError ? {
-                code: findError.code,
+                code: (findError as any).code,
                 message: findError.message,
-                details: findError.details
+                details: (findError as any).details
               } : null
             });
 
             if (existingToken) {
               // 既存のトークンを更新
-              const { data: updateData, error: updateError } = await supabase
+              const updateResult: any = await (supabase
                 .from('google_auth_tokens')
                 .update({
                   access_token: tokens.access_token,
@@ -217,27 +216,24 @@ export default async function handler(
                   expiry_date: expiryDate,
                   updated_at: new Date().toISOString()
                 })
-                .eq('id', existingToken.id)
+                .eq('id', existingToken.id) as any)
                 .select();
+              
+              const updateData = updateResult?.data;
+              const updateError = updateResult?.error;
                 
-                console.log('[GoogleCallback] 既存トークン更新結果:', {
+                logger.debug('GoogleCallback: 既存トークン更新結果', {
                   success: !updateError,
-                  data: updateData ? {
-                    id: updateData[0]?.id,
-                    tenant_id: updateData[0]?.tenant_id,
-                    accessTokenPrefix: updateData[0]?.access_token ? updateData[0].access_token.substring(0, 10) + '...' : null,
-                    updatedAt: updateData[0]?.updated_at,
-                    expiryDate: updateData[0]?.expiry_date
-                  } : null,
+                  hasData: !!updateData,
                   error: updateError ? {
-                    code: updateError.code,
+                    code: (updateError as any).code,
                     message: updateError.message,
-                    details: updateError.details
+                    details: (updateError as any).details
                   } : null
                 });
             } else {
               // 新しいトークンを作成
-              const { data: insertData, error: insertError } = await supabase
+              const insertResult: any = await (supabase
                 .from('google_auth_tokens')
                 .insert({
                   tenant_id: developmentUserId,
@@ -246,43 +242,39 @@ export default async function handler(
                   expiry_date: expiryDate,
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString()
-                })
+                }) as any)
                 .select();
+              
+              const insertData = insertResult?.data;
+              const insertError = insertResult?.error;
                 
-                console.log('[GoogleCallback] 新規トークン作成結果:', {
+                logger.debug('GoogleCallback: 新規トークン作成結果', {
                   success: !insertError,
-                  data: insertData ? {
-                    id: insertData[0]?.id,
-                    tenant_id: insertData[0]?.tenant_id,
-                    accessTokenPrefix: insertData[0]?.access_token ? insertData[0].access_token.substring(0, 10) + '...' : null,
-                    createdAt: insertData[0]?.created_at,
-                    expiryDate: insertData[0]?.expiry_date
-                  } : null,
+                  hasData: !!insertData,
                   error: insertError ? {
-                    code: insertError.code,
+                    code: (insertError as any).code,
                     message: insertError.message,
-                    details: insertError.details
+                    details: (insertError as any).details
                   } : null
                 });
             }
             
             // 直接SQLクエリを実行してテーブル内の全レコードを確認
-            console.log('[GoogleCallback] テーブル内のレコードを確認します...');
-            const { data: allRecords, error: recordsError } = await supabase
+            logger.debug('GoogleCallback: テーブル内のレコードを確認します');
+            const recordsResult: any = await (supabase
               .from('google_auth_tokens')
-              .select('id, tenant_id, created_at')
+              .select('id, tenant_id, created_at') as any)
               .order('created_at', { ascending: false })
               .limit(5);
+            
+            const allRecords = recordsResult?.data;
+            const recordsError = recordsResult?.error;
               
-            console.log('[GoogleCallback] テーブル内レコード:', {
-              count: allRecords?.length || 0,
-              records: allRecords?.map(record => ({
-                id: record.id,
-                tenant_id: record.tenant_id,
-                createdAt: record.created_at
-              })) || [],
+            logger.debug('GoogleCallback: テーブル内レコード', {
+              count: Array.isArray(allRecords) ? allRecords.length : 0,
+              hasError: !!recordsError,
               error: recordsError ? {
-                code: recordsError.code,
+                code: (recordsError as any).code,
                 message: recordsError.message
               } : null
             });
@@ -294,36 +286,33 @@ export default async function handler(
               .eq('tenant_id', developmentUserId)
               .single();
             
-            console.log('[GoogleCallback] トークン保存検証:', {
+            logger.debug('GoogleCallback: トークン保存検証', {
               verified: Boolean(verifyToken),
+              hasError: !!verifyError,
               error: verifyError ? {
-                code: verifyError.code,
+                code: (verifyError as any).code,
                 message: verifyError.message,
-                details: verifyError.details
+                details: (verifyError as any).details
               } : null,
-              tenant_id: verifyToken?.tenant_id,
-              accessTokenPrefix: verifyToken ? verifyToken.access_token.substring(0, 10) + '...' : null,
-              updatedAt: verifyToken ? verifyToken.updated_at : null
+              tenant_id: verifyToken?.tenant_id
             });
             
             // 指定したtenantIdでデータが見つからない場合は、テーブル内の最新のトークンを確認
-            if (verifyError && verifyError.code === 'PGRST116') {
-              console.log('[GoogleCallback] 指定したユーザーIDでトークンが見つかりませんでした。最新トークンを確認します...');
-              const { data: latestToken, error: latestError } = await supabase
+            if (verifyError && (verifyError as any).code === 'PGRST116') {
+              logger.warn('GoogleCallback: 指定したユーザーIDでトークンが見つかりませんでした。最新トークンを確認します');
+              const latestResult: any = await (supabase
                 .from('google_auth_tokens')
-                .select('id, tenant_id, created_at, updated_at')
+                .select('id, tenant_id, created_at, updated_at') as any)
                 .order('created_at', { ascending: false })
                 .limit(1)
                 .single();
+              
+              const latestToken = latestResult?.data;
+              const latestError = latestResult?.error;
                 
-              console.log('[GoogleCallback] 最新トークン情報:', {
+              logger.debug('GoogleCallback: 最新トークン情報', {
                 found: Boolean(latestToken),
-                data: latestToken ? {
-                  id: latestToken.id,
-                  tenant_id: latestToken.tenant_id,
-                  createdAt: latestToken.created_at,
-                  updatedAt: latestToken.updated_at
-                } : null,
+                hasError: !!latestError,
                 error: latestError ? latestError.message : null
               });
             }
@@ -333,7 +322,7 @@ export default async function handler(
             res.end();
             return;
           } catch (dbError: any) {
-            console.error('[GoogleCallback] データベース操作エラー:', dbError);
+            logger.error('GoogleCallback: データベース操作エラー', { error: dbError });
             // エラー詳細をクエリパラメータに追加
             res.writeHead(302, { Location: `/settings?error=db_error&details=${encodeURIComponent(dbError.message)}` });
             res.end();
@@ -346,7 +335,7 @@ export default async function handler(
           return;
         }
       } catch (tokenError: any) {
-        console.error('[GoogleCallback] トークン取得エラー:', tokenError);
+        logger.error('GoogleCallback: トークン取得エラー', { error: tokenError });
         // エラー詳細をクエリパラメータに追加
         res.writeHead(302, { Location: `/settings?error=token_error&details=${encodeURIComponent(tokenError.message)}` });
         res.end();
@@ -355,7 +344,7 @@ export default async function handler(
     }
 
     if (!session) {
-      console.log('[GoogleCallback] 未認証のためログインページへリダイレクト');
+      logger.warn('GoogleCallback: 未認証のためログインページへリダイレクト');
       res.writeHead(302, { Location: '/auth/login?error=auth_required&source=callback' });
       res.end();
       return;
@@ -443,7 +432,7 @@ export default async function handler(
       return;
     }
   } catch (error: any) {
-    console.error('Google認証エラー:', error);
+    logger.error('Google認証エラー', { error });
     res.writeHead(302, { Location: `/settings?error=${encodeURIComponent(error.message || 'unknown_error')}` });
     res.end();
     return;

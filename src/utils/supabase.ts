@@ -3,15 +3,27 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-console.log('[Supabase] URL:', supabaseUrl ? '設定済み' : '未設定');
-console.log('[Supabase] Anon Key:', supabaseAnonKey ? '設定済み' : '未設定');
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[Supabase] 環境変数が設定されていません');
-  throw new Error('Supabaseの設定が正しくありません');
+// 開発環境とテスト環境でのみログを出力
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[Supabase] URL:', supabaseUrl ? '設定済み' : '未設定');
+  console.log('[Supabase] Anon Key:', supabaseAnonKey ? '設定済み' : '未設定');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 環境変数が設定されていない場合のエラーハンドリング
+// ビルド時やテスト時にはエラーを投げず、ダミークライアントを作成
+if (!supabaseUrl || !supabaseAnonKey) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[Supabase] 環境変数が設定されていません');
+    throw new Error('Supabaseの設定が正しくありません');
+  }
+  // 開発環境やテスト環境では警告のみ
+  console.warn('[Supabase] 環境変数が設定されていません。ダミークライアントを使用します。');
+}
+
+// 環境変数が設定されている場合のみ有効なクライアントを作成
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : createClient('https://dummy.supabase.co', 'dummy-key');
 
 // 認証関連の関数
 export const signIn = async (email: string, password: string) => {

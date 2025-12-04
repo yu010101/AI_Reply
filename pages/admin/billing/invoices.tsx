@@ -227,7 +227,11 @@ export default function InvoicesPage() {
   // 請求書項目の更新
   const handleInvoiceItemChange = (index: number, field: 'description' | 'amount', value: string | number) => {
     const newItems = [...invoiceItems];
-    newItems[index][field] = value;
+    if (field === 'description') {
+      newItems[index].description = value as string;
+    } else {
+      newItems[index].amount = value as number;
+    }
     setInvoiceItems(newItems);
   };
 

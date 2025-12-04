@@ -44,6 +44,7 @@ export default function BillingPage() {
       fetchSubscription();
       fetchUsageMetrics();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchSubscription = async () => {

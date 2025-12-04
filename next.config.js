@@ -3,15 +3,23 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['localhost'],
+    domains: [
+      'localhost',
+      // 本番環境で使用する画像ホスティングサービスのドメインを追加
+      // 例: 'images.unsplash.com', 'cdn.example.com'
+      ...(process.env.NEXT_PUBLIC_IMAGE_DOMAINS?.split(',') || []),
+    ],
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   typescript: {
-    // ビルド時の型チェックをスキップ
-    ignoreBuildErrors: true,
+    // ビルド時の型チェックを有効化（型安全性の確保）
+    ignoreBuildErrors: false,
   },
   eslint: {
-    // ビルド時のESLintチェックをスキップ
-    ignoreDuringBuilds: true,
+    // ビルド時のESLintチェックを有効化（コード品質の確保）
+    ignoreDuringBuilds: false,
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {

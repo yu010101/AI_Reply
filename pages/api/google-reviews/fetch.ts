@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Client } from '@googlemaps/google-maps-services-js';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 // Google Places APIクライアントの初期化
 const googleMapsClient = new Client({});
@@ -113,14 +114,14 @@ export default async function handler(
         errors: errors.length > 0 ? errors : null
       });
     } catch (error: any) {
-      console.error('Google Places API error:', error);
+      logger.error('Google Places API error', { error });
       return res.status(500).json({ 
         error: 'Google Places APIからのデータ取得に失敗しました',
         details: error.message 
       });
     }
   } catch (error) {
-    console.error('Server error:', error);
+    logger.error('Server error', { error });
     return res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
 } 

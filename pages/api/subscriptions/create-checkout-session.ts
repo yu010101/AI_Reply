@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { createCheckoutSession } from '@/services/stripe/StripeService';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -63,7 +64,7 @@ export default async function handler(
     // 決済ページのURLを返す
     return res.status(200).json({ url: checkoutUrl });
   } catch (error: any) {
-    console.error('チェックアウトセッション作成エラー:', error);
+    logger.error('チェックアウトセッション作成エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -54,7 +55,7 @@ export default async function handler(
       .eq('user_id', requestUserId || userId);
     
     if (deleteError) {
-      console.error('MFA削除エラー:', deleteError);
+      logger.error('MFA削除エラー', { error: deleteError });
       return res.status(500).json({ error: 'MFAの削除中にエラーが発生しました' });
     }
     
@@ -75,7 +76,7 @@ export default async function handler(
       message: '2要素認証が無効化されました'
     });
   } catch (error: any) {
-    console.error('MFA無効化エラー:', error);
+    logger.error('MFA無効化エラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

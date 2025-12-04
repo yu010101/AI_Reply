@@ -1,8 +1,8 @@
-import { google } from 'googleapis';
+// @ts-ignore
+import google from 'googleapis';
+import { GoogleAuth } from 'google-auth-library';
 import { db } from '../db';
 import { UsageService } from './usage';
-
-const googleReviews = google.mybusiness('v4');
 
 export class GoogleService {
   static async fetchReviews(tenantId: string, locationId: string) {
@@ -14,16 +14,19 @@ export class GoogleService {
       }
 
       // Google APIクライアントの初期化
-      const auth = new google.auth.GoogleAuth({
+      const auth = new GoogleAuth({
         credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS!),
         scopes: ['https://www.googleapis.com/auth/business.manage'],
       });
 
       const client = await auth.getClient();
+      // @ts-ignore
       google.options({ auth: client });
 
       // レビューの取得
-      const response = await googleReviews.accounts.locations.reviews.list({
+      // @ts-ignore
+      const mybusiness = google.mybusiness('v4');
+      const response = await mybusiness.accounts.locations.reviews.list({
         name: `accounts/${process.env.GOOGLE_ACCOUNT_ID}/locations/${locationId}`,
       });
 
@@ -63,16 +66,19 @@ export class GoogleService {
       }
 
       // Google APIクライアントの初期化
-      const auth = new google.auth.GoogleAuth({
+      const auth = new GoogleAuth({
         credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS!),
         scopes: ['https://www.googleapis.com/auth/business.manage'],
       });
 
       const client = await auth.getClient();
+      // @ts-ignore
       google.options({ auth: client });
 
       // 返信の投稿
-      const response = await googleReviews.accounts.locations.reviews.reply({
+      // @ts-ignore
+      const mybusiness = google.mybusiness('v4');
+      const response = await mybusiness.accounts.locations.reviews.reply({
         name: reviewId,
         requestBody: {
           comment: reply,

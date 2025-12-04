@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { buffer } from 'micro';
 import Stripe from 'stripe';
 import { handleStripeWebhook } from '@/services/stripe/StripeService';
+import { logger } from '@/utils/logger';
 
 // Bodyパーサーを無効化（Webhookのrawデータアクセスのため）
 export const config = {
@@ -12,7 +13,7 @@ export const config = {
 
 // Stripeインスタンスを初期化
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2025-04-30.basil',
 });
 
 export default async function handler(
@@ -31,7 +32,7 @@ export default async function handler(
 
   try {
     // リクエストボディを取得
-    const buf = await buffer(req);
+    const buf = await buffer(req as any);
     const sig = req.headers['stripe-signature'] as string;
 
     // イベントを検証
@@ -48,13 +49,13 @@ export default async function handler(
     const result = await handleStripeWebhook(event);
 
     if (!result) {
-      console.warn(`Webhook handling failed for event type ${event.type}`);
+      logger.warn('Webhook handling failed', { eventType: event.type });
       return res.status(500).json({ error: 'Webhook handling failed' });
     }
 
     return res.status(200).json({ received: true });
   } catch (error: any) {
-    console.error('Webhook error:', error);
+    logger.error('Webhook error', { error });
     return res.status(500).json({ error: error.message || 'Server error' });
   }
 } 

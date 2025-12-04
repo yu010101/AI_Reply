@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import nodemailer from 'nodemailer';
 import { supabase } from '@/utils/supabase';
+import { logger } from '@/utils/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -148,7 +149,7 @@ export default async function handler(
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('通知送信エラー:', error);
+    logger.error('通知送信エラー', { error });
     return res.status(500).json({ error: '通知の送信に失敗しました' });
   }
 } 

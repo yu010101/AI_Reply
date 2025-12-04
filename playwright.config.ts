@@ -2,8 +2,16 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Read from default .env file
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+// Read from default .env file (優先順位: .env.test > .env.local > .env)
+const envFiles = [
+  path.resolve(__dirname, '.env.test'),
+  path.resolve(__dirname, '.env.local'),
+  path.resolve(__dirname, '.env'),
+];
+
+for (const envFile of envFiles) {
+  dotenv.config({ path: envFile, override: false });
+}
 
 export default defineConfig({
   testDir: './e2e',

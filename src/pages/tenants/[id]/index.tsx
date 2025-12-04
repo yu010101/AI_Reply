@@ -25,6 +25,7 @@ export default function TenantDetailPage() {
     if (id) {
       fetchTenant();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchTenant = async () => {

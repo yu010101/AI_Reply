@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
 import { supabase } from '@/utils/supabase';
 import { recordUsage } from '@/utils/usage-metrics';
+import { logger } from '@/utils/logger';
 
 // OpenAI API設定
 const openai = new OpenAI({
@@ -222,7 +223,7 @@ export default async function handler(
       });
     }
   } catch (error) {
-    console.error('AI返信生成エラー:', error);
+    logger.error('AI返信生成エラー', { error });
     return res.status(500).json({ error: 'AI返信の生成に失敗しました' });
   }
 } 

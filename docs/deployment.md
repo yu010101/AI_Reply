@@ -68,19 +68,23 @@
 ### Supabaseの設定
 
 1. **プロジェクトの作成**
+   - Supabaseダッシュボードでプロジェクトを作成
+   - またはCLIを使用：
    ```bash
    supabase init
    ```
 
 2. **データベースのマイグレーション**
    ```bash
+   # マイグレーションファイルを適用
    supabase db push
    ```
+   
+   詳細なマイグレーション手順は`docs/DATABASE_MIGRATION.md`を参照してください。
 
-3. **RLSポリシーの適用**
-   ```bash
-   supabase db reset
-   ```
+3. **RLSポリシーの確認**
+   - RLSポリシーが適切に設定されているか確認
+   - 詳細は`docs/RLS_POLICIES.md`を参照してください
 
 ### AWS Lambdaのデプロイ
 
@@ -153,6 +157,24 @@
 
 ## モニタリングの設定
 
+### Sentryの設定
+
+1. **Sentryアカウントの作成**
+   - [Sentry](https://sentry.io)でアカウントを作成
+   - プロジェクトを作成してDSNを取得
+
+2. **環境変数の設定**
+   ```
+   NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+   SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
+   ```
+
+3. **アラートルールの設定**
+   - Sentryダッシュボードでアラートルールを設定
+   - エラーレート、パフォーマンス、可用性のアラートを設定
+
+詳細は`docs/MONITORING_AND_ALERTING.md`を参照してください。
+
 ### ログ収集
 
 1. **Vercelのログ**
@@ -161,40 +183,33 @@
    ```
 
 2. **Supabaseのログ**
-   ```sql
-   -- ログの有効化
-   ALTER DATABASE postgres SET log_statement = 'all';
-   ```
+   - Supabaseダッシュボードでログを確認
+   - クエリパフォーマンス、エラーログを監視
 
-3. **AWS CloudWatch**
-   ```bash
-   aws logs create-log-group \
-     --log-group-name /aws/lambda/generate-reply
-   ```
+3. **カスタムロガー**
+   - 構造化ログが`src/utils/logger.ts`で実装されています
+   - 機密情報は自動的にフィルタリングされます
 
 ### アラート設定
 
-1. **Vercelのアラート**
+1. **Sentryのアラート**
+   - エラーレートのアラート
+   - パフォーマンスのアラート
+   - 可用性のアラート
+
+2. **メール通知**
+   - 重要なエラー（high/critical）は自動的に管理者にメール通知
+   - `ADMIN_EMAIL`環境変数を設定
+
+3. **Vercelのアラート**
    - デプロイ失敗
    - エラーレートの上昇
    - レスポンスタイムの増加
 
-2. **Supabaseのアラート**
+4. **Supabaseのアラート**
    - データベース接続数
    - クエリ実行時間
    - エラーレート
-
-3. **AWS CloudWatchアラート**
-   ```bash
-   aws cloudwatch put-metric-alarm \
-     --alarm-name lambda-errors \
-     --metric-name Errors \
-     --namespace AWS/Lambda \
-     --statistic Sum \
-     --period 300 \
-     --threshold 1 \
-     --comparison-operator GreaterThanThreshold
-   ```
 
 ## バックアップとリカバリー
 

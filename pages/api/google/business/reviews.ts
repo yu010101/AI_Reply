@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getReviews } from '@/utils/googleBusinessProfile';
 import { withBusinessProfileApiLimit } from '@/middleware/apiLimitMiddleware';
+import { logger } from '@/utils/logger';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // GETリクエストのみを受け付ける
@@ -48,7 +49,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     
     return res.status(200).json(reviews);
   } catch (error: any) {
-    console.error('レビュー一覧取得エラー:', error);
+    logger.error('レビュー一覧取得エラー', { error });
     
     // エラーメッセージを適切に処理
     if (error.message.includes('Google認証が必要です')) {

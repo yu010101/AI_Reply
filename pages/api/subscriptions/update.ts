@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import Stripe from 'stripe';
 import { supabase } from '@/utils/supabase';
 import { PLAN_PRICES } from '@/constants/plan';
+import { logger } from '@/utils/logger';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-04-30.basil',
@@ -88,7 +89,7 @@ export default async function handler(
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('サブスクリプション更新エラー:', error);
+    logger.error('サブスクリプション更新エラー', { error });
     return res.status(500).json({ error: 'サブスクリプションの更新に失敗しました' });
   }
 } 

@@ -4,10 +4,18 @@ import Stripe from 'stripe';
 
 // StripeのAPIキー
 const STRIPE_PUBLIC_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-04-30.basil',
-});
+// 環境変数の検証
+if (!STRIPE_SECRET_KEY && typeof window === 'undefined') {
+  console.warn('警告: STRIPE_SECRET_KEYが設定されていません。Stripe機能が正常に動作しない可能性があります。');
+}
+
+export const stripe = STRIPE_SECRET_KEY 
+  ? new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: '2025-04-30.basil',
+    })
+  : null as any; // ビルド時のエラー回避のため、nullを許可（実際の使用時はエラーハンドリングが必要）
 
 // Stripeの初期化
 export const getStripe = async () => {
@@ -106,6 +114,9 @@ export const clientApi = {
     }
   },
 };
+
+// 顧客ポータルリンク生成関数を直接エクスポート
+export const createCustomerPortalLink = clientApi.createCustomerPortalLink;
 
 // プラン価格フォーマット
 export const formatPrice = (plan: keyof typeof PLAN_PRICES) => {

@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
 import { supabase } from '@/utils/supabase';
 import { recordUsage } from '@/utils/usage-metrics';
+import { logger } from '@/utils/logger';
 
 // レビューの型定義
 interface GoogleReview {
@@ -151,7 +152,7 @@ export default async function handler(
       reviews: savedReviews
     });
   } catch (error) {
-    console.error('Googleレビュー同期エラー:', error);
+    logger.error('Googleレビュー同期エラー', { error });
     return res.status(500).json({ error: 'Googleレビューの同期に失敗しました' });
   }
 } 

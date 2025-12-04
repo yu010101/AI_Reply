@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { replyToReview } from '@/utils/googleBusinessProfile';
 import { withBusinessProfileApiLimit } from '@/middleware/apiLimitMiddleware';
 import { incrementUsage, ResourceType } from '@/models/UsageLimit';
+import { logger } from '@/utils/logger';
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   // POSTリクエストのみを受け付ける
@@ -35,7 +36,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       reply: result
     });
   } catch (error: any) {
-    console.error('レビュー返信エラー:', error);
+    logger.error('レビュー返信エラー', { error });
     
     // エラーメッセージを適切に処理
     if (error.message.includes('Google認証が必要です')) {

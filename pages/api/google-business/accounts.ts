@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
 import { getAccounts } from '@/utils/googleBusinessProfile';
+import { logger } from '@/utils/logger';
 
 // レート制限用のシンプルな状態管理
 const rateLimiter = {
@@ -38,7 +39,7 @@ const rateLimiter = {
   setQuotaLimited() {
     // クォータ制限が発生した場合、一定時間リクエストをブロック
     this.quotaLimitedUntil = Date.now() + this.QUOTA_BACKOFF;
-    console.log(`[RateLimiter] クォータ制限を設定しました。${new Date(this.quotaLimitedUntil).toISOString()}まで待機します`);
+    logger.warn(`RateLimiter: クォータ制限を設定しました。${new Date(this.quotaLimitedUntil).toISOString()}まで待機します`);
   },
   
   getRetryAfter(): number {
@@ -77,12 +78,12 @@ async function checkCacheStatus(userId: string) {
     .order('created_at', { ascending: false });
 
   if (cacheError) {
-    console.error('[GoogleBusinessAPI] キャッシュ取得エラー:', cacheError);
+    logger.error('GoogleBusinessAPI: キャッシュ取得エラー', { error: cacheError });
     return { exists: false, valid: false };
   }
 
   const valid = isCacheValid(cachedAccounts);
-  console.log('[GoogleBusinessAPI] キャッシュ状態:', { 
+  logger.debug('GoogleBusinessAPI: キャッシュ状態', { 
     exists: Boolean(cachedAccounts && cachedAccounts.length > 0),
     valid,
     count: cachedAccounts?.length || 0,
@@ -97,7 +98,7 @@ async function checkCacheStatus(userId: string) {
 // アカウント情報をキャッシュに保存する関数
 async function saveAccountsToCache(userId: string, accounts: any[]): Promise<void> {
   if (!accounts || accounts.length === 0) {
-    console.log('[GoogleBusinessAPI] キャッシュするアカウントがありません');
+    logger.debug('GoogleBusinessAPI: キャッシュするアカウントがありません');
     return;
   }
   
@@ -121,17 +122,17 @@ async function saveAccountsToCache(userId: string, accounts: any[]): Promise<voi
       created_at: new Date().toISOString()
     }));
     
-    const { error } = await supabase
+    const { error } = await (supabase
       .from('google_business_accounts')
-      .insert(cacheData);
+      .insert(cacheData as any) as any);
       
     if (error) {
-      console.error('[GoogleBusinessAPI] キャッシュ保存エラー:', error);
+      logger.error('GoogleBusinessAPI: キャッシュ保存エラー', { error });
     } else {
-      console.log('[GoogleBusinessAPI] キャッシュを更新しました:', cacheData.length + '件');
+      logger.info('GoogleBusinessAPI: キャッシュを更新しました', { count: cacheData.length });
     }
   } catch (error) {
-    console.error('[GoogleBusinessAPI] キャッシュ保存中にエラーが発生しました:', error);
+    logger.error('GoogleBusinessAPI: キャッシュ保存中にエラーが発生しました', { error });
   }
 }
 
@@ -151,7 +152,7 @@ export default async function handler(
     let userId: string;
     
     if (isDevEnv) {
-      console.log('[GoogleBusinessAPI] 開発環境のため認証をバイパスします');
+      logger.info('GoogleBusinessAPI: 開発環境のため認証をバイパスします');
       // 開発環境用の固定ID
       userId = process.env.DEV_USER_ID || 'ce223858-240b-4888-9087-fddf947dd020';
     } else {
@@ -166,12 +167,11 @@ export default async function handler(
       userId = session.user.id;
     }
 
-    console.log('[GoogleBusinessAPI] ユーザーID:', userId);
+    logger.debug('GoogleBusinessAPI: ユーザーID', { userId });
     
     // レート制限をチェック
     if (rateLimiter.isLimited()) {
-      console.log('[GoogleBusinessAPI] レート制限により実行をスキップします');
-      console.log(`[GoogleBusinessAPI] 次のリクエストまで待機: ${rateLimiter.getRetryAfter()}秒`);
+      logger.warn('GoogleBusinessAPI: レート制限により実行をスキップします', { retryAfter: rateLimiter.getRetryAfter() });
       
       // キャッシュされたデータが存在するか確認
       const { data: cachedAccounts, error: cacheError } = await supabase
@@ -181,7 +181,7 @@ export default async function handler(
         .order('created_at', { ascending: false });
       
       if (cacheError) {
-        console.error('[GoogleBusinessAPI] キャッシュ取得エラー:', cacheError);
+        logger.error('GoogleBusinessAPI: キャッシュ取得エラー', { error: cacheError });
         return res.status(500).json({ error: 'キャッシュの取得に失敗しました' });
       }
       
@@ -189,8 +189,7 @@ export default async function handler(
       
       // キャッシュがある場合はそれを返す
       if (cacheValid && cachedAccounts) {
-        console.log('[GoogleBusinessAPI] レート制限中のためキャッシュを使用します:',  
-          cachedAccounts.length + '件');
+        logger.debug('GoogleBusinessAPI: レート制限中のためキャッシュを使用します', { count: cachedAccounts.length });
         
         return res.status(200).json({ 
           accounts: cachedAccounts.map(account => ({
@@ -219,7 +218,7 @@ export default async function handler(
     // 通常のAPIリクエストでGoogleからデータを取得
     try {
       // ログ出力
-      console.log('[GoogleBusinessAPI] Google Business APIを呼び出します');
+      logger.debug('GoogleBusinessAPI: Google Business APIを呼び出します');
       
       // キャッシュを確認
       const { data: cachedAccounts, error: cacheError } = await supabase
@@ -229,7 +228,7 @@ export default async function handler(
         .order('created_at', { ascending: false });
         
       const cacheValid = isCacheValid(cachedAccounts);
-      console.log('[GoogleBusinessAPI] キャッシュ状態:', { 
+      logger.debug('GoogleBusinessAPI: キャッシュ状態', { 
         exists: Boolean(cachedAccounts && cachedAccounts.length > 0),
         valid: cacheValid,
         count: cachedAccounts?.length || 0,
@@ -267,7 +266,7 @@ export default async function handler(
       
       // APIで取得したアカウント情報をキャッシュ（バックグラウンド処理）
       saveAccountsToCache(userId, accounts).catch(error => {
-        console.error('[GoogleBusinessAPI] キャッシュ保存エラー:', error);
+        logger.error('GoogleBusinessAPI: キャッシュ保存エラー', { error });
       });
       
       // APIレスポンスを先に返す（キャッシュ保存を待たない）
@@ -278,19 +277,21 @@ export default async function handler(
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
-      console.error('[GoogleBusinessAPI] アカウント情報取得エラー:', error);
+      logger.error('GoogleBusinessAPI: アカウント情報取得エラー', { error });
       
       // キャッシュされたアカウント情報を返す
-      const { data: cachedAccounts } = await supabase
+      const cacheResult: any = await supabase
         .from('google_business_accounts')
         .select('*')
         .eq('tenant_id', userId);
+      
+      const cachedAccounts = cacheResult?.data;
         
       const cacheValid = isCacheValid(cachedAccounts);
         
       if (cacheValid && cachedAccounts) {
         return res.status(200).json({ 
-          accounts: cachedAccounts.map(account => ({
+          accounts: cachedAccounts.map((account: any) => ({
             name: `accounts/${account.account_id}`,
             displayName: account.display_name,
             accountName: account.account_name,
@@ -321,7 +322,7 @@ export default async function handler(
       return res.status(500).json({ error: error.message || 'アカウント情報の取得に失敗しました' });
     }
   } catch (error: any) {
-    console.error('[GoogleBusinessAPI] サーバーエラー:', error);
+    logger.error('GoogleBusinessAPI: サーバーエラー', { error });
     return res.status(500).json({ error: error.message || 'サーバーエラーが発生しました' });
   }
 } 

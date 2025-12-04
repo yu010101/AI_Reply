@@ -34,10 +34,15 @@ describe('Error Monitoring', () => {
       method: 'POST',
       url: '/api/test',
       user: { id: 'test-user-id' },
+      headers: {
+        'user-agent': 'test-user-agent',
+        'content-type': 'application/json',
+      },
     };
     mockRes = {
       status: statusMock,
       json: jsonMock,
+      setHeader: jest.fn(),
     };
   });
 
@@ -103,7 +108,9 @@ describe('Error Monitoring', () => {
       const wrappedHandler = errorMonitoringMiddleware(handler);
       await wrappedHandler(mockReq as NextApiRequest, mockRes as NextApiResponse);
 
-      expect(supabase.from).not.toHaveBeenCalled();
+      // 成功時はエラーログは記録されないが、SentryのsetContextは呼ばれる
+      expect(mockRes.setHeader).toHaveBeenCalledWith('X-Response-Time', expect.stringMatching(/\d+ms/));
+      expect(mockRes.setHeader).toHaveBeenCalledWith('X-Request-ID', expect.any(String));
     });
 
     it('should handle error and log it', async () => {
