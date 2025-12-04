@@ -261,9 +261,10 @@ async function saveAccountsToCache(userId: string, accounts: GoogleApiAccount[])
       role: acc.role ?? null,
     }));
 
-    const { error: insertError } = await supabase
+    const insertResult: any = await (supabase as any)
       .from('google_business_accounts')
       .insert(recordsToInsert);
+    const insertError = insertResult.error;
       
     if (insertError) {
       console.error('[GoogleBusinessAPI] キャッシュ保存エラー(saveAccountsToCache):', insertError.message);
