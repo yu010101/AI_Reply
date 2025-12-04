@@ -320,10 +320,12 @@ export default async function handler(
     if (now - lastCall < API_CALL_COOLDOWN) {
       console.log(`[GoogleBusinessAPI] 短時間での連続呼び出しを検出しました。前回：${new Date(lastCall).toISOString()}`);
       // 前回のAPI呼び出しから十分な時間が経過していない場合は必ずキャッシュを返す
-      const { data: cachedAccounts, error: cacheError } = await supabase
+      const cacheResult: any = await (supabase as any)
         .from('google_business_accounts')
         .select('*')
         .eq('tenant_id', userId);
+      const cachedAccounts = cacheResult.data;
+      const cacheError = cacheResult.error;
 
       if (!cacheError && cachedAccounts && cachedAccounts.length > 0) {
         console.log(`[GoogleBusinessAPI] 連続呼び出し制限により強制的にキャッシュ利用: ${cachedAccounts.length}件`);
@@ -357,10 +359,12 @@ export default async function handler(
     
     if (cacheStatus.exists && cacheStatus.valid) {
       console.log('[GoogleBusinessAPI] 有効なキャッシュを使用します(handler)');
-      const { data: cachedAccounts, error: cacheError } = await supabase
+      const cacheResult: any = await (supabase as any)
         .from('google_business_accounts')
         .select('*')
         .eq('tenant_id', userId);
+      const cachedAccounts = cacheResult.data;
+      const cacheError = cacheResult.error;
 
       if (cacheError) {
         console.error('[GoogleBusinessAPI] キャッシュ取得エラー(handler - valid cache):', cacheError.message);
