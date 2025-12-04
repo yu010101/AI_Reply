@@ -95,7 +95,7 @@ export default async function handler(
           error: queryError ? `${(queryError as any).code}: ${queryError.message}` : null
         });
         
-        if (queryError && queryError.code !== 'PGRST116') {
+        if (queryError && (queryError as any).code !== 'PGRST116') {
           // PGRST116: no rows returned (単に結果がない場合)
           throw new Error(`既存トークン確認エラー: ${queryError.message}`);
         }
