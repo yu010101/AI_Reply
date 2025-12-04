@@ -103,10 +103,10 @@ export default async function handler(
         if (existingToken) {
           // 既存のトークンを更新
           console.log('[GoogleCallback] 既存トークンを更新します:', { id: existingToken.id });
-          const { data, error } = await supabase
+          const updateResult: any = await (supabase as any)
             .from('google_auth_tokens')
             .update({
-              access_token: tokens.access_token,
+              access_token: tokens.access_token || '',
               refresh_token: tokens.refresh_token || 'dummy-refresh-token',
               expiry_date: tokens.expiry_date 
                 ? new Date(tokens.expiry_date).toISOString() 
@@ -115,6 +115,7 @@ export default async function handler(
             })
             .eq('id', existingToken.id)
             .select();
+          const { data, error } = updateResult;
           
           console.log('[GoogleCallback] トークン更新結果:', { 
             success: !error, 
@@ -134,7 +135,7 @@ export default async function handler(
             .from('google_auth_tokens')
             .insert({
               tenant_id: developmentUserId,
-              access_token: tokens.access_token,
+              access_token: tokens.access_token || '',
               refresh_token: tokens.refresh_token || 'dummy-refresh-token',
               expiry_date: tokens.expiry_date 
                 ? new Date(tokens.expiry_date).toISOString() 
