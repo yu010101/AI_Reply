@@ -15,7 +15,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const { user, error } = await authService.signIn(data);
 
     if (error) {
-      return res.status(error.statusCode).json({ error: error.message });
+      return res.status((error as any).statusCode || 500).json({ error: error.message });
     }
 
     return res.status(200).json({ user });

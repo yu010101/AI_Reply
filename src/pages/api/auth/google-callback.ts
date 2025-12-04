@@ -131,7 +131,7 @@ export default async function handler(
         } else {
           // 新しいトークンを作成
           console.log('[GoogleCallback] 新規トークンを作成します:', { userId: developmentUserId });
-          const { data, error } = await supabase
+          const insertResult: any = await (supabase as any)
             .from('google_auth_tokens')
             .insert({
               tenant_id: developmentUserId,
@@ -144,6 +144,7 @@ export default async function handler(
               updated_at: new Date().toISOString()
             })
             .select();
+          const { data, error } = insertResult;
           
           console.log('[GoogleCallback] トークン作成結果:', { 
             success: !error, 
