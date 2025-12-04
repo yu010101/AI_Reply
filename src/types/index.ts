@@ -13,15 +13,3 @@ export type { Reply, ReplyFormData } from './reply';
 
 // Subscription型の定義（subscription.tsから再エクスポート）
 export type { Subscription, SubscriptionFormData, CreateSubscriptionRequest, UpdateSubscriptionRequest } from './subscription';
-
-// Subscription型の定義
-export interface Subscription {
-  id: string;
-  tenant_id: string;
-  plan: string;
-  status: 'active' | 'canceled' | 'past_due';
-  current_period_start?: string;
-  current_period_end?: string;
-  created_at?: string;
-  updated_at?: string;
-}
