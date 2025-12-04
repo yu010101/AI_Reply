@@ -282,10 +282,10 @@ export default function GoogleBusinessIntegration() {
       
       try {
         // まず、テーブルの存在を確認
-        const result = await supabase
+        const { count, error: countError } = await supabase
           .from('google_auth_tokens')
-          .select('*', { count: 'exact', head: true });
-        const { count, error: countError } = result as { count: number | null; error: any };
+          .select('*', { count: 'exact', head: true })
+          .then((result: any) => ({ count: result.count, error: result.error }));
           
         if (countError) {
           console.error('[GoogleBI] テーブル確認エラー:', {
