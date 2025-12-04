@@ -39,4 +39,11 @@ export const PLAN_PRICES: Record<Plan, number> = {
   basic: 4900,
   pro: 14900,
   enterprise: 49900,
+};
+
+export const PLAN_FEATURES: Record<Plan, string[]> = {
+  free: PLAN_LIMITS.free.features,
+  basic: PLAN_LIMITS.basic.features,
+  pro: PLAN_LIMITS.pro.features,
+  enterprise: PLAN_LIMITS.enterprise.features,
 }; 
