@@ -147,6 +147,10 @@ async function webhookHandler(req: NextApiRequest, res: NextApiResponse) {
       event = typeof maybeEvent?.then === 'function' ? await maybeEvent : maybeEvent;
     }
 
+    if (!event) {
+      throw new WebhookError('Event is undefined', 400, 'INVALID_EVENT');
+    }
+
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
