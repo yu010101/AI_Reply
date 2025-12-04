@@ -281,31 +281,15 @@ export default function GoogleBusinessIntegration() {
       console.log('[GoogleBI] google_auth_tokensテーブル確認を開始します');
       
       try {
-        // まず、テーブルの存在を確認
-        const countResult: any = await supabase
-          .from('google_auth_tokens')
-          .select('*', { count: 'exact', head: true });
-        const count = countResult.count;
-        const countError = countResult.error;
-          
-        if (countError) {
-          console.error('[GoogleBI] テーブル確認エラー:', {
-            error: countError,
-            code: countError.code,
-            details: countError.details,
-            message: countError.message
-          });
-        } else {
-          console.log('[GoogleBI] テーブル確認結果:', { count });
-        }
-        
         // テーブル内の最新レコードを確認
         console.log('[GoogleBI] テーブル内の最新レコードを確認します...');
-        const { data: allRecords, error: recordsError } = await supabase
+        const recordsResult: any = await supabase
           .from('google_auth_tokens')
           .select('id, tenant_id, created_at, updated_at')
           .order('created_at', { ascending: false })
           .limit(5);
+        const allRecords = recordsResult.data;
+        const recordsError = recordsResult.error;
           
         console.log('[GoogleBI] テーブル内レコード:', {
           count: allRecords?.length || 0,

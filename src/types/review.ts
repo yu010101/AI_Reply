@@ -12,3 +12,12 @@ export interface Review {
 
 // ReviewStatus型の定義
 export type ReviewStatus = 'pending' | 'responded' | 'ignored';
+
+// ReviewFormData型の定義
+export interface ReviewFormData {
+  location_id: string;
+  author: string;
+  rating: number;
+  comment: string;
+  status?: ReviewStatus;
+}
