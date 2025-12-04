@@ -13,8 +13,8 @@ export default function UserProfile() {
 
   useEffect(() => {
     if (user) {
-      setName(user.user_metadata?.name || '');
-      setAvatarUrl(user.user_metadata?.avatar_url || '');
+      setName((user as any).user_metadata?.name || '');
+      setAvatarUrl((user as any).user_metadata?.avatar_url || '');
     }
   }, [user]);
 
