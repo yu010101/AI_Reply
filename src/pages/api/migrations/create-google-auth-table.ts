@@ -19,8 +19,13 @@ export default async function handler(
     // テーブルの存在確認
     const { error: checkError } = await supabase
       .from('google_auth_tokens')
+      .select('*');
+    const limitResult: any = await (supabase as any)
+      .from('google_auth_tokens')
       .select('*')
       .limit(1);
+    const checkData = limitResult.data;
+    const checkError = limitResult.error;
       
     // テーブルが存在する場合は処理をスキップ
     if (!checkError) {

@@ -330,7 +330,7 @@ export default async function handler(
       if (!cacheError && cachedAccounts && cachedAccounts.length > 0) {
         console.log(`[GoogleBusinessAPI] 連続呼び出し制限により強制的にキャッシュ利用: ${cachedAccounts.length}件`);
         return res.status(200).json({
-          accounts: cachedAccounts.map((account) => ({ 
+          accounts: cachedAccounts.map((account: any) => ({ 
             name: `accounts/${account.account_id}`,
             displayName: account.display_name || '',
             accountName: account.account_name || '',
@@ -371,7 +371,7 @@ export default async function handler(
       } else if (cachedAccounts && cachedAccounts.length > 0) {
         console.log(`[GoogleBusinessAPI] キャッシュから ${cachedAccounts.length} 件のアカウント情報を返却します (handler)`);
         return res.status(200).json({
-          accounts: cachedAccounts.map((account) => ({ 
+          accounts: cachedAccounts.map((account: any) => ({ 
             name: `accounts/${account.account_id}`,
             displayName: account.display_name || '',
             accountName: account.account_name || '',
@@ -413,10 +413,12 @@ export default async function handler(
       if (error.code === 429 || error.message?.includes('quota') || error.message?.includes('Quota') || (error.status === 429) ) {
         console.warn('[GoogleBusinessAPI] クォータエラーのためキャッシュフォールバックを試みます(handler)');
         try {
-          const { data: fbData, error: fbCacheError } = await supabase
+          const fbResult: any = await (supabase as any)
             .from('google_business_accounts')
             .select('*')
             .eq('tenant_id', userId);
+          const fbData = fbResult.data;
+          const fbCacheError = fbResult.error;
             
           if (fbCacheError) {
             console.error('[GoogleBusinessAPI] フォールバックキャッシュ取得エラー(handler):', fbCacheError.message, 'Code:', fbCacheError.code);
