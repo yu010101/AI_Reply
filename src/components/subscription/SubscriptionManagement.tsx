@@ -114,7 +114,7 @@ export const SubscriptionManagement = () => {
             label="プラン"
             fullWidth
             value={formData.plan}
-            onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
+            onChange={(e) => setFormData({ ...formData, plan: e.target.value as Plan })}
           />
         </DialogContent>
         <DialogActions>
