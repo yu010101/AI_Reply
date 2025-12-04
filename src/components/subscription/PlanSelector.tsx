@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plan, PLAN_FEATURES, PLAN_PRICES } from '@/constants/plan';
 import { STRIPE_PRICE_IDS } from '@/constants/stripe';
-import { createCheckoutSession } from '@/utils/stripe';
+// Stripe checkout sessionはAPI経由で作成
 import { SubscriptionFormData } from '@/types/subscription';
 
 type PlanSelectorProps = {
