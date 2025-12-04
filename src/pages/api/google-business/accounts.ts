@@ -253,12 +253,12 @@ async function saveAccountsToCache(userId: string, accounts: GoogleApiAccount[])
     const recordsToInsert: Array<Omit<CachedAccountTableRow, 'id' | 'created_at' | 'updated_at'>> = accounts.map(acc => ({
       tenant_id: userId,
       account_id: acc.name?.split('/').pop() || '',
-      display_name: acc.displayName,
-      account_name: acc.accountName,
-      type: acc.type,
-      location_count: acc.locationCount,
-      primary_owner: acc.primaryOwner,
-      role: acc.role,
+      display_name: acc.displayName ?? null,
+      account_name: acc.accountName ?? null,
+      type: acc.type ?? null,
+      location_count: acc.locationCount ?? null,
+      primary_owner: acc.primaryOwner ?? null,
+      role: acc.role ?? null,
     }));
 
     const { error: insertError } = await supabase
