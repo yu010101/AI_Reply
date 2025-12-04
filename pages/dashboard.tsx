@@ -7,6 +7,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard';
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import SyncReviewsButton from '@/components/reviews/SyncReviewsButton';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
@@ -63,6 +64,8 @@ export default function Dashboard() {
   const [monthlyReviews, setMonthlyReviews] = useState<{month: string; count: number}[]>([]);
   const [ratingDistribution, setRatingDistribution] = useState<number[]>([0, 0, 0, 0, 0]);
   const [recentReviews, setRecentReviews] = useState<RecentReview[]>([]);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
 
   const fetchDashboardData = useCallback(async () => {
         if (!user) return;
@@ -146,11 +149,50 @@ export default function Dashboard() {
       }
   }, [user]);
 
+  // オンボーディング状態をチェック
   useEffect(() => {
-    if (user) {
+    const checkOnboardingStatus = async () => {
+      if (!user) {
+        setCheckingOnboarding(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('onboarding_completed')
+          .eq('id', user.id)
+          .single();
+
+        if (error) {
+          console.error('オンボーディング状態の取得エラー:', error);
+          // エラーの場合はオンボーディング未完了として扱う
+          setOnboardingCompleted(false);
+        } else {
+          setOnboardingCompleted(data?.onboarding_completed ?? false);
+        }
+      } catch (error) {
+        console.error('オンボーディング状態のチェックエラー:', error);
+        setOnboardingCompleted(false);
+      } finally {
+        setCheckingOnboarding(false);
+      }
+    };
+
+    checkOnboardingStatus();
+  }, [user]);
+
+  useEffect(() => {
+    if (user && onboardingCompleted) {
       fetchDashboardData();
     }
-  }, [user, fetchDashboardData]);
+  }, [user, onboardingCompleted, fetchDashboardData]);
+
+  const handleOnboardingComplete = async () => {
+    setOnboardingCompleted(true);
+    // ダッシュボードデータを取得
+    await fetchDashboardData();
+  };
 
   const fetchMonthlyReviews = async () => {
     try {
@@ -296,7 +338,30 @@ export default function Dashboard() {
       : <Chip size="small" label="返信済" color="success" />;
   };
 
-  if (isLoading || loading) {
+  // オンボーディング未完了の場合はウィザードを表示
+  if (checkingOnboarding || isLoading) {
+    return (
+      <AuthGuard>
+        <Layout>
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="90vh">
+            <CircularProgress />
+          </Box>
+        </Layout>
+      </AuthGuard>
+    );
+  }
+
+  if (onboardingCompleted === false) {
+    return (
+      <AuthGuard>
+        <Layout>
+          <OnboardingWizard onComplete={handleOnboardingComplete} />
+        </Layout>
+      </AuthGuard>
+    );
+  }
+
+  if (loading) {
     return (
       <AuthGuard>
         <Layout>

@@ -32,12 +32,13 @@ export class AuthService {
       if (error) throw error;
 
       if (user) {
-        // ユーザープロファイルの作成
+        // ユーザープロファイルの作成（オンボーディング未完了として設定）
         await supabase.from('profiles').insert({
           id: user.id,
           email: user.email,
           name: data.name,
           role: 'user',
+          onboarding_completed: false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });

@@ -19,7 +19,7 @@ export const collectReviews = async (locationId: string, placeId: string, apiKey
 
     // 新しいレビューをフィルタリング
     const newReviews = placeData.reviews.filter(review => {
-      const reviewDate = new Date((review.created_at as number) * 1000);
+      const reviewDate = new Date((review.created_at as unknown as number) * 1000);
       return !existingReviews?.some(existing => {
         const existingDate = new Date(existing.created_at);
         return existingDate.getTime() === reviewDate.getTime();
