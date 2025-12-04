@@ -79,8 +79,9 @@ export default function PlanSelector({ currentPlan, onSubmit }: PlanSelectorProp
                 <div className="flex-1">
                   <h3 className="text-lg font-medium text-gray-900">
                     {plan === 'free' && 'フリープラン'}
-                    {plan === 'standard' && 'スタンダードプラン'}
-                    {plan === 'premium' && 'プレミアムプラン'}
+                    {plan === 'basic' && 'ベーシックプラン'}
+                    {plan === 'pro' && 'プロプラン'}
+                    {plan === 'enterprise' && 'エンタープライズプラン'}
                   </h3>
                   <p className="mt-4 text-3xl font-extrabold text-gray-900">
                     {PLAN_PRICES[plan] === 0

@@ -24,7 +24,7 @@ export const SubscriptionManagement = () => {
   const [open, setOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('basic');
   const [formData, setFormData] = useState<CreateSubscriptionRequest>({
-    plan: '',
+    plan: 'free',
   });
 
   useEffect(() => {

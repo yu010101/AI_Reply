@@ -16,3 +16,15 @@ export interface Subscription {
 export interface SubscriptionFormData {
   plan: Plan;
 }
+
+// CreateSubscriptionRequest型の定義
+export interface CreateSubscriptionRequest {
+  plan: Plan;
+  priceId?: string;
+}
+
+// UpdateSubscriptionRequest型の定義
+export interface UpdateSubscriptionRequest {
+  plan?: Plan;
+  priceId?: string;
+}

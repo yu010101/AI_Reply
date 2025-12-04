@@ -11,6 +11,9 @@ export type { Review, ReviewStatus } from './review';
 // Reply型の定義（reply.tsから再エクスポート）
 export type { Reply, ReplyFormData } from './reply';
 
+// Subscription型の定義（subscription.tsから再エクスポート）
+export type { Subscription, SubscriptionFormData, CreateSubscriptionRequest, UpdateSubscriptionRequest } from './subscription';
+
 // Subscription型の定義
 export interface Subscription {
   id: string;
