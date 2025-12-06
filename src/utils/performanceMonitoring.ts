@@ -41,8 +41,8 @@ export async function recordPerformanceMetric(
       }
     }
 
-    // レスポンスタイムが長い場合は警告ログ
-    if (duration > 5000) {
+    // レスポンスタイムが長い場合は警告ログ（閾値を10秒に引き上げ）
+    if (duration > 10000) {
       logger.warn('レスポンスタイムが長い', {
         endpoint,
         method,
@@ -51,8 +51,8 @@ export async function recordPerformanceMetric(
       });
     }
 
-    // レスポンスタイムが非常に長い場合はエラーログ
-    if (duration > 10000) {
+    // レスポンスタイムが非常に長い場合はエラーログ（閾値を30秒に引き上げ）
+    if (duration > 30000) {
       logger.error('レスポンスタイムが非常に長い', {
         endpoint,
         method,

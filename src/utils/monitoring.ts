@@ -42,20 +42,21 @@ const createTransporter = () => {
 function determineErrorSeverity(error: Error): ErrorSeverity {
   // エラーの種類に基づく判定
   if (error instanceof TypeError || error instanceof ReferenceError) {
-    return 'high';
+    return 'medium'; // Reduced from 'high' - these are often caught and handled
   }
 
   // エラーコードに基づく判定
   const code = (error as any).code;
   if (code === 'ECONNRESET' || code === 'ETIMEDOUT') {
-    return 'high';
+    return 'low'; // Reduced from 'high' - network blips are common and usually transient
   }
 
   // ステータスコードに基づく判定
   const statusCode = (error as any).statusCode;
   if (statusCode) {
     if (statusCode >= 500) return 'high';
-    if (statusCode >= 400) return 'medium';
+    if (statusCode === 429) return 'low'; // Rate limiting is expected behavior, not an error
+    if (statusCode >= 400) return 'low'; // Reduced from 'medium' - client errors are usually validation issues
   }
 
   // エラーメッセージに基づく判定
@@ -63,15 +64,21 @@ function determineErrorSeverity(error: Error): ErrorSeverity {
   if (message.includes('critical') || message.includes('fatal')) {
     return 'critical';
   }
+  if (message.includes('database') || message.includes('connection pool')) {
+    return 'high'; // Database issues are critical
+  }
+  if (message.includes('payment') || message.includes('stripe')) {
+    return 'high'; // Payment issues need immediate attention
+  }
   if (message.includes('error') || message.includes('failed')) {
-    return 'medium';
+    return 'low'; // Reduced from 'medium' - many errors are non-critical
   }
   if (message.includes('warning') || message.includes('invalid')) {
-    return 'medium';
+    return 'low'; // Reduced from 'medium' - warnings and validation errors are common
   }
 
   // デフォルトの重要度
-  return 'medium';
+  return 'low'; // Reduced from 'medium' - default to less noise
 }
 
 // エラーログを記録する関数
@@ -184,9 +191,9 @@ function errorMonitoringMiddleware(
       
       // レスポンスタイムを記録（成功時）
       const duration = Date.now() - startTime;
-      
-      // レスポンスタイムが長い場合は警告
-      if (duration > 5000) {
+
+      // レスポンスタイムが長い場合は警告（閾値を10秒に引き上げ）
+      if (duration > 10000) {
         logger.warn('レスポンスタイムが長い', {
           duration,
           method: req.method,

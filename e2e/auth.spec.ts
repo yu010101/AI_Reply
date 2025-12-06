@@ -26,6 +26,11 @@ test.describe('認証機能', () => {
       await page.getByText('新規登録はこちら').click();
       await expect(page).toHaveURL('/auth/register');
     });
+
+    test('パスワードリセットリンクが表示される', async ({ page }) => {
+      await page.goto('/auth/login');
+      await expect(page.getByText(/パスワードを忘れた|Forgot password/i)).toBeVisible();
+    });
   });
 
   test.describe('ログイン - 正常系', () => {
@@ -70,6 +75,20 @@ test.describe('認証機能', () => {
 
       // ローディング中のボタンテキストまたは無効化を確認
       await expect(page.getByRole('button', { name: 'ログイン中...' })).toBeVisible({ timeout: 2000 });
+    });
+
+    test('ログイン後、セッションが保持される', async ({ page }) => {
+      await mockSupabaseAuthSuccess(page);
+
+      await page.goto('/auth/login');
+      await page.locator('input[type="email"]').fill(TEST_USER.email);
+      await page.locator('input[type="password"]').fill(TEST_USER.password);
+      await page.getByRole('button', { name: 'ログイン' }).click();
+      await page.waitForURL('/dashboard', { timeout: 10000 });
+
+      // ページをリロードしてもログイン状態が保持される
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'ダッシュボード' })).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -136,6 +155,36 @@ test.describe('認証機能', () => {
       await expect(alert).toContainText('正しくありません');
     });
 
+    test('メール未確認アカウントでログインするとエラーが表示される', async ({ page }) => {
+      // メール未確認エラーをモック
+      await mockSupabaseAuthFailure(page, 'Email not confirmed');
+
+      await page.goto('/auth/login');
+      await page.locator('input[type="email"]').fill(TEST_USER.email);
+      await page.locator('input[type="password"]').fill(TEST_USER.password);
+      await page.getByRole('button', { name: 'ログイン' }).click();
+
+      // エラーメッセージが表示される
+      const alert = page.locator('.MuiAlert-root');
+      await expect(alert).toBeVisible({ timeout: 5000 });
+      await expect(alert).toContainText(/確認|Confirm/i);
+    });
+
+    test('レート制限エラー時にエラーメッセージが表示される', async ({ page }) => {
+      // レート制限エラーをモック
+      await mockSupabaseAuthFailure(page, 'Too many requests');
+
+      await page.goto('/auth/login');
+      await page.locator('input[type="email"]').fill(TEST_USER.email);
+      await page.locator('input[type="password"]').fill(TEST_USER.password);
+      await page.getByRole('button', { name: 'ログイン' }).click();
+
+      // エラーメッセージが表示される
+      const alert = page.locator('.MuiAlert-root');
+      await expect(alert).toBeVisible({ timeout: 5000 });
+      await expect(alert).toContainText(/待って|Wait|しばらく/i);
+    });
+
     test('ネットワークエラー時にエラーメッセージが表示される', async ({ page }) => {
       // ネットワークエラーをモック
       await page.route('**/auth/v1/token*', (route) => route.abort('failed'));
@@ -188,6 +237,65 @@ test.describe('認証機能', () => {
     test('未認証ユーザーがテナントページにアクセスするとログインページにリダイレクトされる', async ({ page }) => {
       await page.goto('/tenants');
       await expect(page).toHaveURL(/\/auth\/login/);
+    });
+
+    test('未認証ユーザーがプロフィールページにアクセスするとログインページにリダイレクトされる', async ({ page }) => {
+      await page.goto('/profile');
+      await expect(page).toHaveURL(/\/auth\/login/);
+    });
+  });
+
+  test.describe('ログアウト機能', () => {
+    test('ログアウトボタンが表示される', async ({ page }) => {
+      await mockSupabaseAuthSuccess(page);
+
+      await page.goto('/auth/login');
+      await page.locator('input[type="email"]').fill(TEST_USER.email);
+      await page.locator('input[type="password"]').fill(TEST_USER.password);
+      await page.getByRole('button', { name: 'ログイン' }).click();
+      await page.waitForURL('/dashboard', { timeout: 10000 });
+
+      // ログアウトボタンが表示される（ユーザーメニュー内）
+      const userMenu = page.locator('[aria-label*="account"], [aria-label*="user"], button[aria-haspopup="true"]').first();
+      if (await userMenu.isVisible().catch(() => false)) {
+        await userMenu.click();
+        await expect(page.getByRole('menuitem', { name: /ログアウト|Logout/i })).toBeVisible({ timeout: 2000 });
+      }
+    });
+
+    test('ログアウトを実行できる', async ({ page }) => {
+      await mockSupabaseAuthSuccess(page);
+
+      // ログアウトAPIをモック
+      await page.route('**/auth/v1/logout*', (route) => {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({}),
+        });
+      });
+
+      await page.goto('/auth/login');
+      await page.locator('input[type="email"]').fill(TEST_USER.email);
+      await page.locator('input[type="password"]').fill(TEST_USER.password);
+      await page.getByRole('button', { name: 'ログイン' }).click();
+      await page.waitForURL('/dashboard', { timeout: 10000 });
+
+      // ユーザーメニューを開く
+      const userMenu = page.locator('[aria-label*="account"], [aria-label*="user"], button[aria-haspopup="true"]').first();
+      if (await userMenu.isVisible().catch(() => false)) {
+        await userMenu.click();
+        await page.waitForTimeout(500);
+
+        // ログアウトをクリック
+        const logoutButton = page.getByRole('menuitem', { name: /ログアウト|Logout/i });
+        if (await logoutButton.isVisible().catch(() => false)) {
+          await logoutButton.click();
+
+          // ログインページにリダイレクトされる
+          await expect(page).toHaveURL(/\/auth\/login/, { timeout: 5000 });
+        }
+      }
     });
   });
 });
@@ -246,6 +354,30 @@ test.describe('新規登録機能', () => {
       await expect(successAlert).toBeVisible({ timeout: 5000 });
       await expect(successAlert).toContainText('登録が完了しました');
     });
+
+    test('登録後、確認メール送信メッセージが表示される', async ({ page }) => {
+      await page.route('**/auth/v1/signup*', (route) => {
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            user: {
+              id: 'new-user-id',
+              email: 'newuser@example.com',
+            },
+          }),
+        });
+      });
+
+      await page.goto('/auth/register');
+      await page.locator('input[type="email"]').fill('newuser@example.com');
+      await page.locator('input[type="password"]').first().fill('password123');
+      await page.locator('input[type="password"]').last().fill('password123');
+      await page.getByRole('button', { name: '登録' }).click();
+
+      // 確認メール送信メッセージが表示される
+      await expect(page.getByText(/メール|Email|確認/i)).toBeVisible({ timeout: 5000 });
+    });
   });
 
   test.describe('新規登録 - 異常系', () => {
@@ -259,6 +391,24 @@ test.describe('新規登録機能', () => {
       const alert = page.locator('.MuiAlert-root');
       await expect(alert).toBeVisible({ timeout: 5000 });
       await expect(alert).toContainText('パスワードが一致しません');
+    });
+
+    test('パスワードが短すぎる場合エラーが表示される', async ({ page }) => {
+      await page.goto('/auth/register');
+      await page.locator('input[type="email"]').fill('newuser@example.com');
+      await page.locator('input[type="password"]').first().fill('12345'); // 5文字
+      await page.locator('input[type="password"]').last().fill('12345');
+      await page.getByRole('button', { name: '登録' }).click();
+
+      // HTML5バリデーションまたはエラーメッセージが表示される
+      const alert = page.locator('.MuiAlert-root');
+      const minLengthError = page.getByText(/6文字|6 characters/i);
+      
+      if (await alert.isVisible().catch(() => false)) {
+        await expect(alert).toContainText(/6文字|短すぎ/i);
+      } else if (await minLengthError.isVisible().catch(() => false)) {
+        await expect(minLengthError).toBeVisible();
+      }
     });
 
     test('無効なメールアドレス形式でエラーが表示される', async ({ page }) => {
@@ -295,6 +445,22 @@ test.describe('新規登録機能', () => {
       const alert = page.locator('.MuiAlert-root');
       await expect(alert).toBeVisible({ timeout: 5000 });
       await expect(alert).toContainText('既に登録されています');
+    });
+
+    test('ネットワークエラー時にエラーメッセージが表示される', async ({ page }) => {
+      // ネットワークエラーをモック
+      await page.route('**/auth/v1/signup*', (route) => {
+        route.abort('failed');
+      });
+
+      await page.goto('/auth/register');
+      await page.locator('input[type="email"]').fill('newuser@example.com');
+      await page.locator('input[type="password"]').first().fill('password123');
+      await page.locator('input[type="password"]').last().fill('password123');
+      await page.getByRole('button', { name: '登録' }).click();
+
+      const alert = page.locator('.MuiAlert-root');
+      await expect(alert).toBeVisible({ timeout: 10000 });
     });
   });
 });

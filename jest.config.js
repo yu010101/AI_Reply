@@ -11,7 +11,7 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   // jsdomテスト環境を使用
   testEnvironment: 'node',
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: ['**/__tests__/**/*.test.ts', '**/tests/**/*.test.ts'],
   transform: {
     '^.+\\.tsx?$': 'ts-jest',
   },

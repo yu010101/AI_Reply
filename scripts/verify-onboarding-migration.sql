@@ -37,3 +37,4 @@ SELECT
   COUNT(*) FILTER (WHERE onboarding_completed = FALSE) as pending_users,
   COUNT(*) FILTER (WHERE onboarding_completed IS NULL) as null_users
 FROM profiles;
+

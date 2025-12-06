@@ -2,7 +2,7 @@
 -- このテーブルはAPIリクエストのパフォーマンスメトリクスを記録します
 
 CREATE TABLE IF NOT EXISTS performance_metrics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   endpoint TEXT NOT NULL,
   method TEXT NOT NULL,
   duration INTEGER NOT NULL,
@@ -27,14 +27,15 @@ CREATE INDEX IF NOT EXISTS idx_performance_metrics_status_code ON performance_me
 ALTER TABLE performance_metrics ENABLE ROW LEVEL SECURITY;
 
 -- 管理者のみが全データを閲覧可能
+-- Note: Using organization_users with role_id = 1 (admin) instead of users table
 CREATE POLICY "管理者は全パフォーマンスメトリクスを閲覧可能"
   ON performance_metrics
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
+      SELECT 1 FROM organization_users
+      WHERE organization_users.user_id = auth.uid()
+      AND organization_users.role_id = 1
     )
   );
 

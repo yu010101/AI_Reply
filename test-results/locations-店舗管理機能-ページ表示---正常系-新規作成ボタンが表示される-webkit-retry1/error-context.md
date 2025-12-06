@@ -1,0 +1,67 @@
+# Page snapshot
+
+```yaml
+- generic [active]:
+  - alert [ref=e1]
+  - dialog "Server Error" [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - navigation [ref=e8]:
+          - button "previous" [disabled] [ref=e9]:
+            - img "previous" [ref=e10]
+          - button "next" [disabled] [ref=e12]:
+            - img "next" [ref=e13]
+          - generic [ref=e15]: 1 of 1 error
+          - generic [ref=e16]:
+            - text: Next.js (14.2.33) is outdated
+            - link "(learn more)" [ref=e18]:
+              - /url: https://nextjs.org/docs/messages/version-staleness
+        - heading "Server Error" [level=1] [ref=e19]
+        - paragraph [ref=e20]: "Error: Cannot find module './276.js' Require stack: - /Users/yu01/Desktop/DevIdentity/.next/server/webpack-runtime.js - /Users/yu01/Desktop/DevIdentity/.next/server/app/_not-found/page.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/require.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/load-components.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/build/utils.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/dev/hot-middleware.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/dev/hot-reloader-webpack.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/lib/router-utils/setup-dev-bundler.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/lib/router-server.js - /Users/yu01/Desktop/DevIdentity/node_modules/next/dist/server/lib/start-server.js"
+        - generic [ref=e21]: This error happened while generating the page. Any console logs will be displayed in the terminal window.
+      - generic [ref=e22]:
+        - heading "Call Stack" [level=2] [ref=e23]
+        - group [ref=e24]:
+          - generic "Next.js" [ref=e25] [cursor=pointer]:
+            - img [ref=e26]
+            - img [ref=e28]
+            - text: Next.js
+        - generic [ref=e34]:
+          - heading "TracingChannel.traceSync" [level=3] [ref=e35]
+          - generic [ref=e37]: node:diagnostics_channel (328:14)
+        - group [ref=e38]:
+          - generic "Next.js" [ref=e39] [cursor=pointer]:
+            - img [ref=e40]
+            - img [ref=e42]
+            - text: Next.js
+        - generic [ref=e48]:
+          - heading "Array.reduce" [level=3] [ref=e49]
+          - generic [ref=e51]: <anonymous>
+        - group [ref=e52]:
+          - generic "Next.js" [ref=e53] [cursor=pointer]:
+            - img [ref=e54]
+            - img [ref=e56]
+            - text: Next.js
+        - generic [ref=e62]:
+          - heading "Array.map" [level=3] [ref=e63]
+          - generic [ref=e65]: <anonymous>
+        - group [ref=e66]:
+          - generic "Next.js" [ref=e67] [cursor=pointer]:
+            - img [ref=e68]
+            - img [ref=e70]
+            - text: Next.js
+        - generic [ref=e76]:
+          - heading "<unknown>" [level=3] [ref=e77]
+          - generic [ref=e79]: file:///Users/yu01/Desktop/DevIdentity/.next/server/app/_not-found/page.js (1:3392)
+        - generic [ref=e80]:
+          - heading "Object.<anonymous>" [level=3] [ref=e81]
+          - generic [ref=e83]: file:///Users/yu01/Desktop/DevIdentity/.next/server/app/_not-found/page.js (1:3437)
+        - generic [ref=e84]:
+          - heading "TracingChannel.traceSync" [level=3] [ref=e85]
+          - generic [ref=e87]: node:diagnostics_channel (328:14)
+        - group [ref=e88]:
+          - generic "Next.js" [ref=e89] [cursor=pointer]:
+            - img [ref=e90]
+            - img [ref=e92]
+            - text: Next.js
+```

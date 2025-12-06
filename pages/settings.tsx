@@ -1,11 +1,34 @@
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import Layout from '@/components/layout/Layout';
-import { Box, Tabs, Tab, Typography, Alert } from '@mui/material';
-import GoogleBusinessIntegration from '@/components/settings/GoogleBusinessIntegration';
-import NotificationSettings from '@/components/notification/NotificationSettings';
-import SubscriptionSettings from '@/components/subscription/SubscriptionSettings';
+import { Box, Tabs, Tab, Typography, Alert, CircularProgress } from '@mui/material';
 import { useRouter } from 'next/router';
+
+// Dynamic imports for heavy tab components
+const GoogleBusinessIntegration = dynamic(() => import('@/components/settings/GoogleBusinessIntegration'), {
+  loading: () => (
+    <Box display="flex" justifyContent="center" p={3}>
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+const NotificationSettings = dynamic(() => import('@/components/notification/NotificationSettings'), {
+  loading: () => (
+    <Box display="flex" justifyContent="center" p={3}>
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+const SubscriptionSettings = dynamic(() => import('@/components/subscription/SubscriptionSettings'), {
+  loading: () => (
+    <Box display="flex" justifyContent="center" p={3}>
+      <CircularProgress />
+    </Box>
+  ),
+});
 
 interface TabPanelProps {
   children?: React.ReactNode;

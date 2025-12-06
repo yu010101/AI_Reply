@@ -2,7 +2,7 @@ import rateLimit from 'express-rate-limit';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from './supabase';
 
-// レート制限の設定
+// レート制限の設定（環境変数で上書き可能、本番環境向けに調整）
 const limiter = process.env.NODE_ENV === 'test'
   ? (req: NextApiRequest, res: NextApiResponse, next: any) => {
       const ip = req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress;
@@ -19,12 +19,14 @@ const limiter = process.env.NODE_ENV === 'test'
       next();
     }
   : rateLimit({
-      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15分
-      max: parseInt(process.env.RATE_LIMIT_MAX || '100'), // IPアドレスごとの最大リクエスト数
+      windowMs: parseInt(process.env.RATE_LIMIT_API_WINDOW_MS || '60000'), // デフォルト1分（15分から変更）
+      max: parseInt(process.env.RATE_LIMIT_API_MAX || '200'), // デフォルト200リクエスト/分（100から変更）
       message: {
         error: 'Too many requests',
         code: 'RATE_LIMIT_EXCEEDED',
       },
+      standardHeaders: true, // RateLimit-* ヘッダーを返す
+      legacyHeaders: false, // X-RateLimit-* ヘッダーを無効化
     });
 
 // セキュリティログの型定義

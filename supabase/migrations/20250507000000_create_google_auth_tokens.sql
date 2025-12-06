@@ -1,8 +1,7 @@
 -- Google認証トークンを保存するテーブルを作成
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS public.google_auth_tokens (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL,
   access_token TEXT NOT NULL,
   refresh_token TEXT NOT NULL,
@@ -16,6 +15,12 @@ CREATE INDEX IF NOT EXISTS idx_google_auth_tokens_tenant_id ON public.google_aut
 
 -- RLS (行レベルセキュリティ)
 ALTER TABLE public.google_auth_tokens ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ参照可能" ON public.google_auth_tokens;
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ挿入可能" ON public.google_auth_tokens;
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ更新可能" ON public.google_auth_tokens;
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ削除可能" ON public.google_auth_tokens;
 
 -- ポリシー: 自分のレコードのみ参照可能
 CREATE POLICY "ユーザーは自分のレコードのみ参照可能" ON public.google_auth_tokens
@@ -35,7 +40,7 @@ CREATE POLICY "ユーザーは自分のレコードのみ削除可能" ON public
 
 -- OAuth状態を保存するためのテーブル
 CREATE TABLE IF NOT EXISTS public.oauth_states (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL,
   state TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -48,6 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_oauth_states_state ON public.oauth_states(state);
 -- RLS (行レベルセキュリティ)
 ALTER TABLE public.oauth_states ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ参照可能" ON public.oauth_states;
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ挿入可能" ON public.oauth_states;
+DROP POLICY IF EXISTS "ユーザーは自分のレコードのみ削除可能" ON public.oauth_states;
+
 -- ポリシー: 自分のレコードのみ参照可能
 CREATE POLICY "ユーザーは自分のレコードのみ参照可能" ON public.oauth_states
   FOR SELECT USING (auth.uid() = tenant_id);
@@ -58,4 +68,4 @@ CREATE POLICY "ユーザーは自分のレコードのみ挿入可能" ON public
 
 -- ポリシー: 自分のレコードのみ削除可能
 CREATE POLICY "ユーザーは自分のレコードのみ削除可能" ON public.oauth_states
-  FOR DELETE USING (auth.uid() = tenant_id); 
+  FOR DELETE USING (auth.uid() = tenant_id);

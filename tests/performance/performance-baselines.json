@@ -1,0 +1,182 @@
+{
+  "description": "Performance baseline metrics for comparison and regression detection",
+  "lastUpdated": "2025-12-06",
+  "api": {
+    "auth.login": {
+      "threshold": 500,
+      "baseline": {
+        "average": 250,
+        "p95": 350,
+        "p99": 450
+      }
+    },
+    "auth.register": {
+      "threshold": 500,
+      "baseline": {
+        "average": 300,
+        "p95": 400,
+        "p99": 480
+      }
+    },
+    "auth.me": {
+      "threshold": 500,
+      "baseline": {
+        "average": 150,
+        "p95": 250,
+        "p99": 350
+      }
+    },
+    "tenants.list": {
+      "threshold": 1000,
+      "baseline": {
+        "average": 400,
+        "p95": 600,
+        "p99": 800
+      }
+    },
+    "subscriptions.list": {
+      "threshold": 1000,
+      "baseline": {
+        "average": 350,
+        "p95": 550,
+        "p99": 750
+      }
+    },
+    "google-reviews.sync": {
+      "threshold": 3000,
+      "baseline": {
+        "average": 1500,
+        "p95": 2200,
+        "p99": 2800
+      }
+    }
+  },
+  "pages": {
+    "login": {
+      "fcp": {
+        "threshold": 1800,
+        "baseline": 800
+      },
+      "lcp": {
+        "threshold": 2500,
+        "baseline": 1200
+      },
+      "loadTime": {
+        "threshold": 3000,
+        "baseline": 1500
+      }
+    },
+    "dashboard": {
+      "fcp": {
+        "threshold": 1800,
+        "baseline": 1000
+      },
+      "lcp": {
+        "threshold": 2500,
+        "baseline": 1500
+      },
+      "loadTime": {
+        "threshold": 4500,
+        "baseline": 2500
+      }
+    },
+    "reviews": {
+      "fcp": {
+        "threshold": 1800,
+        "baseline": 900
+      },
+      "lcp": {
+        "threshold": 2500,
+        "baseline": 1400
+      },
+      "loadTime": {
+        "threshold": 4500,
+        "baseline": 2300
+      }
+    }
+  },
+  "database": {
+    "queries": {
+      "getUserById": {
+        "threshold": 100,
+        "baseline": {
+          "average": 30,
+          "p95": 50,
+          "p99": 80
+        }
+      },
+      "getLocations": {
+        "threshold": 100,
+        "baseline": {
+          "average": 40,
+          "p95": 60,
+          "p99": 90
+        }
+      },
+      "getReviewsWithJoin": {
+        "threshold": 300,
+        "baseline": {
+          "average": 150,
+          "p95": 220,
+          "p99": 280
+        }
+      },
+      "complexAggregation": {
+        "threshold": 1000,
+        "baseline": {
+          "average": 500,
+          "p95": 750,
+          "p99": 950
+        }
+      },
+      "insertReview": {
+        "threshold": 300,
+        "baseline": {
+          "average": 120,
+          "p95": 180,
+          "p99": 250
+        }
+      },
+      "batchInsert10": {
+        "threshold": 1000,
+        "baseline": {
+          "average": 400,
+          "p95": 650,
+          "p99": 850
+        }
+      }
+    }
+  },
+  "budgets": {
+    "description": "Performance budgets - hard limits that should not be exceeded",
+    "api": {
+      "authentication": 500,
+      "dataRetrieval": 1000,
+      "externalApi": 3000
+    },
+    "pages": {
+      "fcp": 1800,
+      "lcp": 2500,
+      "tti": 3800,
+      "totalLoad": 3000
+    },
+    "database": {
+      "simpleQuery": 100,
+      "mediumQuery": 300,
+      "complexQuery": 1000
+    },
+    "resources": {
+      "totalPageSize": 5242880,
+      "totalResources": 100,
+      "scripts": 50
+    }
+  },
+  "notes": [
+    "Baselines represent expected performance under normal conditions",
+    "Thresholds are hard limits - tests fail if exceeded",
+    "P95 means 95% of requests should be faster than this value",
+    "P99 means 99% of requests should be faster than this value",
+    "Update baselines after intentional performance improvements",
+    "Review and adjust thresholds based on real-world usage patterns"
+  ]
+}

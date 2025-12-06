@@ -14,11 +14,13 @@ declare global {
   }
 }
 
-// レート制限の設定
+// レート制限の設定（環境変数で上書き可能）
 export const rateLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1分
-  max: 100, // 制限回数
+  windowMs: parseInt(process.env.RATE_LIMIT_API_WINDOW_MS || String(60 * 1000)), // デフォルト1分
+  max: parseInt(process.env.RATE_LIMIT_API_MAX || '200'), // デフォルト200リクエスト/分
   message: 'Too many requests, please try again later.',
+  standardHeaders: true, // RateLimit-* ヘッダーを返す
+  legacyHeaders: false, // X-RateLimit-* ヘッダーを無効化
 });
 
 // 認証ミドルウェア

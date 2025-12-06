@@ -66,17 +66,20 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
+    SELECT 1 FROM pg_policies
     WHERE tablename = 'organization_users' AND policyname = '組織管理者はユーザーを追加可能'
   ) THEN
     CREATE POLICY "組織管理者はユーザーを追加可能" ON organization_users
-      FOR INSERT 
+      FOR INSERT
       WITH CHECK (
+        -- User adding themselves OR admin adding new user
+        user_id = auth.uid()
+        OR
         EXISTS (
-          SELECT 1 FROM organization_users
-          WHERE organization_id = NEW.organization_id
-          AND user_id = auth.uid()
-          AND role_id = 1  -- admin role
+          SELECT 1 FROM organization_users ou
+          WHERE ou.organization_id = organization_users.organization_id
+          AND ou.user_id = auth.uid()
+          AND ou.role_id = 1  -- admin role
         )
       );
   END IF;
@@ -130,17 +133,17 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
+    SELECT 1 FROM pg_policies
     WHERE tablename = 'subscriptions' AND policyname = '組織管理者はサブスクリプションを作成可能'
   ) THEN
     CREATE POLICY "組織管理者はサブスクリプションを作成可能" ON subscriptions
-      FOR INSERT 
+      FOR INSERT
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM organization_users
-          WHERE organization_id = NEW.organization_id
-          AND user_id = auth.uid()
-          AND role_id = 1  -- admin role
+          WHERE organization_users.organization_id = subscriptions.organization_id
+          AND organization_users.user_id = auth.uid()
+          AND organization_users.role_id = 1  -- admin role
         )
       );
   END IF;
@@ -294,17 +297,17 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
+    SELECT 1 FROM pg_policies
     WHERE tablename = 'invitations' AND policyname = '組織管理者は招待を作成可能'
   ) THEN
     CREATE POLICY "組織管理者は招待を作成可能" ON invitations
-      FOR INSERT 
+      FOR INSERT
       WITH CHECK (
         EXISTS (
           SELECT 1 FROM organization_users
-          WHERE organization_id = NEW.organization_id
-          AND user_id = auth.uid()
-          AND role_id = 1  -- admin role
+          WHERE organization_users.organization_id = invitations.organization_id
+          AND organization_users.user_id = auth.uid()
+          AND organization_users.role_id = 1  -- admin role
         )
       );
   END IF;

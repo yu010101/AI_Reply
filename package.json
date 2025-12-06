@@ -6,6 +6,7 @@
     "dev": "NODE_OPTIONS=--max-old-space-size=4096 next dev -p 3000",
     "build": "next build",
     "build:validate": "npm run validate-env && next build",
+    "build:analyze": "ANALYZE=true npm run build",
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
@@ -14,6 +15,11 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
+    "test:perf": "npm run test:perf:api && npm run test:perf:page && npm run test:perf:db",
+    "test:perf:api": "jest --config=jest.config.performance.js --testPathPattern=api-performance",
+    "test:perf:page": "playwright test --config=playwright.config.performance.ts",
+    "test:perf:db": "jest --config=jest.config.performance.js --testPathPattern=database-performance",
+    "test:perf:report": "open playwright-report-performance/index.html",
     "validate-env": "npx ts-node scripts/validate-env.ts"
   },
   "dependencies": {
@@ -62,7 +68,6 @@
     "react": "^18.2.0",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.22.1",
     "speakeasy": "^2.0.0",
     "stream-browserify": "^3.0.0",
     "stream-http": "^3.2.0",
@@ -72,6 +77,7 @@
     "xss": "^1.0.15"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.0.7",
     "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
@@ -84,6 +90,7 @@
     "eslint-config-next": "14.1.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
+    "node-mocks-http": "^1.17.2",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.3.3",

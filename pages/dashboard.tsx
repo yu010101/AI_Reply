@@ -1,28 +1,62 @@
 import { useEffect, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Box, Grid, Typography, Paper, Card, CardContent, Divider, List, ListItem, ListItemText, Rating, Chip, CircularProgress } from '@mui/material';
-import { Bar, Pie, Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
 import Layout from '@/components/layout/Layout';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import SyncReviewsButton from '@/components/reviews/SyncReviewsButton';
-import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-// Chart.jsのコンポーネント登録
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-);
+// Dynamic imports for heavy components
+const SyncReviewsButton = dynamic(() => import('@/components/reviews/SyncReviewsButton'), {
+  loading: () => <CircularProgress size={20} />,
+});
+
+const OnboardingWizard = dynamic(() => import('@/components/onboarding/OnboardingWizard'), {
+  ssr: false,
+  loading: () => (
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+// Dynamic imports for Chart.js components
+const Bar = dynamic(() => import('react-chartjs-2').then(mod => mod.Bar), {
+  ssr: false,
+  loading: () => (
+    <Box display="flex" justifyContent="center" alignItems="center" height={300}>
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+const Pie = dynamic(() => import('react-chartjs-2').then(mod => mod.Pie), {
+  ssr: false,
+  loading: () => (
+    <Box display="flex" justifyContent="center" alignItems="center" height={300}>
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+// Register Chart.js components dynamically
+if (typeof window !== 'undefined') {
+  import('chart.js').then(({ Chart, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend }) => {
+    Chart.register(
+      CategoryScale,
+      LinearScale,
+      PointElement,
+      LineElement,
+      BarElement,
+      ArcElement,
+      Title,
+      Tooltip,
+      Legend
+    );
+  });
+}
 
 type DashboardStats = {
   totalLocations: number;

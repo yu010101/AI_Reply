@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Box, Typography, Paper, Grid, CircularProgress, Card, CardContent, Divider, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Rating, Chip } from '@mui/material';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement } from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import Layout from '@/components/layout/Layout';
 import { supabase } from '@/utils/supabase';
@@ -9,18 +8,41 @@ import { useAuth } from '@/hooks/useAuth';
 import { format, subMonths } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-// Chart.jsコンポーネントを登録
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  PointElement,
-  LineElement
-);
+// Dynamic imports for Chart.js components
+const Bar = dynamic(() => import('react-chartjs-2').then(mod => mod.Bar), {
+  ssr: false,
+  loading: () => (
+    <Box display="flex" justifyContent="center" alignItems="center" height={250}>
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+const Pie = dynamic(() => import('react-chartjs-2').then(mod => mod.Pie), {
+  ssr: false,
+  loading: () => (
+    <Box display="flex" justifyContent="center" alignItems="center" height={250}>
+      <CircularProgress />
+    </Box>
+  ),
+});
+
+// Register Chart.js components dynamically
+if (typeof window !== 'undefined') {
+  import('chart.js').then(({ Chart, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement, PointElement, LineElement }) => {
+    Chart.register(
+      CategoryScale,
+      LinearScale,
+      BarElement,
+      Title,
+      Tooltip,
+      Legend,
+      ArcElement,
+      PointElement,
+      LineElement
+    );
+  });
+}
 
 interface ReplyAnalytics {
   totalReplies: number;

@@ -6,8 +6,8 @@ Sentry.init({
   // 環境設定
   environment: process.env.NODE_ENV || 'development',
   
-  // トレーシング設定
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  // トレーシング設定（本番環境では5%に削減してノイズを減らす）
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.05 : 1.0,
   
   // 機密情報のフィルタリング
   beforeSend(event) {

@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { Box, Button, TextField, Typography, Alert } from '@mui/material';
 import { supabase } from '@/utils/supabase';
-import { useNavigate } from 'react-router-dom';
 
 export default function NewPassword() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   useEffect(() => {
     // パスワードリセットセッションを確認
@@ -16,7 +16,7 @@ export default function NewPassword() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         console.error('[NewPassword] セッションが見つかりません');
-        navigate('/auth/login');
+        router.push('/auth/login');
       }
     };
     checkSession();
