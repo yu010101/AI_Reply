@@ -224,9 +224,9 @@ export default function LandingPage() {
       {/* Hero Section */}
       <Box
         sx={{
-          background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`,
-          pt: { xs: 8, md: 12 },
-          pb: { xs: 8, md: 12 },
+          bgcolor: '#FFFFFF',
+          pt: { xs: 10, md: 16 },
+          pb: { xs: 10, md: 16 },
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -235,27 +235,30 @@ export default function LandingPage() {
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={6}>
               <motion.div
-                initial={{ opacity: 0, x: -60 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
               >
-                <Chip
-                  label="14日間無料トライアル実施中"
-                  color="primary"
-                  size="small"
-                  sx={{ mb: 2, fontWeight: 600 }}
-                />
+                <Typography
+                  variant="overline"
+                  sx={{
+                    color: '#6B7280',
+                    letterSpacing: '0.1em',
+                    mb: 2,
+                    display: 'block',
+                  }}
+                >
+                  14日間無料トライアル
+                </Typography>
                 <Typography
                   variant="h1"
                   sx={{
                     fontSize: { xs: '2.5rem', md: '3.5rem', lg: '4rem' },
-                    fontWeight: 800,
-                    mb: 2,
-                    background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    lineHeight: 1.2,
+                    fontWeight: 400,
+                    mb: 3,
+                    color: '#1A1A1A',
+                    lineHeight: 1.1,
+                    letterSpacing: '-0.02em',
                   }}
                 >
                   Google口コミ返信を、
@@ -275,13 +278,16 @@ export default function LandingPage() {
                   <Button
                     variant="contained"
                     size="large"
-                    endIcon={<ArrowForward />}
                     onClick={() => router.push('/auth/signup')}
                     sx={{
                       px: 4,
                       py: 1.5,
-                      fontSize: '1.1rem',
-                      boxShadow: `0 8px 16px ${alpha(theme.palette.primary.main, 0.3)}`,
+                      fontSize: '1rem',
+                      bgcolor: '#1A1A1A',
+                      color: '#FFFFFF',
+                      '&:hover': {
+                        bgcolor: '#333333',
+                      },
                     }}
                   >
                     無料で始める
@@ -292,56 +298,58 @@ export default function LandingPage() {
                     onClick={() => {
                       document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
                     }}
-                    sx={{ px: 4, py: 1.5, fontSize: '1.1rem' }}
+                    sx={{
+                      px: 4,
+                      py: 1.5,
+                      fontSize: '1rem',
+                      borderColor: '#1A1A1A',
+                      color: '#1A1A1A',
+                      '&:hover': {
+                        borderColor: '#1A1A1A',
+                        bgcolor: 'rgba(26, 26, 26, 0.04)',
+                      },
+                    }}
                   >
                     デモを見る
                   </Button>
                 </Box>
-                <Box sx={{ mt: 4, display: 'flex', gap: 3, alignItems: 'center' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CheckCircle color="success" fontSize="small" />
-                    <Typography variant="body2" color="text.secondary">
-                      クレジットカード不要
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CheckCircle color="success" fontSize="small" />
-                    <Typography variant="body2" color="text.secondary">
-                      即日利用可能
-                    </Typography>
-                  </Box>
+                <Box sx={{ mt: 6, display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <Typography variant="body2" color="#6B7280">
+                    クレジットカード不要
+                  </Typography>
+                  <Typography variant="body2" color="#6B7280">
+                    即日利用可能
+                  </Typography>
                 </Box>
               </motion.div>
             </Grid>
             <Grid item xs={12} md={6}>
               <motion.div
-                initial={{ opacity: 0, x: 60 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
               >
                 <Box
                   sx={{
                     position: 'relative',
-                    height: { xs: 300, md: 500 },
+                    height: { xs: 300, md: 450 },
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  {/* Placeholder for hero illustration */}
                   <Box
                     sx={{
                       width: '100%',
                       height: '100%',
-                      background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.1)} 100%)`,
-                      borderRadius: 4,
+                      bgcolor: '#FAFAFA',
+                      border: '1px solid #E5E7EB',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: `2px dashed ${alpha(theme.palette.primary.main, 0.3)}`,
                     }}
                   >
-                    <AutoAwesome sx={{ fontSize: 120, color: theme.palette.primary.main, opacity: 0.3 }} />
+                    <AutoAwesome sx={{ fontSize: 80, color: '#E5E7EB' }} />
                   </Box>
                 </Box>
               </motion.div>
@@ -831,9 +839,9 @@ export default function LandingPage() {
       {/* Final CTA Section */}
       <Box
         sx={{
-          py: { xs: 8, md: 12 },
-          background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-          color: 'white',
+          py: { xs: 10, md: 16 },
+          bgcolor: '#1A1A1A',
+          color: '#FFFFFF',
         }}
       >
         <Container maxWidth="md">
@@ -841,34 +849,33 @@ export default function LandingPage() {
             initial="initial"
             whileInView="animate"
             viewport={{ once: true }}
-            variants={scaleIn}
+            variants={fadeInUp}
           >
             <Typography
               variant="h2"
               align="center"
-              sx={{ fontSize: { xs: '2rem', md: '2.5rem' }, fontWeight: 700, mb: 2 }}
+              sx={{ fontSize: { xs: '2rem', md: '2.5rem' }, fontWeight: 400, mb: 2, color: '#FFFFFF' }}
             >
               今すぐ始めて、
               <br />
               ビジネスを加速させましょう
             </Typography>
-            <Typography variant="h6" align="center" sx={{ mb: 4, opacity: 0.9 }}>
+            <Typography variant="body1" align="center" sx={{ mb: 6, color: '#9CA3AF' }}>
               14日間無料トライアル - クレジットカード登録不要
             </Typography>
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
                 size="large"
-                endIcon={<ArrowForward />}
                 onClick={() => router.push('/auth/signup')}
                 sx={{
                   px: 4,
                   py: 1.5,
-                  fontSize: '1.1rem',
-                  bgcolor: 'white',
-                  color: theme.palette.primary.main,
+                  fontSize: '1rem',
+                  bgcolor: '#FFFFFF',
+                  color: '#1A1A1A',
                   '&:hover': {
-                    bgcolor: alpha('#fff', 0.9),
+                    bgcolor: '#F5F5F5',
                   },
                 }}
               >
@@ -881,30 +888,30 @@ export default function LandingPage() {
                 sx={{
                   px: 4,
                   py: 1.5,
-                  fontSize: '1.1rem',
-                  borderColor: 'white',
-                  color: 'white',
+                  fontSize: '1rem',
+                  borderColor: '#6B7280',
+                  color: '#FFFFFF',
                   '&:hover': {
-                    borderColor: 'white',
-                    bgcolor: alpha('#fff', 0.1),
+                    borderColor: '#FFFFFF',
+                    bgcolor: 'rgba(255, 255, 255, 0.04)',
                   },
                 }}
               >
                 お問い合わせ
               </Button>
             </Box>
-            <Box sx={{ mt: 4, display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <Box sx={{ mt: 8, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
               {[
-                '返信率95%達成',
-                '業務時間70%削減',
-                '満足度98%',
+                { value: '95%', label: '返信率達成' },
+                { value: '70%', label: '業務時間削減' },
+                { value: '98%', label: '満足度' },
               ].map((stat, index) => (
                 <Box key={index} sx={{ textAlign: 'center' }}>
-                  <Typography variant="h4" fontWeight={700}>
-                    {stat.match(/\d+%/)?.[0]}
+                  <Typography variant="h3" sx={{ fontWeight: 400, color: '#FFFFFF' }}>
+                    {stat.value}
                   </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                    {stat.replace(/\d+%/, '')}
+                  <Typography variant="body2" sx={{ color: '#6B7280' }}>
+                    {stat.label}
                   </Typography>
                 </Box>
               ))}
