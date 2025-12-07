@@ -88,7 +88,7 @@ export default async function handler(
     const reviewerName = review.reviewer_name || '匿名ユーザー';
 
     let templateContent = '';
-    let selectedTone = tone || 'friendly';
+    let selectedTone = tone || 'polite';
 
     // テンプレートIDが提供された場合、そのテンプレートを使用
     if (templateId) {
@@ -119,7 +119,7 @@ export default async function handler(
     // トーン指示を設定
     let toneInstruction = '';
     switch (selectedTone) {
-      case 'formal':
+      case 'polite':
         toneInstruction = '丁寧かつフォーマルな口調で';
         break;
       case 'friendly':

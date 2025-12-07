@@ -13,11 +13,11 @@ export const generateReply = async (
 ): Promise<string> => {
   try {
     const tonePrompt = {
-      formal: '丁寧で礼儀正しい口調で',
-      casual: 'カジュアルで親しみやすい口調で',
+      polite: '丁寧で礼儀正しい口調で',
       friendly: 'フレンドリーで温かみのある口調で',
+      apologetic: '誠実に謝罪の気持ちを込めた口調で',
+      grateful: '感謝の気持ちを強調する口調で',
       professional: 'プロフェッショナルで信頼感のある口調で',
-      polite: '丁寧で上品な口調で',
     }[tone] || '丁寧で礼儀正しい口調で';
 
     const response = await openai.chat.completions.create({

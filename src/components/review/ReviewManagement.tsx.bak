@@ -28,8 +28,7 @@ import {
   ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 // DatePicker imports temporarily commented out due to ES module import issues
-// import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-// import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+// import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 // import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ja } from 'date-fns/locale';
 import { Review } from '@/types';
@@ -214,8 +213,7 @@ export const ReviewManagement = () => {
   }, [searchQuery, selectedRatings, dateRangePreset, replyStatusFilter, sortOption]);
 
   return (
-    // LocalizationProvider temporarily removed due to ES module import issues
-    // <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ja}>
+    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ja}>
       <Box sx={{ p: 3 }}>
         <Typography variant="h4" sx={{ mb: 3 }}>
           レビュー管理
@@ -322,27 +320,23 @@ export const ReviewManagement = () => {
 
                 {dateRangePreset === 'custom' && (
                   <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    <TextField
+                    <DatePicker
                       label="開始日"
-                      type="date"
-                      size="small"
-                      value={customStartDate ? customStartDate.toISOString().split('T')[0] : ''}
-                      onChange={(e) => {
-                        setCustomStartDate(e.target.value ? new Date(e.target.value) : null);
+                      value={customStartDate}
+                      onChange={(date) => {
+                        setCustomStartDate(date);
                         setPage(1);
                       }}
-                      InputLabelProps={{ shrink: true }}
+                      slotProps={{ textField: { size: 'small' } }}
                     />
-                    <TextField
+                    <DatePicker
                       label="終了日"
-                      type="date"
-                      size="small"
-                      value={customEndDate ? customEndDate.toISOString().split('T')[0] : ''}
-                      onChange={(e) => {
-                        setCustomEndDate(e.target.value ? new Date(e.target.value) : null);
+                      value={customEndDate}
+                      onChange={(date) => {
+                        setCustomEndDate(date);
                         setPage(1);
                       }}
-                      InputLabelProps={{ shrink: true }}
+                      slotProps={{ textField: { size: 'small' } }}
                     />
                   </Box>
                 )}
@@ -502,6 +496,6 @@ export const ReviewManagement = () => {
           </Box>
         )}
       </Box>
-    // </LocalizationProvider>
+    </LocalizationProvider>
   );
 }; 

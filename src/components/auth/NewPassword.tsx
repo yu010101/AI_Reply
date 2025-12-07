@@ -20,7 +20,7 @@ export default function NewPassword() {
       }
     };
     checkSession();
-  }, [navigate]);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +46,7 @@ export default function NewPassword() {
       }
 
       console.log('[NewPassword] パスワード更新成功');
-      navigate('/auth/login');
+      router.push('/auth/login');
     } catch (error) {
       console.error('[NewPassword] 予期せぬエラー:', error);
       setError('パスワードの更新に失敗しました');

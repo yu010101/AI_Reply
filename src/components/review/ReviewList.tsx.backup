@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Typography, Card, CardContent, Avatar, Rating, Button, Grid, CircularProgress, Divider, Chip, TextField, IconButton, Collapse } from '@mui/material';
+import { Box, Typography, Card, CardContent, Avatar, Rating, Button, Grid, CircularProgress, Divider, Chip, TextField, IconButton, Collapse, Dialog, DialogContent } from '@mui/material';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Reply as ReplyIcon, ChatBubbleOutline as ChatBubbleOutlineIcon, AutoAwesome as AutoAwesomeIcon } from '@mui/icons-material';
@@ -522,7 +522,11 @@ export default function ReviewList({ locationId }: ReviewListProps) {
       )}
 
       {/* AI Generating Loader Dialog */}
-      <AIGeneratingLoader open={showGeneratingDialog} />
+      <Dialog open={showGeneratingDialog} maxWidth="sm" fullWidth>
+        <DialogContent>
+          <AIGeneratingLoader />
+        </DialogContent>
+      </Dialog>
 
       {/* AI Reply Preview Dialog */}
       {currentReviewId && (
