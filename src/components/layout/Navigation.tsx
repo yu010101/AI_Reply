@@ -28,6 +28,7 @@ import {
   ExpandMore,
   FormatListBulleted as ListIcon,
   Analytics as AnalyticsIcon,
+  ContactSupport as ContactSupportIcon,
 } from '@mui/icons-material';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -192,6 +193,17 @@ export default function Navigation({ mobileOpen, handleDrawerToggle }: Navigatio
           >
             <ListItemIcon><SettingsIcon /></ListItemIcon>
             <ListItemText primary="設定" />
+          </ListItemButton>
+        </ListItem>
+
+        {/* お問い合わせ */}
+        <ListItem disablePadding>
+          <ListItemButton
+            selected={router.pathname === '/contact'}
+            onClick={() => router.push('/contact')}
+          >
+            <ListItemIcon><ContactSupportIcon /></ListItemIcon>
+            <ListItemText primary="お問い合わせ" />
           </ListItemButton>
         </ListItem>
       </List>
