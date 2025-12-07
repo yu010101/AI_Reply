@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   Box,
   Typography,
   LinearProgress,
@@ -11,12 +12,15 @@ import {
   ListItemIcon,
   ListItemText,
   CircularProgress,
+  Button,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   HourglassEmpty as HourglassEmptyIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
+import { motion } from 'framer-motion';
 
 interface ReviewProgress {
   reviewId: string;
@@ -30,6 +34,7 @@ interface BulkReplyProgressProps {
   reviews: ReviewProgress[];
   currentIndex: number;
   totalCount: number;
+  onClose?: () => void;
 }
 
 export const BulkReplyProgress: React.FC<BulkReplyProgressProps> = ({
@@ -37,6 +42,7 @@ export const BulkReplyProgress: React.FC<BulkReplyProgressProps> = ({
   reviews,
   currentIndex,
   totalCount,
+  onClose,
 }) => {
   const progress = totalCount > 0 ? (currentIndex / totalCount) * 100 : 0;
   const successCount = reviews.filter(r => r.status === 'success').length;
@@ -164,16 +170,42 @@ export const BulkReplyProgress: React.FC<BulkReplyProgressProps> = ({
         </Box>
 
         {currentIndex === totalCount && (
-          <Box mt={3} p={2} bgcolor="success.light" borderRadius={1}>
-            <Typography variant="body1" color="success.dark" fontWeight="bold">
-              すべての返信生成が完了しました！
-            </Typography>
-            <Typography variant="body2" color="success.dark">
-              {successCount}件の返信を確認して投稿してください
-            </Typography>
-          </Box>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300 }}
+          >
+            <Box mt={3} p={2} bgcolor="success.light" borderRadius={1}>
+              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                <motion.div
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                >
+                  <AutoAwesomeIcon color="success" />
+                </motion.div>
+                <Typography variant="body1" color="success.dark" fontWeight="bold">
+                  すべての返信生成が完了しました！
+                </Typography>
+              </Box>
+              <Typography variant="body2" color="success.dark">
+                {successCount}件の返信を確認して投稿してください
+              </Typography>
+            </Box>
+          </motion.div>
         )}
       </DialogContent>
+      {currentIndex === totalCount && onClose && (
+        <DialogActions>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={onClose}
+            fullWidth
+          >
+            確認して投稿する
+          </Button>
+        </DialogActions>
+      )}
     </Dialog>
   );
 };

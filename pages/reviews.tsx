@@ -1,12 +1,12 @@
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import Layout from '@/components/layout/Layout';
-import { ReviewManagement } from '@/components/review/ReviewManagement';
+import ReviewManagementUltimate from '@/components/review/ReviewManagementUltimate';
 
 export default function ReviewsPage() {
   return (
     <AuthGuard>
       <Layout>
-        <ReviewManagement />
+        <ReviewManagementUltimate />
       </Layout>
     </AuthGuard>
   );
