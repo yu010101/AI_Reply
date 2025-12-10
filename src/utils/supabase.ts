@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { NextApiRequest } from 'next';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -98,3 +99,57 @@ export const createTenantsTable = async () => {
     return false;
   }
 };
+
+// サーバーサイド用：リクエストからセッションを取得
+export async function getServerSession(req: NextApiRequest) {
+  // Authorizationヘッダーからトークンを取得
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (!error && user) {
+      return { user, token };
+    }
+  }
+
+  // Cookieからトークンを取得
+  const cookies = req.cookies;
+  const accessToken = cookies['sb-access-token'] || cookies['sb-fmonerzmxohwkisdagvm-auth-token'];
+
+  if (accessToken) {
+    try {
+      // JSON形式の場合はパース
+      let token = accessToken;
+      if (accessToken.startsWith('{')) {
+        const parsed = JSON.parse(accessToken);
+        token = parsed.access_token || parsed.token;
+      }
+
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (!error && user) {
+        return { user, token };
+      }
+    } catch (e) {
+      // パースエラーは無視
+    }
+  }
+
+  // supabase.auth.getSession()も試行（クライアントサイドレンダリング時）
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    return { user: session.user, token: session.access_token };
+  }
+
+  return null;
+}
+
+// サーバーサイド用：認証済みSupabaseクライアントを作成
+export function createAuthenticatedClient(token: string) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
+}

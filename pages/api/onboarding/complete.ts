@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '@/utils/supabase';
+import { supabase, getServerSession, createAuthenticatedClient } from '@/utils/supabase';
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,11 +11,14 @@ export default async function handler(
 
   try {
     // ユーザー認証を確認
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
+    const sessionData = await getServerSession(req);
+
+    if (!sessionData) {
       return res.status(401).json({ message: '認証が必要です' });
     }
+
+    const user = sessionData.user;
+    const authClient = createAuthenticatedClient(sessionData.token);
 
     // オンボーディング完了フラグを更新
     const { error: updateError } = await supabase

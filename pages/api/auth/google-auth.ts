@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { OAuth2Client } from 'google-auth-library';
-import { supabase } from '@/utils/supabase';
+import { supabase, getServerSession, createAuthenticatedClient } from '@/utils/supabase';
 import crypto from 'crypto';
 import { logger } from '@/utils/logger';
 
@@ -84,13 +84,13 @@ export default async function handler(
       logger.debug('API: 開発環境用ユーザーID', { userId });
     } else {
       // 本番環境では通常通りセッションチェック
-      const { data: { session } } = await supabase.auth.getSession();
+      const sessionData = await getServerSession(req);
 
-      if (!session) {
+      if (!sessionData) {
         return res.status(401).json({ error: '認証されていません' });
       }
 
-      userId = session.user.id;
+      userId = sessionData.user.id;
     }
 
     // CSRFトークンとして使用するランダムなstate値を生成
@@ -98,14 +98,18 @@ export default async function handler(
 
     // 開発環境ではデータベース操作をスキップするオプション
     if (!isDevEnv) {
-      // stateをデータベースに保存
-      await supabase
-        .from('oauth_states')
-        .insert({
-          tenant_id: userId,
-          state,
-          created_at: new Date().toISOString()
-        });
+      // 認証済みクライアントを作成してstateをデータベースに保存
+      const sessionData = await getServerSession(req);
+      if (sessionData) {
+        const authClient = createAuthenticatedClient(sessionData.token);
+        await authClient
+          .from('oauth_states')
+          .insert({
+            tenant_id: userId,
+            state,
+            created_at: new Date().toISOString()
+          });
+      }
     }
 
     // モック認証が有効な場合

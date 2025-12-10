@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 // @ts-ignore
 import { google } from 'googleapis';
-import { supabase } from '@/utils/supabase';
+import { supabase, getServerSession, createAuthenticatedClient } from '@/utils/supabase';
 import { logger } from '@/utils/logger';
 
 export default async function handler(
@@ -15,16 +15,17 @@ export default async function handler(
 
   try {
     // セッションからユーザー情報を取得
-    const { data: { session } } = await supabase.auth.getSession();
+    const sessionData = await getServerSession(req);
 
-    if (!session) {
+    if (!sessionData) {
       logger.warn('GoogleCallback: 未認証のためログインページへリダイレクト');
       res.writeHead(302, { Location: '/auth/login?error=auth_required&source=callback' });
       res.end();
       return;
     }
 
-    const userId = session.user.id;
+    const userId = sessionData.user.id;
+    const authClient = createAuthenticatedClient(sessionData.token);
     const { code, state } = req.query;
 
     if (!code) {
@@ -34,7 +35,7 @@ export default async function handler(
     }
 
     // stateパラメータを確認（CSRF保護）
-    const { data: stateData } = await supabase
+    const { data: stateData } = await authClient
       .from('oauth_states')
       .select('state, tenant_id')
       .eq('state', state as string)
@@ -47,7 +48,7 @@ export default async function handler(
     }
 
     // 有効期限切れのstateを削除
-    await supabase
+    await authClient
       .from('oauth_states')
       .delete()
       .lt('created_at', new Date(Date.now() - 10 * 60 * 1000).toISOString());
@@ -73,7 +74,7 @@ export default async function handler(
     const expiryDate = new Date(Number(expiryMillis)).toISOString();
 
     // トークン情報を保存
-    const { data: existingToken } = await supabase
+    const { data: existingToken } = await authClient
       .from('google_auth_tokens')
       .select('id')
       .eq('tenant_id', userId)
@@ -92,7 +93,7 @@ export default async function handler(
         updateData.refresh_token = tokens.refresh_token;
       }
 
-      await supabase
+      await authClient
         .from('google_auth_tokens')
         .update(updateData)
         .eq('id', existingToken.id);
@@ -104,7 +105,7 @@ export default async function handler(
         return;
       }
 
-      await supabase
+      await authClient
         .from('google_auth_tokens')
         .insert({
           tenant_id: userId,

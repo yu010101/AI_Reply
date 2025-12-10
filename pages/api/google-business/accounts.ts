@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '@/utils/supabase';
+import { supabase, getServerSession, createAuthenticatedClient } from '@/utils/supabase';
 import { getAccounts } from '@/utils/googleBusinessProfile';
 import { logger } from '@/utils/logger';
 
@@ -95,17 +95,18 @@ export default async function handler(
 
   try {
     // セッションからユーザー情報を取得
-    const { data: { session } } = await supabase.auth.getSession();
+    const sessionData = await getServerSession(req);
 
-    if (!session) {
+    if (!sessionData) {
       return res.status(401).json({ error: '認証されていません' });
     }
 
-    const userId = session.user.id;
+    const userId = sessionData.user.id;
+    const authClient = createAuthenticatedClient(sessionData.token);
 
     // レート制限をチェック
     if (rateLimiter.isLimited()) {
-      const { data: cachedAccounts } = await supabase
+      const { data: cachedAccounts } = await authClient
         .from('google_business_accounts')
         .select('*')
         .eq('tenant_id', userId)
@@ -152,7 +153,7 @@ export default async function handler(
     } catch (error: any) {
       logger.error('GoogleBusinessAPI: アカウント情報取得エラー', { error });
 
-      const cacheResult: any = await supabase
+      const cacheResult: any = await authClient
         .from('google_business_accounts')
         .select('*')
         .eq('tenant_id', userId);
