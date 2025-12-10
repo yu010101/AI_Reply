@@ -1,122 +1,300 @@
-import { useState } from 'react';
-import { Box, Button, TextField, Typography, Alert, Link } from '@mui/material';
+/**
+ * World-Class Login Form
+ *
+ * Design Principles:
+ * - Crystal-clear user journey
+ * - Accessible form with proper labels
+ * - Smooth loading states
+ * - Helpful error messaging
+ */
+
+import { useState, useCallback } from 'react';
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  Alert,
+  InputAdornment,
+  IconButton,
+  CircularProgress,
+} from '@mui/material';
+import {
+  Visibility,
+  VisibilityOff,
+  EmailOutlined,
+  LockOutlined,
+} from '@mui/icons-material';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 import { supabase } from '@/utils/supabase';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading(true);
+      setError(null);
 
-    try {
-      console.log('[LoginForm] ログイン試行:', email);
-      console.log('[LoginForm] Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (error) {
-        console.error('[LoginForm] ログインエラー:', error);
-        if (error.message.includes('Invalid login credentials')) {
-          setError('メールアドレスまたはパスワードが正しくありません');
-        } else {
-          setError(`ログインエラー: ${error.message}`);
+        if (error) {
+          if (error.message.includes('Invalid login credentials')) {
+            setError('メールアドレスまたはパスワードが正しくありません');
+          } else if (error.message.includes('Email not confirmed')) {
+            setError('メールアドレスの確認が完了していません。確認メールをご確認ください');
+          } else {
+            setError('ログインに失敗しました。しばらく経ってからお試しください');
+          }
+          return;
         }
-        return;
-      }
 
-      if (!data.user) {
-        console.error('[LoginForm] ユーザーデータが取得できません');
-        setError('ユーザー情報の取得に失敗しました');
-        return;
-      }
+        if (!data.user) {
+          setError('ユーザー情報の取得に失敗しました');
+          return;
+        }
 
-      console.log('[LoginForm] ログイン成功:', data.user.email);
-      router.push('/dashboard');
-    } catch (error) {
-      console.error('[LoginForm] 予期せぬエラー:', error);
-      setError('ログイン処理中にエラーが発生しました');
-    } finally {
-      setLoading(false);
-    }
-  };
+        router.push('/dashboard');
+      } catch {
+        setError('ログイン処理中にエラーが発生しました');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [email, password, router]
+  );
+
+  const togglePasswordVisibility = useCallback(() => {
+    setShowPassword((prev) => !prev);
+  }, []);
 
   return (
     <Box
       component="form"
       onSubmit={handleSubmit}
+      noValidate
       sx={{
-        maxWidth: 400,
-        mx: 'auto',
-        mt: 8,
-        p: 3,
         display: 'flex',
         flexDirection: 'column',
-        gap: 2,
+        gap: 3,
       }}
     >
-      <Typography variant="h5" component="h1" gutterBottom>
-        ログイン
-      </Typography>
-      
+      {/* Error Alert */}
       {error && (
-        <Alert severity="error" onClose={() => setError(null)}>
+        <Alert
+          severity="error"
+          onClose={() => setError(null)}
+          sx={{
+            borderRadius: 2,
+            '& .MuiAlert-message': {
+              fontWeight: 500,
+            },
+          }}
+        >
           {error}
         </Alert>
       )}
 
-      <TextField
-        label="メールアドレス"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-        fullWidth
-        disabled={loading}
-      />
+      {/* Email Field */}
+      <Box>
+        <Typography
+          component="label"
+          htmlFor="email"
+          sx={{
+            display: 'block',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            color: 'text.secondary',
+            mb: 1,
+          }}
+        >
+          メールアドレス
+        </Typography>
+        <TextField
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          fullWidth
+          disabled={loading}
+          placeholder="you@example.com"
+          autoComplete="email"
+          autoFocus
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <EmailOutlined sx={{ color: 'text.disabled', fontSize: 20 }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1.5,
+            },
+          }}
+        />
+      </Box>
 
-      <TextField
-        label="パスワード"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-        fullWidth
-        disabled={loading}
-      />
+      {/* Password Field */}
+      <Box>
+        <Typography
+          component="label"
+          htmlFor="password"
+          sx={{
+            display: 'block',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            color: 'text.secondary',
+            mb: 1,
+          }}
+        >
+          パスワード
+        </Typography>
+        <TextField
+          id="password"
+          type={showPassword ? 'text' : 'password'}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          fullWidth
+          disabled={loading}
+          autoComplete="current-password"
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <LockOutlined sx={{ color: 'text.disabled', fontSize: 20 }} />
+              </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  aria-label={showPassword ? 'パスワードを隠す' : 'パスワードを表示'}
+                  onClick={togglePasswordVisibility}
+                  edge="end"
+                  size="small"
+                  sx={{
+                    '&:focus-visible': {
+                      boxShadow: '0 0 0 2px #FFFFFF, 0 0 0 4px #0F172A',
+                    },
+                  }}
+                >
+                  {showPassword ? (
+                    <VisibilityOff sx={{ fontSize: 20 }} />
+                  ) : (
+                    <Visibility sx={{ fontSize: 20 }} />
+                  )}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 1.5,
+            },
+          }}
+        />
+      </Box>
 
+      {/* Submit Button */}
       <Button
         type="submit"
         variant="contained"
-        disabled={loading}
-        sx={{ mt: 2 }}
+        disabled={loading || !email || !password}
+        fullWidth
+        sx={{
+          mt: 1,
+          py: 1.5,
+          borderRadius: 1.5,
+          fontSize: '0.9375rem',
+          fontWeight: 500,
+          position: 'relative',
+        }}
       >
-        {loading ? 'ログイン中...' : 'ログイン'}
+        {loading ? (
+          <>
+            <CircularProgress
+              size={20}
+              sx={{
+                color: 'inherit',
+                position: 'absolute',
+                left: '50%',
+                marginLeft: '-10px',
+              }}
+            />
+            <span style={{ visibility: 'hidden' }}>ログイン</span>
+          </>
+        ) : (
+          'ログイン'
+        )}
       </Button>
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+      {/* Links */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mt: 1,
+        }}
+      >
         <Link
           href="/auth/reset-password"
-          variant="body2"
+          style={{
+            fontSize: '0.875rem',
+            color: '#475569',
+            textDecoration: 'none',
+          }}
         >
-          パスワードを忘れた場合
+          <Typography
+            component="span"
+            sx={{
+              fontSize: '0.875rem',
+              color: 'text.secondary',
+              '&:hover': {
+                color: 'text.primary',
+                textDecoration: 'underline',
+              },
+              transition: 'color 150ms ease',
+            }}
+          >
+            パスワードを忘れた場合
+          </Typography>
         </Link>
         <Link
           href="/auth/register"
-          variant="body2"
+          style={{
+            fontSize: '0.875rem',
+            color: '#0F172A',
+            textDecoration: 'none',
+          }}
         >
-          新規登録はこちら
+          <Typography
+            component="span"
+            sx={{
+              fontSize: '0.875rem',
+              color: 'text.primary',
+              fontWeight: 500,
+              '&:hover': {
+                textDecoration: 'underline',
+              },
+            }}
+          >
+            新規登録
+          </Typography>
         </Link>
       </Box>
     </Box>
   );
-} 
+}

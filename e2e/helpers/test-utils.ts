@@ -112,3 +112,29 @@ export async function mockSupabaseAuthFailure(page: Page, errorMessage: string =
     });
   });
 }
+
+/**
+ * Cookie同意バナーを閉じる
+ * Cookie同意バナーが表示されている場合は「必要なCookieのみ」をクリックして閉じる
+ */
+export async function dismissCookieBanner(page: Page) {
+  try {
+    const cookieBanner = page.getByRole('button', { name: '必要なCookieのみ' });
+    const isVisible = await cookieBanner.isVisible({ timeout: 2000 }).catch(() => false);
+    if (isVisible) {
+      await cookieBanner.click();
+      // バナーが閉じるまで待機
+      await page.waitForTimeout(300);
+    }
+  } catch {
+    // バナーが表示されていない場合は何もしない
+  }
+}
+
+/**
+ * ページに遷移してCookieバナーを閉じる
+ */
+export async function gotoAndDismissCookie(page: Page, url: string) {
+  await page.goto(url);
+  await dismissCookieBanner(page);
+}

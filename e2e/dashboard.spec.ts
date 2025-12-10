@@ -1,12 +1,59 @@
 import { test, expect, Page } from '@playwright/test';
-import { mockSupabaseAuthSuccess, TEST_USER } from './helpers/test-utils';
+import { mockSupabaseAuthSuccess, TEST_USER, dismissCookieBanner } from './helpers/test-utils';
+
+/**
+ * 認証とオンボーディングの基本モック
+ */
+async function setupBasicAuthMocks(page: Page) {
+  // 認証をモック
+  await mockSupabaseAuthSuccess(page);
+
+  // ユーザーメタデータをモック（オンボーディング完了済み）
+  await page.route('**/auth/v1/user*', (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'test-user-id',
+        email: TEST_USER.email,
+        role: 'authenticated',
+        user_metadata: {
+          onboarding_completed: true,
+        },
+      }),
+    });
+  });
+
+  // profilesテーブルをモック（オンボーディング完了済み）
+  await page.route('**/rest/v1/profiles*', (route) => {
+    const url = route.request().url();
+    if (url.includes('select=onboarding_completed')) {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          onboarding_completed: true,
+        }),
+      });
+    } else {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{
+          id: 'test-user-id',
+          email: TEST_USER.email,
+          onboarding_completed: true,
+        }]),
+      });
+    }
+  });
+}
 
 /**
  * ダッシュボードテスト用の認証セットアップ
  */
 async function setupAuthenticatedPage(page: Page) {
-  // 認証をモック
-  await mockSupabaseAuthSuccess(page);
+  await setupBasicAuthMocks(page);
 
   // ダッシュボードデータをモック
   await page.route('**/rest/v1/locations*', (route) => {
@@ -77,10 +124,12 @@ async function setupAuthenticatedPage(page: Page) {
 
   // ログイン
   await page.goto('/auth/login');
+  await dismissCookieBanner(page);
   await page.locator('input[type="email"]').fill(TEST_USER.email);
   await page.locator('input[type="password"]').fill(TEST_USER.password);
   await page.getByRole('button', { name: 'ログイン' }).click();
   await page.waitForURL('/dashboard', { timeout: 10000 });
+  await dismissCookieBanner(page);
 }
 
 test.describe('ダッシュボード', () => {
@@ -141,7 +190,7 @@ test.describe('ダッシュボード', () => {
 
   test.describe('データ表示', () => {
     test('レビュー数が正しく表示される', async ({ page }) => {
-      await mockSupabaseAuthSuccess(page);
+      await setupBasicAuthMocks(page);
 
       // レビュー数をモック（10件）
       await page.route('**/rest/v1/reviews*', (route) => {
@@ -154,7 +203,8 @@ test.describe('ダッシュボード', () => {
       });
 
       await page.route('**/rest/v1/**', (route) => {
-        if (!route.request().url().includes('reviews')) {
+        const url = route.request().url();
+        if (!url.includes('reviews') && !url.includes('profiles')) {
           route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -165,32 +215,39 @@ test.describe('ダッシュボード', () => {
       });
 
       await page.goto('/auth/login');
+      await dismissCookieBanner(page);
       await page.locator('input[type="email"]').fill(TEST_USER.email);
       await page.locator('input[type="password"]').fill(TEST_USER.password);
       await page.getByRole('button', { name: 'ログイン' }).click();
       await page.waitForURL('/dashboard', { timeout: 10000 });
+      await dismissCookieBanner(page);
 
       await expect(page.getByText('総レビュー数')).toBeVisible();
     });
 
     test('レビューがない場合、空のメッセージが表示される', async ({ page }) => {
-      await mockSupabaseAuthSuccess(page);
+      await setupBasicAuthMocks(page);
 
       // 空のレビューをモック
       await page.route('**/rest/v1/**', (route) => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([]),
-          headers: { 'content-range': '0-0/0' },
-        });
+        const url = route.request().url();
+        if (!url.includes('profiles')) {
+          route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify([]),
+            headers: { 'content-range': '0-0/0' },
+          });
+        }
       });
 
       await page.goto('/auth/login');
+      await dismissCookieBanner(page);
       await page.locator('input[type="email"]').fill(TEST_USER.email);
       await page.locator('input[type="password"]').fill(TEST_USER.password);
       await page.getByRole('button', { name: 'ログイン' }).click();
       await page.waitForURL('/dashboard', { timeout: 10000 });
+      await dismissCookieBanner(page);
 
       // 空の状態メッセージまたはデフォルト値が表示される
       await expect(page.getByText('レビューはまだありません')).toBeVisible();
@@ -199,64 +256,79 @@ test.describe('ダッシュボード', () => {
 
   test.describe('ダッシュボード - 異常系', () => {
     test('API エラー時にエラー状態が表示される', async ({ page }) => {
-      await mockSupabaseAuthSuccess(page);
+      await setupBasicAuthMocks(page);
 
-      // APIエラーをモック
+      // APIエラーをモック（profilesを除く）
       await page.route('**/rest/v1/**', (route) => {
-        route.fulfill({
-          status: 500,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'Internal Server Error' }),
-        });
+        const url = route.request().url();
+        if (!url.includes('profiles')) {
+          route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Internal Server Error' }),
+          });
+        }
       });
 
       await page.goto('/auth/login');
+      await dismissCookieBanner(page);
       await page.locator('input[type="email"]').fill(TEST_USER.email);
       await page.locator('input[type="password"]').fill(TEST_USER.password);
       await page.getByRole('button', { name: 'ログイン' }).click();
       await page.waitForURL('/dashboard', { timeout: 10000 });
+      await dismissCookieBanner(page);
 
       // ダッシュボードは表示される（エラーがあってもクラッシュしない）
       await expect(page.getByRole('heading', { name: 'ダッシュボード' })).toBeVisible();
     });
 
     test('ネットワークエラー時にページがクラッシュしない', async ({ page }) => {
-      await mockSupabaseAuthSuccess(page);
+      await setupBasicAuthMocks(page);
 
-      // ネットワークエラーをモック
+      // ネットワークエラーをモック（profilesを除く）
       await page.route('**/rest/v1/**', (route) => {
-        route.abort('failed');
+        const url = route.request().url();
+        if (!url.includes('profiles')) {
+          route.abort('failed');
+        }
       });
 
       await page.goto('/auth/login');
+      await dismissCookieBanner(page);
       await page.locator('input[type="email"]').fill(TEST_USER.email);
       await page.locator('input[type="password"]').fill(TEST_USER.password);
       await page.getByRole('button', { name: 'ログイン' }).click();
       await page.waitForURL('/dashboard', { timeout: 10000 });
+      await dismissCookieBanner(page);
 
       // ページはクラッシュせず表示される
       await expect(page.getByRole('heading', { name: 'ダッシュボード' })).toBeVisible();
     });
 
     test('タイムアウト時にローディング状態が適切に処理される', async ({ page }) => {
-      await mockSupabaseAuthSuccess(page);
+      await setupBasicAuthMocks(page);
 
-      // 遅延レスポンスをモック
+      // 遅延レスポンスをモック（profilesを除く）
       await page.route('**/rest/v1/**', async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([]),
-          headers: { 'content-range': '0-0/0' },
-        });
+        const url = route.request().url();
+        if (!url.includes('profiles')) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify([]),
+            headers: { 'content-range': '0-0/0' },
+          });
+        }
       });
 
       await page.goto('/auth/login');
+      await dismissCookieBanner(page);
       await page.locator('input[type="email"]').fill(TEST_USER.email);
       await page.locator('input[type="password"]').fill(TEST_USER.password);
       await page.getByRole('button', { name: 'ログイン' }).click();
       await page.waitForURL('/dashboard', { timeout: 10000 });
+      await dismissCookieBanner(page);
 
       // ページは最終的に表示される
       await expect(page.getByRole('heading', { name: 'ダッシュボード' })).toBeVisible({ timeout: 15000 });

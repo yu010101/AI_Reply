@@ -3,36 +3,25 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// 開発環境とテスト環境でのみログを出力
-if (process.env.NODE_ENV !== 'production') {
-  console.log('[Supabase] URL:', supabaseUrl ? '設定済み' : '未設定');
-  console.log('[Supabase] Anon Key:', supabaseAnonKey ? '設定済み' : '未設定');
-}
-
 // 環境変数が設定されていない場合のエラーハンドリング
-// ビルド時やテスト時にはエラーを投げず、ダミークライアントを作成
 if (!supabaseUrl || !supabaseAnonKey) {
   if (process.env.NODE_ENV === 'production') {
-    console.error('[Supabase] 環境変数が設定されていません');
-    throw new Error('Supabaseの設定が正しくありません');
+    throw new Error('Supabaseの環境変数が設定されていません');
   }
-  // 開発環境やテスト環境では警告のみ
-  console.warn('[Supabase] 環境変数が設定されていません。ダミークライアントを使用します。');
 }
 
-// 環境変数が設定されている場合のみ有効なクライアントを作成
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : createClient('https://dummy.supabase.co', 'dummy-key');
+// Supabaseクライアントを作成
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
 
 // 認証関連の関数
 export const signIn = async (email: string, password: string) => {
-  console.log('[Supabase] ログイン試行:', { email });
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password
   });
-  console.log('[Supabase] ログイン結果:', { data, error });
   return { data, error };
 };
 
@@ -100,18 +89,12 @@ export interface Draft {
 // テナントテーブルを作成する関数
 export const createTenantsTable = async () => {
   try {
-    console.log('[Supabase] テナントテーブル作成開始');
-    
     const { error } = await supabase.rpc('create_tenants_table');
     if (error) {
-      console.error('[Supabase] テナントテーブル作成エラー:', error);
       throw error;
     }
-    
-    console.log('[Supabase] テナントテーブル作成成功');
     return true;
   } catch (error) {
-    console.error('[Supabase] テナントテーブル作成エラー:', error);
     return false;
   }
-}; 
+};

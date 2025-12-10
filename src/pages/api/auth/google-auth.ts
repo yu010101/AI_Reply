@@ -1,61 +1,69 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
+import { OAuth2Client } from 'google-auth-library';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  console.log('==========================================');
-  console.log('[google-auth] API呼び出し開始');
-  
-  // リクエストメソッドとパスをログ出力
-  console.log('[google-auth] リクエスト受信:', { 
-    method: req.method, 
-    path: req.url,
-    timestamp: new Date().toISOString()
-  });
-  
   if (req.method !== 'GET') {
-    console.log('[google-auth] 不正なメソッド:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // 強制的に開発環境として処理
-    const isDevEnv = true; // process.env.NODE_ENV === 'development';
-    console.log('[google-auth] 実行環境詳細:', { 
-      isDevEnv, 
-      nodeEnv: process.env.NODE_ENV,
-      vercelEnv: process.env.VERCEL_ENV || 'なし',
-      forceDevMode: true
+    // 環境変数の検証
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+    if (!clientId || !clientSecret) {
+      console.error('[google-auth] Google OAuth credentials not configured');
+      return res.status(500).json({
+        error: 'Google OAuth認証情報が設定されていません',
+        details: 'GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET を設定してください'
+      });
+    }
+
+    if (!appUrl) {
+      console.error('[google-auth] NEXT_PUBLIC_APP_URL not configured');
+      return res.status(500).json({
+        error: 'アプリケーションURLが設定されていません',
+        details: 'NEXT_PUBLIC_APP_URL を設定してください'
+      });
+    }
+
+    // 認証済みユーザーかチェック
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      return res.status(401).json({ error: '認証が必要です' });
+    }
+
+    // OAuth2クライアントの設定
+    const redirectUri = `${appUrl}/api/auth/google-callback`;
+    const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);
+
+    // Google Business Profile API用のスコープ
+    const scopes = [
+      'https://www.googleapis.com/auth/business.manage',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+    ];
+
+    // 認証URLを生成
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      prompt: 'consent', // リフレッシュトークンを確実に取得
+      state: session.user.id, // ユーザーIDをstateとして渡す
     });
-    
-    // クッキーの詳細をログ出力
-    const cookieStr = req.headers.cookie || '';
-    console.log('[google-auth] クッキー詳細:', {
-      cookieExists: !!cookieStr,
-      cookieLength: cookieStr.length,
-      cookieStart: cookieStr.substring(0, 50) + (cookieStr.length > 50 ? '...' : ''),
-      hasAuthCookie: cookieStr.includes('supabase-auth'),
-      cookieParts: cookieStr.split(';').map(c => c.trim().substring(0, 20) + '...').slice(0, 3)
+
+    return res.status(200).json({ url: authUrl });
+
+  } catch (error: any) {
+    console.error('[google-auth] エラー:', error);
+    res.status(500).json({
+      error: '認証準備中にエラーが発生しました',
+      details: error.message
     });
-    
-    console.log('[google-auth] 強制的にモックモードを使用します');
-    
-    // モックコールバックURLを生成して返す
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const mockCallbackUrl = `${appUrl}/api/auth/google-callback?code=mock_auth_code&mock=true&ts=${Date.now()}`;
-    console.log('[google-auth] モック認証URL生成:', mockCallbackUrl);
-    
-    // 応答を返す前に最終ログ
-    console.log('[google-auth] 正常終了 - 200 応答');
-    console.log('==========================================');
-    
-    return res.status(200).json({ url: mockCallbackUrl });
-    
-  } catch (error) {
-    console.error('[google-auth] エラー発生:', error);
-    console.log('==========================================');
-    res.status(500).json({ error: '認証準備中にエラーが発生しました', details: error instanceof Error ? error.message : '不明なエラー' });
   }
-} 
+}

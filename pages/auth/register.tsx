@@ -1,12 +1,102 @@
 import RegisterForm from '@/components/auth/RegisterForm';
+import { Box, Container, Typography } from '@mui/material';
+import Head from 'next/head';
+import Link from 'next/link';
 
 export default function RegisterPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded shadow">
-        <h1 className="text-2xl font-bold mb-6 text-center">新規登録</h1>
-        <RegisterForm />
-      </div>
-    </div>
+    <>
+      <Head>
+        <title>新規登録 - RevAI Concierge</title>
+      </Head>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: '#FFFFFF',
+        }}
+      >
+        {/* Header */}
+        <Box
+          component="header"
+          sx={{
+            py: 3,
+            px: 4,
+            borderBottom: '1px solid #E5E7EB',
+          }}
+        >
+          <Link href="/" style={{ textDecoration: 'none' }}>
+            <Typography
+              sx={{
+                fontSize: '1rem',
+                fontWeight: 400,
+                color: '#1A1A1A',
+              }}
+            >
+              RevAI Concierge
+            </Typography>
+          </Link>
+        </Box>
+
+        {/* Main Content */}
+        <Box
+          sx={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            py: 8,
+          }}
+        >
+          <Container maxWidth="sm">
+            <Box
+              sx={{
+                maxWidth: 400,
+                mx: 'auto',
+              }}
+            >
+              <Typography
+                variant="h1"
+                sx={{
+                  fontSize: '1.75rem',
+                  fontWeight: 400,
+                  color: '#1A1A1A',
+                  mb: 1,
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                新規登録
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: '0.875rem',
+                  color: '#6B7280',
+                  mb: 4,
+                }}
+              >
+                14日間無料でお試しいただけます
+              </Typography>
+              <RegisterForm />
+            </Box>
+          </Container>
+        </Box>
+
+        {/* Footer */}
+        <Box
+          component="footer"
+          sx={{
+            py: 3,
+            px: 4,
+            borderTop: '1px solid #E5E7EB',
+            textAlign: 'center',
+          }}
+        >
+          <Typography sx={{ fontSize: '0.75rem', color: '#9CA3AF' }}>
+            © 2024 RevAI Concierge
+          </Typography>
+        </Box>
+      </Box>
+    </>
   );
-} 
+}

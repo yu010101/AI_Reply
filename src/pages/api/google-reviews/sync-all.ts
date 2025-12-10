@@ -1,5 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { supabase } from '@/utils/supabase';
+// @ts-ignore
+import { google } from 'googleapis';
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,9 +18,6 @@ export default async function handler(
       return res.status(401).json({ error: '認証が必要です' });
     }
 
-    // 失敗したレビュー同期を再試行するかどうか
-    const retryFailed = req.query.retryFailed === 'true';
-
     // トークン情報を取得
     const { data: tokenData, error: tokenError } = await supabase
       .from('google_auth_tokens')
@@ -28,6 +27,13 @@ export default async function handler(
 
     if (tokenError || !tokenData) {
       return res.status(401).json({ error: 'Google認証が必要です' });
+    }
+
+    // トークンの有効期限をチェック
+    const now = new Date();
+    const expiryDate = new Date(tokenData.expiry_date);
+    if (now >= expiryDate) {
+      return res.status(401).json({ error: 'Google認証の有効期限が切れています。再認証してください。' });
     }
 
     // ユーザーの全店舗を取得
@@ -44,7 +50,36 @@ export default async function handler(
       return res.status(404).json({ error: '店舗が登録されていません' });
     }
 
-    // 各店舗のレビューを同期（ダミーデータ）
+    // Google API クライアント設定
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token,
+    });
+
+    const mybusiness = google.mybusinessaccountmanagement({ version: 'v1', auth: oauth2Client });
+
+    // アカウント一覧を取得
+    let accounts;
+    try {
+      const accountsResponse = await mybusiness.accounts.list();
+      accounts = accountsResponse.data.accounts || [];
+    } catch (apiError: any) {
+      console.error('Google API アカウント取得エラー:', apiError);
+      return res.status(500).json({
+        error: 'Google Business Profileアカウントの取得に失敗しました',
+        details: apiError.message
+      });
+    }
+
+    if (accounts.length === 0) {
+      return res.status(404).json({ error: 'Google Business Profileアカウントが見つかりません' });
+    }
+
+    // 各店舗のレビューを同期
     const results = [];
     let totalReviews = 0;
 
@@ -59,69 +94,65 @@ export default async function handler(
         continue;
       }
 
-      // 実際の実装ではGoogle My Business APIを使用してレビューを取得
-      // ここではダミーレビューを生成して保存
-      const dummyReviews = [
-        {
-          location_id: location.id,
-          tenant_id: session.user.id,
-          google_review_id: `review_${location.id}_${Date.now()}_1`,
-          author: 'テストユーザー1',
-          rating: 4,
-          comment: 'とても良いサービスでした。また利用したいです。',
-          status: 'pending',
-          source: 'google',
-          review_date: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          location_id: location.id,
-          tenant_id: session.user.id,
-          google_review_id: `review_${location.id}_${Date.now()}_2`,
-          author: 'テストユーザー2',
-          rating: 5,
-          comment: '素晴らしい対応でした。スタッフの方々がとても親切でした。',
-          status: 'pending',
-          source: 'google',
-          review_date: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ];
+      try {
+        // Google Business Profile APIで店舗情報を確認
+        const mybusinessInfo = google.mybusinessbusinessinformation({ version: 'v1', auth: oauth2Client });
+        const accountName = accounts[0].name;
 
-      // レビューをデータベースに保存
-      const { data: insertedReviews, error: insertError } = await supabase
-        .from('reviews')
-        .upsert(dummyReviews, { onConflict: 'google_review_id' })
-        .select();
-
-      if (insertError) {
-        results.push({
-          locationId: location.id,
-          locationName: location.name,
-          success: false,
-          error: '保存エラー'
+        const locationsResponse = await mybusinessInfo.accounts.locations.list({
+          parent: accountName!,
+          readMask: 'name,title,metadata',
         });
-      } else {
+
+        const googleLocations = locationsResponse.data.locations || [];
+        const matchingLocation = googleLocations.find(
+          (loc: any) => loc.metadata?.placeId === location.google_place_id
+        );
+
+        if (!matchingLocation) {
+          results.push({
+            locationId: location.id,
+            locationName: location.name,
+            success: false,
+            error: 'Google Business Profileで店舗が見つかりません'
+          });
+          continue;
+        }
+
+        // TODO: 実際のレビュー取得実装
+        // 現時点ではAPIの設定確認のみ
         results.push({
           locationId: location.id,
           locationName: location.name,
           success: true,
-          reviewsCount: dummyReviews.length
+          googleLocation: matchingLocation.title,
+          reviewsCount: 0,
+          note: 'レビュー取得機能は開発中です'
         });
-        totalReviews += dummyReviews.length;
+
+      } catch (locationError: any) {
+        results.push({
+          locationId: location.id,
+          locationName: location.name,
+          success: false,
+          error: locationError.message || '店舗情報の取得に失敗しました'
+        });
       }
     }
 
-    // 同期成功
+    // 同期結果を返す
     res.status(200).json({
       success: true,
-      message: `${totalReviews}件のレビューを同期しました`,
-      results
+      message: `${locations.length}件の店舗を確認しました`,
+      totalReviews,
+      results,
+      note: 'レビュー取得機能は現在開発中です。Google Business Profile APIの追加設定が必要です。'
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Google Reviewの一括同期エラー:', error);
-    res.status(500).json({ error: 'レビューの同期中にエラーが発生しました' });
+    res.status(500).json({
+      error: 'レビューの同期中にエラーが発生しました',
+      details: error.message
+    });
   }
-} 
+}

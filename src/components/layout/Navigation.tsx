@@ -1,4 +1,14 @@
-import { useState } from 'react';
+/**
+ * World-Class Navigation Component
+ *
+ * Design Principles:
+ * - Crystal-clear navigation hierarchy
+ * - Keyboard-accessible with focus management
+ * - Smooth transitions
+ * - Mobile-first responsive design
+ */
+
+import { useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import {
   Box,
@@ -10,13 +20,11 @@ import {
   ListItemButton,
   Divider,
   Typography,
-  IconButton,
   Collapse,
+  alpha,
 } from '@mui/material';
 import {
-  Menu as MenuIcon,
   Dashboard as DashboardIcon,
-  People as PeopleIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon,
   Store as StoreIcon,
@@ -32,219 +40,394 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '@/contexts/AuthContext';
 
-const drawerWidth = 240;
+const DRAWER_WIDTH = 256;
 
 interface NavigationProps {
   mobileOpen: boolean;
   handleDrawerToggle: () => void;
 }
 
+interface NavItem {
+  label: string;
+  path?: string;
+  icon: React.ReactNode;
+  children?: { label: string; path: string; icon: React.ReactNode }[];
+}
+
+const navItems: NavItem[] = [
+  {
+    label: 'ダッシュボード',
+    path: '/dashboard',
+    icon: <DashboardIcon />,
+  },
+  {
+    label: '店舗管理',
+    path: '/locations',
+    icon: <StoreIcon />,
+  },
+  {
+    label: 'レビュー管理',
+    icon: <CommentIcon />,
+    children: [
+      { label: 'レビュー一覧', path: '/reviews', icon: <ListIcon /> },
+      { label: 'レビュー分析', path: '/reviews/analytics', icon: <BarChartIcon /> },
+    ],
+  },
+  {
+    label: 'AI返信',
+    icon: <AutoAwesomeIcon />,
+    children: [
+      { label: '返信テンプレート', path: '/reply-templates', icon: <ListIcon /> },
+      { label: '返信分析', path: '/ai-reply-analytics', icon: <AnalyticsIcon /> },
+    ],
+  },
+  {
+    label: '請求・プラン',
+    icon: <PaymentIcon />,
+    children: [
+      { label: 'プラン管理', path: '/account/billing', icon: <PaymentIcon /> },
+      { label: '請求履歴', path: '/subscription-history', icon: <ListIcon /> },
+    ],
+  },
+  {
+    label: '設定',
+    path: '/settings',
+    icon: <SettingsIcon />,
+  },
+  {
+    label: 'お問い合わせ',
+    path: '/contact',
+    icon: <ContactSupportIcon />,
+  },
+];
+
 export default function Navigation({ mobileOpen, handleDrawerToggle }: NavigationProps) {
   const router = useRouter();
   const { signOut } = useAuth();
-  const [reviewsOpen, setReviewsOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [billingOpen, setBillingOpen] = useState(false);
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     try {
       await signOut();
       router.push('/auth/login');
     } catch (error) {
       console.error('ログアウトエラー:', error);
     }
-  };
+  }, [signOut, router]);
 
-  const isPathActive = (path: string) => {
-    if (path === router.pathname) return true;
-    if (path === '/reviews' && router.pathname.startsWith('/reviews')) return true;
-    if (path === '/ai-reply' && router.pathname.startsWith('/ai-reply')) return true;
-    if (path === '/account' && router.pathname.startsWith('/account')) return true;
-    return false;
-  };
+  const toggleMenu = useCallback((label: string) => {
+    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+  }, []);
+
+  const isPathActive = useCallback(
+    (path: string) => {
+      if (path === router.pathname) return true;
+      // Check if current path starts with the nav path (for nested routes)
+      if (path !== '/' && router.pathname.startsWith(path)) return true;
+      return false;
+    },
+    [router.pathname]
+  );
+
+  const isMenuActive = useCallback(
+    (item: NavItem) => {
+      if (item.path) return isPathActive(item.path);
+      if (item.children) {
+        return item.children.some((child) => isPathActive(child.path));
+      }
+      return false;
+    },
+    [isPathActive]
+  );
+
+  const handleNavigation = useCallback(
+    (path: string) => {
+      router.push(path);
+      if (mobileOpen) handleDrawerToggle();
+    },
+    [router, mobileOpen, handleDrawerToggle]
+  );
 
   const drawer = (
-    <Box>
-      <Box sx={{ p: 2 }}>
-        <Typography variant="h6">RevAI Concierge</Typography>
+    <Box
+      component="nav"
+      aria-label="メインナビゲーション"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+      }}
+    >
+      {/* Logo */}
+      <Box
+        sx={{
+          p: 3,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 500,
+            letterSpacing: '-0.02em',
+            color: 'text.primary',
+          }}
+        >
+          RevAI Concierge
+        </Typography>
       </Box>
-      <Divider />
-      <List>
-        {/* ダッシュボード */}
-        <ListItem disablePadding>
-          <ListItemButton
-            selected={router.pathname === '/dashboard'}
-            onClick={() => router.push('/dashboard')}
-          >
-            <ListItemIcon><DashboardIcon /></ListItemIcon>
-            <ListItemText primary="ダッシュボード" />
-          </ListItemButton>
-        </ListItem>
 
-        {/* 店舗管理 */}
-        <ListItem disablePadding>
-          <ListItemButton
-            selected={router.pathname === '/locations'}
-            onClick={() => router.push('/locations')}
-          >
-            <ListItemIcon><StoreIcon /></ListItemIcon>
-            <ListItemText primary="店舗管理" />
-          </ListItemButton>
-        </ListItem>
+      {/* Navigation Items */}
+      <Box sx={{ flex: 1, overflowY: 'auto', py: 2 }}>
+        <List component="ul" sx={{ px: 1.5 }} disablePadding>
+          {navItems.map((item) => (
+            <ListItem key={item.label} disablePadding component="li" sx={{ display: 'block', mb: 0.5 }}>
+              {item.children ? (
+                <>
+                  <ListItemButton
+                    onClick={() => toggleMenu(item.label)}
+                    aria-expanded={openMenus[item.label] || isMenuActive(item)}
+                    aria-controls={`${item.label}-submenu`}
+                    sx={{
+                      borderRadius: 1.5,
+                      py: 1.25,
+                      px: 2,
+                      minHeight: 44,
+                      color: isMenuActive(item) ? 'text.primary' : 'text.secondary',
+                      bgcolor: isMenuActive(item) ? 'action.hover' : 'transparent',
+                      '&:hover': {
+                        bgcolor: 'action.hover',
+                        color: 'text.primary',
+                      },
+                      '&:focus-visible': {
+                        outline: 'none',
+                        boxShadow: '0 0 0 2px #FFFFFF, 0 0 0 4px #0F172A',
+                      },
+                      transition: 'all 150ms ease',
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        minWidth: 36,
+                        color: 'inherit',
+                      }}
+                    >
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{
+                        fontSize: '0.875rem',
+                        fontWeight: isMenuActive(item) ? 500 : 400,
+                      }}
+                    />
+                    {openMenus[item.label] || isMenuActive(item) ? (
+                      <ExpandLess sx={{ fontSize: 20 }} />
+                    ) : (
+                      <ExpandMore sx={{ fontSize: 20 }} />
+                    )}
+                  </ListItemButton>
+                  <Collapse
+                    in={openMenus[item.label] || isMenuActive(item)}
+                    timeout="auto"
+                    unmountOnExit
+                  >
+                    <List
+                      component="ul"
+                      id={`${item.label}-submenu`}
+                      disablePadding
+                      sx={{ pl: 2, mt: 0.5 }}
+                    >
+                      {item.children.map((child) => (
+                        <ListItem key={child.path} disablePadding component="li" sx={{ mb: 0.5 }}>
+                          <ListItemButton
+                            selected={isPathActive(child.path)}
+                            onClick={() => handleNavigation(child.path)}
+                            sx={{
+                              borderRadius: 1.5,
+                              py: 1,
+                              px: 2,
+                              minHeight: 40,
+                              color: isPathActive(child.path) ? 'text.primary' : 'text.secondary',
+                              bgcolor: isPathActive(child.path)
+                                ? (theme) => alpha(theme.palette.text.primary, 0.08)
+                                : 'transparent',
+                              '&:hover': {
+                                bgcolor: 'action.hover',
+                                color: 'text.primary',
+                              },
+                              '&:focus-visible': {
+                                outline: 'none',
+                                boxShadow: '0 0 0 2px #FFFFFF, 0 0 0 4px #0F172A',
+                              },
+                              '&.Mui-selected': {
+                                bgcolor: (theme) => alpha(theme.palette.text.primary, 0.08),
+                                '&:hover': {
+                                  bgcolor: (theme) => alpha(theme.palette.text.primary, 0.12),
+                                },
+                              },
+                              transition: 'all 150ms ease',
+                            }}
+                          >
+                            <ListItemIcon
+                              sx={{
+                                minWidth: 32,
+                                color: 'inherit',
+                                '& svg': { fontSize: 18 },
+                              }}
+                            >
+                              {child.icon}
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={child.label}
+                              primaryTypographyProps={{
+                                fontSize: '0.8125rem',
+                                fontWeight: isPathActive(child.path) ? 500 : 400,
+                              }}
+                            />
+                          </ListItemButton>
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Collapse>
+                </>
+              ) : (
+                <ListItemButton
+                  selected={isPathActive(item.path!)}
+                  onClick={() => handleNavigation(item.path!)}
+                  sx={{
+                    borderRadius: 1.5,
+                    py: 1.25,
+                    px: 2,
+                    minHeight: 44,
+                    color: isPathActive(item.path!) ? 'text.primary' : 'text.secondary',
+                    bgcolor: isPathActive(item.path!)
+                      ? (theme) => alpha(theme.palette.text.primary, 0.08)
+                      : 'transparent',
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                      color: 'text.primary',
+                    },
+                    '&:focus-visible': {
+                      outline: 'none',
+                      boxShadow: '0 0 0 2px #FFFFFF, 0 0 0 4px #0F172A',
+                    },
+                    '&.Mui-selected': {
+                      bgcolor: (theme) => alpha(theme.palette.text.primary, 0.08),
+                      '&:hover': {
+                        bgcolor: (theme) => alpha(theme.palette.text.primary, 0.12),
+                      },
+                    },
+                    transition: 'all 150ms ease',
+                  }}
+                >
+                  <ListItemIcon
+                    sx={{
+                      minWidth: 36,
+                      color: 'inherit',
+                    }}
+                  >
+                    {item.icon}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontSize: '0.875rem',
+                      fontWeight: isPathActive(item.path!) ? 500 : 400,
+                    }}
+                  />
+                </ListItemButton>
+              )}
+            </ListItem>
+          ))}
+        </List>
+      </Box>
 
-        {/* レビュー管理 */}
-        <ListItem disablePadding>
-          <ListItemButton
-            onClick={() => setReviewsOpen(!reviewsOpen)}
-          >
-            <ListItemIcon><CommentIcon /></ListItemIcon>
-            <ListItemText primary="レビュー管理" />
-            {reviewsOpen ? <ExpandLess /> : <ExpandMore />}
-          </ListItemButton>
-        </ListItem>
-        <Collapse in={reviewsOpen} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
+      {/* Footer */}
+      <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 1.5 }}>
+        <List disablePadding>
+          <ListItem disablePadding>
             <ListItemButton
-              sx={{ pl: 4 }}
-              selected={router.pathname === '/reviews'}
-              onClick={() => router.push('/reviews')}
+              onClick={handleSignOut}
+              sx={{
+                borderRadius: 1.5,
+                py: 1.25,
+                px: 2,
+                minHeight: 44,
+                color: 'text.secondary',
+                '&:hover': {
+                  bgcolor: 'error.main',
+                  color: 'error.contrastText',
+                  '& .MuiListItemIcon-root': {
+                    color: 'error.contrastText',
+                  },
+                },
+                '&:focus-visible': {
+                  outline: 'none',
+                  boxShadow: '0 0 0 2px #FFFFFF, 0 0 0 4px #0F172A',
+                },
+                transition: 'all 150ms ease',
+              }}
             >
-              <ListItemIcon><ListIcon /></ListItemIcon>
-              <ListItemText primary="レビュー一覧" />
+              <ListItemIcon
+                sx={{
+                  minWidth: 36,
+                  color: 'inherit',
+                }}
+              >
+                <LogoutIcon />
+              </ListItemIcon>
+              <ListItemText
+                primary="ログアウト"
+                primaryTypographyProps={{
+                  fontSize: '0.875rem',
+                }}
+              />
             </ListItemButton>
-            <ListItemButton
-              sx={{ pl: 4 }}
-              selected={router.pathname === '/reviews/analytics'}
-              onClick={() => router.push('/reviews/analytics')}
-            >
-              <ListItemIcon><BarChartIcon /></ListItemIcon>
-              <ListItemText primary="レビュー分析" />
-            </ListItemButton>
-          </List>
-        </Collapse>
-
-        {/* AI返信機能 */}
-        <ListItem disablePadding>
-          <ListItemButton
-            onClick={() => setAiOpen(!aiOpen)}
-          >
-            <ListItemIcon><AutoAwesomeIcon /></ListItemIcon>
-            <ListItemText primary="AI返信" />
-            {aiOpen ? <ExpandLess /> : <ExpandMore />}
-          </ListItemButton>
-        </ListItem>
-        <Collapse in={aiOpen} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItemButton
-              sx={{ pl: 4 }}
-              selected={router.pathname === '/reply-templates'}
-              onClick={() => router.push('/reply-templates')}
-            >
-              <ListItemIcon><ListIcon /></ListItemIcon>
-              <ListItemText primary="返信テンプレート" />
-            </ListItemButton>
-            <ListItemButton
-              sx={{ pl: 4 }}
-              selected={router.pathname === '/ai-reply-analytics'}
-              onClick={() => router.push('/ai-reply-analytics')}
-            >
-              <ListItemIcon><AnalyticsIcon /></ListItemIcon>
-              <ListItemText primary="返信分析" />
-            </ListItemButton>
-          </List>
-        </Collapse>
-
-        {/* 請求・プラン管理 */}
-        <ListItem disablePadding>
-          <ListItemButton
-            onClick={() => setBillingOpen(!billingOpen)}
-          >
-            <ListItemIcon><PaymentIcon /></ListItemIcon>
-            <ListItemText primary="請求・プラン" />
-            {billingOpen ? <ExpandLess /> : <ExpandMore />}
-          </ListItemButton>
-        </ListItem>
-        <Collapse in={billingOpen} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItemButton
-              sx={{ pl: 4 }}
-              selected={router.pathname === '/account/billing'}
-              onClick={() => router.push('/account/billing')}
-            >
-              <ListItemIcon><PaymentIcon /></ListItemIcon>
-              <ListItemText primary="プラン管理" />
-            </ListItemButton>
-            <ListItemButton
-              sx={{ pl: 4 }}
-              selected={router.pathname === '/subscription-history'}
-              onClick={() => router.push('/subscription-history')}
-            >
-              <ListItemIcon><ListIcon /></ListItemIcon>
-              <ListItemText primary="請求履歴" />
-            </ListItemButton>
-          </List>
-        </Collapse>
-
-        {/* 設定 */}
-        <ListItem disablePadding>
-          <ListItemButton
-            selected={router.pathname === '/settings'}
-            onClick={() => router.push('/settings')}
-          >
-            <ListItemIcon><SettingsIcon /></ListItemIcon>
-            <ListItemText primary="設定" />
-          </ListItemButton>
-        </ListItem>
-
-        {/* お問い合わせ */}
-        <ListItem disablePadding>
-          <ListItemButton
-            selected={router.pathname === '/contact'}
-            onClick={() => router.push('/contact')}
-          >
-            <ListItemIcon><ContactSupportIcon /></ListItemIcon>
-            <ListItemText primary="お問い合わせ" />
-          </ListItemButton>
-        </ListItem>
-      </List>
-      <Divider />
-      <List>
-        <ListItem disablePadding>
-          <ListItemButton onClick={handleSignOut}>
-            <ListItemIcon>
-              <LogoutIcon />
-            </ListItemIcon>
-            <ListItemText primary="ログアウト" />
-          </ListItemButton>
-        </ListItem>
-      </List>
+          </ListItem>
+        </List>
+      </Box>
     </Box>
   );
 
   return (
     <Box
-      component="nav"
-      sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+      component="aside"
+      sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
     >
+      {/* Mobile Drawer */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{
-          keepMounted: true,
+          keepMounted: true, // Better mobile performance
         }}
         sx={{
-          display: { xs: 'block', sm: 'none' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': {
+            boxSizing: 'border-box',
+            width: DRAWER_WIDTH,
+            borderRight: '1px solid',
+            borderColor: 'divider',
+          },
         }}
       >
         {drawer}
       </Drawer>
+
+      {/* Desktop Drawer */}
       <Drawer
         variant="permanent"
         sx={{
-          display: { xs: 'none', sm: 'block' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
+          display: { xs: 'none', md: 'block' },
+          '& .MuiDrawer-paper': {
+            boxSizing: 'border-box',
+            width: DRAWER_WIDTH,
+            borderRight: '1px solid',
+            borderColor: 'divider',
+          },
         }}
         open
       >
@@ -252,4 +435,4 @@ export default function Navigation({ mobileOpen, handleDrawerToggle }: Navigatio
       </Drawer>
     </Box>
   );
-} 
+}
