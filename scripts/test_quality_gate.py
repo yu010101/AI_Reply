@@ -14,6 +14,19 @@ class QualityGate(unittest.TestCase):
  def write(self,path,text):p=self.root/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text);return p
  def run_gate(self,base=None):self.write('.quality/change.json',json.dumps(self.manifest));return q.gate(self.root,base=base)
  def rules(self,result):return [x['rule'] for x in result['errors']]
+ def test_shared_pattern_union(self):
+  examples=['ghu_'+'A'*35,'password="'+'A'*24+'"','AIza'+'A'*30,'sk-ant-'+'A'*30,'ASIA'+'A'*16]
+  for secret in examples:
+   self.write('intake-beta/public/app.js',secret)
+   result=self.run_gate();self.assertIn('secret_pattern_shared',self.rules(result));self.assertNotIn(secret,json.dumps(result))
+ def test_definition_missing(self):
+  with self.assertRaises(ValueError):q.load_secret_rules(self.root/'missing')
+ def test_definition_truncated(self):
+  path=self.write('truncated.regex',q.SECRET_RULES[0][1].pattern+'\n')
+  with self.assertRaises(ValueError):q.load_secret_rules(path)
+ def test_definition_symlink(self):
+  target=self.write('target','pattern');link=self.root/'link';link.symlink_to(target)
+  with self.assertRaises(ValueError):q.load_secret_rules(link)
  def test_normal(self):self.assertTrue(self.run_gate()['ok'])
  def test_missing_manifest(self):self.assertFalse(q.gate(self.root)['ok'])
  def test_missing_reuse(self):self.manifest['reuse']=[];self.assertIn('manifest_required_reuse',self.rules(self.run_gate()))
@@ -22,10 +35,10 @@ class QualityGate(unittest.TestCase):
  def test_copy(self):self.write('intake-beta/public/app.js','export const original = 7;');self.assertIn('normalized_code_clone',self.rules(self.run_gate()))
  def test_whitespace_clone(self):self.write('intake-beta/public/app.js','export\n const original=7 ;');self.assertIn('normalized_code_clone',self.rules(self.run_gate()))
  def test_preexisting_clone_not_new(self):self.write('src/oldcopy.ts','export const original = 7;');self.assertTrue(self.run_gate()['ok'])
- def test_secret_value_not_printed(self):secret='sk_'+'live_'+'A'*24;self.write('intake-beta/public/app.js','const key="'+secret+'";');r=self.run_gate();self.assertIn('secret_pattern_stripe_live_secret',self.rules(r));self.assertNotIn(secret,json.dumps(r))
+ def test_secret_value_not_printed(self):secret='sk_'+'live_'+'A'*24;self.write('intake-beta/public/app.js','const key="'+secret+'";');r=self.run_gate();self.assertIn('secret_pattern_shared',self.rules(r));self.assertNotIn(secret,json.dumps(r))
  def test_secret_file(self):self.write('intake-beta/.env','not-printed');self.manifest['changed_files']=['intake-beta/.env'];self.assertIn('secret_file_not_allowed',self.rules(self.run_gate()))
  def test_tracked_template_allowed_but_scanned(self):
-  self.write('.env.example','API_KEY=your-key');self.git('add','.env.example');self.assertTrue(self.run_gate()['ok']);secret='sk_'+'live_'+'B'*24;self.write('.env.example',secret);self.assertIn('secret_pattern_stripe_live_secret',self.rules(self.run_gate()))
+  self.write('.env.example','API_KEY=your-key');self.git('add','.env.example');self.assertTrue(self.run_gate()['ok']);secret='sk_'+'live_'+'B'*24;self.write('.env.example',secret);self.assertIn('secret_pattern_shared',self.rules(self.run_gate()))
  def test_tracked_secret_outside_scope(self):self.write('.env','not-printed');self.git('add','.env');self.assertIn('tracked_secret_file',self.rules(self.run_gate()))
  def test_diff_omission(self):self.manifest['changed_files'].append('.quality/change.json');self.write('intake-beta/other.js','different();');self.assertIn('git_change_missing_from_manifest',self.rules(self.run_gate(self.base)))
  def test_diff_complete(self):self.manifest['changed_files'].append('.quality/change.json');self.assertTrue(self.run_gate(self.base)['ok'])

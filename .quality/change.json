@@ -1,12 +1,10 @@
 {
-  "task_id": "intake-source-and-quality-20260925",
+  "task_id": "shared-secret-definitions-20260925",
   "owner": "Codex / AI会社整備",
   "acceptance": [
-    "既存ESLintとAPI試験を再利用し独自lintに置換しない",
-    "変更票・再利用証跡欠測、危険path、コピー、限定秘密パターンを機械的に拒否する",
-    "--base指定時の実Git差分漏れを失敗として報告する",
-    "PRはread-only tokenで検査し、顧客API・本番配備を呼ばない",
-    "公開済みβの最小ソースを版管理し内部証跡・認証設定を含めない"
+    "Preserve both existing secret detector pattern sets",
+    "Reject missing, altered, or truncated shared definitions",
+    "Keep existing file, path, size and change scope checks"
   ],
   "reuse": [
     {
@@ -31,22 +29,13 @@
     }
   ],
   "changed_files": [
-    "package.json",
-    ".quality/change.json",
-    ".quality/README.md",
-    ".quality/eslint.cjs",
-    ".github/workflows/quality.yml",
     "scripts/quality_gate.py",
     "scripts/test_quality_gate.py",
-    "intake-beta/worker.mjs",
-    "intake-beta/schema.sql",
-    "intake-beta/tests/worker.test.mjs",
-    "intake-beta/public/app.js",
-    "intake-beta/public/index.html",
-    "intake-beta/public/privacy.html",
-    "intake-beta/public/qrcode.min.js",
-    "intake-beta/public/styles.css"
+    ".quality/change.json",
+    ".quality/README.md",
+    ".quality/secret_patterns.regex",
+    ".quality/secret-provenance.json",
+    ".env.example"
   ],
-  "adoption_scope_note": "隔離worktree。公開済みβの最小ソースと検査を対象とする。元作業領域のnext-env.d.tsは変更しない。",
-  "local_remote_note": "ローカル候補のみ。commit/pushなし。GitHub required check/branch protectionは未設定。"
+  "adoption_scope_note": "隔離worktree。公開済みβの最小ソースと検査を対象とする。元作業領域のnext-env.d.tsは変更しない。"
 }
