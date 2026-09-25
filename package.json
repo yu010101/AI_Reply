@@ -20,7 +20,11 @@
     "test:perf:page": "playwright test --config=playwright.config.performance.ts",
     "test:perf:db": "jest --config=jest.config.performance.js --testPathPattern=database-performance",
     "test:perf:report": "open playwright-report-performance/index.html",
-    "validate-env": "npx ts-node scripts/validate-env.ts"
+    "validate-env": "npx ts-node scripts/validate-env.ts",
+    "quality:policy": "python3 scripts/quality_gate.py",
+    "quality:lint": "ESLINT_USE_FLAT_CONFIG=false eslint --no-eslintrc --config .quality/eslint.cjs intake-beta/public/app.js intake-beta/worker.mjs",
+    "quality:test": "node --test intake-beta/tests/worker.test.mjs",
+    "quality": "npm run quality:policy && npm run quality:lint && npm run quality:test"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",
