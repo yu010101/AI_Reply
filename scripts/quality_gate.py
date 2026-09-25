@@ -15,14 +15,18 @@ EXCLUDED_DIRS = {'node_modules','.git','.next','.open-next','dist','build','cove
 EXCLUDED_FILES = {'intake-beta/public/qrcode.min.js'}  # pinned MIT upstream artifact
 ENV_TEMPLATES = {'.env.example','.env.sample','.env.template'}
 GOVERNANCE = {'AGENTS.md','CLAUDE.md','CONTRIBUTING.md','package.json','package-lock.json','tsconfig.json','next-env.d.ts','.gitignore','.eslintrc.json','.eslintrc.js','eslint.config.mjs','jest.config.js','scripts/quality_gate.py','scripts/test_quality_gate.py'}
-SECRET_RULES = [
- ('private_key',re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----')),
- ('github_token',re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{35,})\b')),
- ('aws_access_key',re.compile(r'\bAKIA[A-Z0-9]{16}\b')),
- ('stripe_live_secret',re.compile(r'\b(?:sk|rk)_live_[A-Za-z0-9]{16,}\b')),
- ('google_api_key',re.compile(r'\bAIza[A-Za-z0-9_-]{30,}\b')),
- ('credential_assignment',re.compile(r'''(?i)(?:api[_-]?key|client[_-]?secret|refresh[_-]?token|access[_-]?token|password)\s*["']?\s*[:=]\s*["']([A-Za-z0-9_+/=.-]{24,})["']''')),
-]
+SECRET_DEFINITION_SHA256 = "582affe53ff190b3e3b42e759638baaca0ad2b4287e430c50fa5e04ee5d1876a"
+
+def load_secret_rules(path=None):
+ path=Path(path) if path is not None else Path(__file__).resolve().parent.parent/'.quality/secret_patterns.regex'
+ if path.is_symlink() or not path.is_file():raise ValueError('secret_definition_missing_or_unsafe')
+ with path.open('rb') as f:raw=f.read(262145)
+ if len(raw)>262144 or hashlib.sha256(raw).hexdigest()!=SECRET_DEFINITION_SHA256:raise ValueError('secret_definition_sha_mismatch')
+ lines=raw.decode('utf-8').splitlines()
+ if not lines or any(not line.strip() for line in lines):raise ValueError('secret_definition_empty')
+ return [('shared',re.compile(line)) for line in lines]
+
+SECRET_RULES = load_secret_rules()
 
 def safe_path(root, raw, file_only=True):
  if not isinstance(raw,str) or not raw or '\\' in raw or '\x00' in raw:raise ValueError('invalid_relative_path')
@@ -36,7 +40,7 @@ def safe_path(root, raw, file_only=True):
  return target
 
 def in_scope(path):
- return path.startswith(('intake-beta/','.quality/','.github/workflows/')) or path in GOVERNANCE
+ return path.startswith(('intake-beta/','.quality/','.github/workflows/')) or path in GOVERNANCE or path in ENV_TEMPLATES
 
 def excluded(path):
  return bool(set(PurePosixPath(path).parts)&EXCLUDED_DIRS) or path in EXCLUDED_FILES

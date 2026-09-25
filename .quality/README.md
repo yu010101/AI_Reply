@@ -7,3 +7,5 @@
 `.quality/change.json`にtask_id、owner、acceptance、reuse、changed_filesを記録。真実性を機械が保証するものではない。新しいコードの意味的重複には既存資産確認とレビューも必要。
 
 `.github/workflows/quality.yml`はPRのチェック候補。GitHubへ反映し必須チェックを設定するまではマージ阻止は保証しない。直接配備権限が残る間は手動配備による迂回も可能。ここを曖昧にして「確実に守れる」とは記載しない。
+
+Secret patterns are generated from the shared openclaw-gates definition. The shipped artifact contains only regex lines; source provenance is in secret-provenance.json. The checker pins the artifact SHA and fails on missing/altered definitions. This detects file drift, not malicious coordinated edits to checker and artifact. Update from the canonical source; do not maintain a separate pattern list here.
