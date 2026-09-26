@@ -141,6 +141,24 @@ class ReceiptAndExec(unittest.TestCase):
         with self.assertRaises(m.Refuse):
             m.revalidate(dict(self.R, head='f' * 40), dict(self.CUR, head='f' * 40), now_iso='2026-09-25T10:05:00+00:00')
 
+    def test_command_is_rebuilt_not_replayed(self):
+        # Devin レビュー指摘: receipt の command を書き換えても、現在の状態から組み直したコマンドと一致しなければ実行しない
+        good = ['wrangler', 'deploy', '--config', m.CONFIG, '--tag', H[:12], '--message', 'git=x']
+        forged = ['wrangler', 'deploy', '--config', 'prod/wrangler.json', '--env', 'prod']
+        self.assertTrue(m.revalidate(dict(self.R, command=good), self.CUR, now_iso='2026-09-25T10:05:00+00:00', expected_command=good))
+        self.assertTrue(m.revalidate(dict(self.R, command=['/opt/wrangler'] + good[1:]), self.CUR, now_iso='2026-09-25T10:05:00+00:00', expected_command=good))
+        with self.assertRaises(m.Refuse) as cm:
+            m.revalidate(dict(self.R, command=forged), self.CUR, now_iso='2026-09-25T10:05:00+00:00', expected_command=good)
+        self.assertEqual(str(cm.exception), 'command_changed_since_preflight')
+        with self.assertRaises(m.Refuse):
+            m.revalidate(self.R, self.CUR, now_iso='2026-09-25T10:05:00+00:00', expected_command=good)  # receipt に command が無い
+
+    def test_exec_path_regathers_instead_of_replaying(self):
+        src = Path(m.__file__).read_text()
+        self.assertNotIn("receipt['command'][1:]", src)
+        exec_block = src.split('if a.exec:')[1].split('g = gather(root)')[0]
+        self.assertNotIn('snapshot(root)', exec_block)
+
     def test_expired_receipt(self):
         with self.assertRaises(m.Refuse) as cm:
             m.revalidate(self.R, self.CUR, now_iso='2026-09-25T11:00:01+00:00')

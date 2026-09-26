@@ -8,8 +8,9 @@
 第2便での修正（統合レビュー指摘）:
  - check-run は名前ごとに started_at が最新の1件だけを見る。未完了(pending/in_progress)は success ではない。
  - 配備入力は wrangler 設定の main / assets.directory から導く（固定パスとハッシュ対象のずれを無くす）。
- - 判定結果を receipt に残し、--exec は直前に再検証、--verify は receipt より新しい配備だけを対象にする
-   （ゲート後改変と「最新をそのまま採用」を塞ぐ）。
+ - 判定結果を receipt に残し、--exec は fetch と check-run 照会からやり直して同じ判定になることを確かめ、
+   コマンドは receipt から再生せず現在の状態から組み直す。--verify は receipt より新しい配備だけを対象にする
+   （ゲート後改変・receipt 改竄によるコマンド差し替え・古い origin/main・「最新をそのまま採用」を塞ぐ）。
 
 判定（全て満たさなければ非0で停止し、wrangler コマンドを出さない）:
  1. HEAD == origin/main（fetch 後）。
@@ -206,11 +207,14 @@ def build_command(wrangler, g, basis):
     return [wrangler, 'deploy', '--config', CONFIG, '--tag', g['head'][:12], '--message', msg]
 
 
-def revalidate(receipt, current, now_iso=None, max_age=RECEIPT_MAX_AGE_SEC):
-    """--exec 直前: receipt と現在の状態が同一で、receipt が新しいことを確認する。純粋関数。"""
+def revalidate(receipt, current, now_iso=None, max_age=RECEIPT_MAX_AGE_SEC, expected_command=None):
+    """--exec 直前: receipt と現在の状態が同一で、receipt が新しいことを確認する。純粋関数。
+    expected_command は現在の状態から組み直した配備コマンド。receipt 側の command は実行に使わず照合にだけ使う。"""
     for k in ('head', 'cfg_sha', 'bundle_sha'):
         if receipt.get(k) != current.get(k):
             raise Refuse('changed_since_preflight:' + k)
+    if expected_command is not None and list(receipt.get('command') or [])[1:] != list(expected_command)[1:]:
+        raise Refuse('command_changed_since_preflight')
     if current.get('dirty'):
         raise Refuse('deploy_inputs_dirty_at_exec')
     if current.get('head') != current.get('origin_main'):
@@ -275,9 +279,12 @@ def main():
             print(json.dumps(r))
             return 0 if r['verify'] else 1
         if a.exec:
-            revalidate(receipt, snapshot(root))
-            cmd = [a.wrangler] + receipt['command'][1:]
-            print(json.dumps({'exec': True, 'command': cmd}))
+            # receipt のコマンドは再生しない。fetch・check-run 照会・判定を今やり直し、同じ結果のときだけ実行する
+            g = gather(root)
+            basis = decide(g['head'], g['origin_main'], g['dirty'], g['conclusions'], g['fallback'])
+            cmd = build_command(a.wrangler, g, basis)
+            revalidate(receipt, g, expected_command=cmd)
+            print(json.dumps({'exec': True, 'basis': basis, 'command': cmd}))
             return subprocess.run(cmd, cwd=str(root)).returncode
         g = gather(root)
         basis = decide(g['head'], g['origin_main'], g['dirty'], g['conclusions'], g['fallback'])
