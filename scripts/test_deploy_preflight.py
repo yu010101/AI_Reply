@@ -165,6 +165,32 @@ class ReceiptAndExec(unittest.TestCase):
         self.assertEqual(str(cm.exception), 'preflight_receipt_expired')
 
 
+class ExecPinnedReceipt(unittest.TestCase):
+    """承認した receipt と exec 時に読む receipt の中身が違えば、fetch・判定に入る前に拒否する。"""
+    def run_main(self, root, expect):
+        import io, contextlib, sys
+        called = []
+        orig = m.gather
+        m.gather = lambda r: called.append(r) or (_ for _ in ()).throw(AssertionError('gather must not run'))
+        argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(root), '--exec', '--expect-receipt-sha256', expect]
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                rc = m.main()
+        finally:
+            sys.argv, m.gather = argv, orig
+        return rc, json.loads(out.getvalue().strip().splitlines()[-1]), called
+
+    def test_swapped_receipt_is_refused_before_gather(self):
+        import hashlib
+        root = Path(tempfile.mkdtemp()); (root / '.quality').mkdir()
+        approved = json.dumps({'head': H, 'issued_at': '2026-09-25T10:00:00+00:00'}).encode()
+        (root / m.DEFAULT_RECEIPT).write_bytes(json.dumps({'head': 'b' * 40, 'issued_at': '2026-09-25T10:01:00+00:00'}).encode())
+        rc, out, called = self.run_main(root, hashlib.sha256(approved).hexdigest())
+        self.assertEqual((rc, out['allow'], out['reason']), (1, False, 'receipt_changed_since_approval'))
+        self.assertEqual(called, [])
+
+
 class VerifyAfterReceipt(unittest.TestCase):
     """統合レビュー指摘5: deployment を確定できないときに『最新』を採用してはいけない。"""
     R = {'head': H, 'cfg_sha': 'c' * 64, 'bundle_sha': 'b' * 64, 'issued_at': '2026-09-25T10:00:00+00:00'}

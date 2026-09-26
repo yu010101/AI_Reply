@@ -14,7 +14,7 @@ CODE = {'.js','.jsx','.ts','.tsx','.mjs','.cjs','.py','.css','.html'}
 EXCLUDED_DIRS = {'node_modules','.git','.next','.open-next','dist','build','coverage','__pycache__','vendor','archive','archives'}
 EXCLUDED_FILES = {'intake-beta/public/qrcode.min.js'}  # pinned MIT upstream artifact
 ENV_TEMPLATES = {'.env.example','.env.sample','.env.template'}
-GOVERNANCE = {'AGENTS.md','CLAUDE.md','CONTRIBUTING.md','package.json','package-lock.json','tsconfig.json','next-env.d.ts','.gitignore','.eslintrc.json','.eslintrc.js','eslint.config.mjs','jest.config.js','scripts/quality_gate.py','scripts/test_quality_gate.py','scripts/deploy_preflight.py','scripts/test_deploy_preflight.py'}
+GOVERNANCE = {'AGENTS.md','CLAUDE.md','CONTRIBUTING.md','package.json','package-lock.json','tsconfig.json','next-env.d.ts','.gitignore','.eslintrc.json','.eslintrc.js','eslint.config.mjs','jest.config.js','scripts/quality_gate.py','scripts/test_quality_gate.py','scripts/deploy_preflight.py','scripts/test_deploy_preflight.py','scripts/deploy_with_approval.py','scripts/test_deploy_with_approval.py','scripts/test_deploy_verify_fixture.py','scripts/fixtures/approval/approval-before-receipt.json','scripts/fixtures/approval/approval-no-tz.json','scripts/fixtures/approval/approval-ok.json','scripts/fixtures/approval/approval-wrong-bundle.json','scripts/fixtures/approval/approval-wrong-head.json','scripts/fixtures/approval/interactive-y.txt','scripts/fixtures/approval/interactive-yes.txt','scripts/fixtures/approval/receipt-a8385dc.json'}
 SECRET_DEFINITION_SHA256 = "582affe53ff190b3e3b42e759638baaca0ad2b4287e430c50fa5e04ee5d1876a"
 
 def load_secret_rules(path=None):

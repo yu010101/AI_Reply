@@ -1,49 +1,50 @@
 {
-  "task_id": "instruction-020-poster-print-20260925",
-  "owner": "parallel-handoffs/10 (Claude調査) → 統合担当が適用",
+  "task_id": "coding-standard-enforcement-deploy-with-approval-wave3-20260926",
+  "owner": "parallel-handoffs/01 wave3 (Claude調査) → 統合担当が適用",
   "acceptance": [
-    "店舗担当者が共有リンク作成後に、店名・QR・共有URL入りの掲示用カードを印刷でき、QRをSVGとして保存できる",
-    "画面表示・客画面・/api/draft・worker・D1・CSPは変更しない。サーバー保存やlocalStorageを追加しない",
-    "既存ESLint・既存API試験15件・変更票ゲートを通し、隔離ブラウザ試験で印刷時に掲示カードだけが残ることを確認する"
+    "deploy_with_approval.py は承認を receipt の sha256 と head/bundle/cfg に束縛し、使った receipt_sha256 を追記台帳で拒否する。承認ファイル方式は --prepare と --approval-file の2段で、後者は preflight を再実行せず exec 側の再検証に委ねる（隔離試験22件。旧実装では15件失敗）",
+    "deploy_preflight.py --verify の読み方を fixture で固定する(receipt より古い配備を採用しない)",
+    "既存 deploy_preflight の27試験・quality_gate を維持。配備・wrangler 書込は行わない"
   ],
   "reuse": [
     {
-      "path": "intake-beta/public/qrcode.min.js",
-      "decision": "vendor_reuse",
-      "reason": "既存の固定バージョンQRライブラリが出すSVG（xmlns付き）をそのまま保存対象にする。全体コピー比較からの除外は維持し秘密検査は免除しない"
-    },
-    {
-      "path": "intake-beta/public/app.js",
+      "path": "scripts/deploy_preflight.py",
       "decision": "extend",
-      "reason": "既存の共有リンク作成ハンドラ内でQR生成成功後に掲示情報と保存URLを用意する。validGoogle・copy・showCustomerは変更しない"
+      "reason": "--exec に --expect-receipt-sha256 を1つ足すだけ。指定時は読み込んだ receipt の中身の sha256 が違えば gather 前に拒否。既存の判定・再検証は変更しない"
     },
     {
-      "path": "intake-beta/public/styles.css",
+      "path": "scripts/quality_gate.py",
       "decision": "extend",
-      "reason": "既存の.hidden/.secondary/.text-link/#qr-areaを使い、print媒体の上書きだけを追加する"
+      "reason": "GOVERNANCE に承認wrapper・試験2本・fixture 8件をファイル名で列挙して追加するだけ。接頭辞での範囲拡大はしない。既存規則は維持"
     },
     {
-      "path": "intake-beta/public/index.html",
+      "path": "scripts/test_quality_gate.py",
       "decision": "extend",
-      "reason": "既存の#share-result内へ印刷専用要素と操作を追加する。LP・店舗フォーム・客画面は変更しない"
+      "reason": "範囲追加の試験を1件追加"
     },
     {
-      "path": "intake-beta/tests/worker.test.mjs",
-      "decision": "reuse",
-      "reason": "既存の隔離API試験をそのまま通す。worker.mjsは変更しない"
-    },
-    {
-      "path": "intake-beta/tests/poster_browser.py",
+      "path": "scripts/test_deploy_preflight.py",
       "decision": "extend",
-      "reason": "既存のlive_browser.py（ローカル作業領域）の方式を踏襲し、ディスク配信・外部通信遮断・API呼出0の隔離ブラウザ試験を追加する"
+      "reason": "receipt 差し替え拒否の試験を1件追加"
     }
   ],
   "changed_files": [
-    "intake-beta/public/index.html",
-    "intake-beta/public/styles.css",
-    "intake-beta/public/app.js",
-    "intake-beta/tests/poster_browser.py",
-    ".quality/change.json"
+    "scripts/deploy_with_approval.py",
+    "scripts/fixtures/approval/approval-before-receipt.json",
+    "scripts/fixtures/approval/approval-no-tz.json",
+    "scripts/fixtures/approval/approval-ok.json",
+    "scripts/fixtures/approval/approval-wrong-bundle.json",
+    "scripts/fixtures/approval/approval-wrong-head.json",
+    "scripts/fixtures/approval/interactive-y.txt",
+    "scripts/fixtures/approval/interactive-yes.txt",
+    "scripts/fixtures/approval/receipt-a8385dc.json",
+    "scripts/test_deploy_verify_fixture.py",
+    "scripts/test_deploy_with_approval.py",
+    ".quality/change.json",
+    "scripts/quality_gate.py",
+    "scripts/test_quality_gate.py",
+    "scripts/deploy_preflight.py",
+    "scripts/test_deploy_preflight.py"
   ],
-  "adoption_scope_note": "差分案。origin/main 26254fd17cb836b03bc8a731d363dac7e9e8f443 を基点に隔離クローンで作成。commit/push/deployなし。適用と配備は統合担当。ローカル作業領域の未追跡intake-beta/docs等は本変更票に含めない。"
+  "adoption_scope_note": "origin/main a8385dc を基点にした隔離worktree。配備なし。証跡は ai-company-visibility/live-ops/development-throughput-ops/parallel-handoffs/01/wave3/。"
 }
