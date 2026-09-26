@@ -89,7 +89,10 @@ def gate(root,manifest='.quality/change.json',base=None):
    except ValueError:fail('changed_path_invalid');continue
    if not in_scope(path):fail('changed_file_outside_initial_scope',path)
    changed.append(path)
- if base:
+ if base is not None:
+  # 空文字・全ゼロ(新規ブランチの push)・非SHAは「照合できない」であって「照合不要」ではない。
+  if not re.fullmatch(r'[0-9a-fA-F]{40}',base or '') or set(base)=={'0'}:fail('base_missing_or_invalid')
+ if base and not any(e.get('rule')=='base_missing_or_invalid' for e in errors):
   try:
    actual=actual_changes(root,base)
    for path in sorted(actual):

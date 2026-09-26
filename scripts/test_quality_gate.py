@@ -44,6 +44,8 @@ class QualityGate(unittest.TestCase):
  def test_diff_complete(self):self.manifest['changed_files'].append('.quality/change.json');self.assertTrue(self.run_gate(self.base)['ok'])
  def test_deleted_scope_file_rejected(self):self.git('add','intake-beta/public/app.js');self.git('commit','-qm','tracked');base=self.git('rev-parse','HEAD').strip();(self.root/'intake-beta/public/app.js').unlink();self.assertFalse(self.run_gate(base)['ok'])
  def test_absolute_path(self):self.manifest['changed_files']=[str(self.root/'intake-beta/public/app.js')];self.assertFalse(self.run_gate()['ok'])
+ def test_empty_base_is_not_a_silent_skip(self):self.manifest['changed_files'].append('.quality/change.json');r=self.run_gate('');self.assertFalse(r['ok']);self.assertIn('base_missing_or_invalid',self.rules(r))
+ def test_all_zero_base_from_branch_creation_push_rejected(self):self.manifest['changed_files'].append('.quality/change.json');self.assertIn('base_missing_or_invalid',self.rules(self.run_gate('0'*40)))
  def test_scope(self):self.manifest['changed_files']=['src/original.ts'];self.assertIn('changed_file_outside_initial_scope',self.rules(self.run_gate()))
  def test_fixed_vendor_exclusion(self):self.write('intake-beta/public/qrcode.min.js','export const original = 7;');self.assertTrue(self.run_gate()['ok'])
  def test_no_arbitrary_baseline_exemption(self):self.write('intake-beta/public/app.js','export const original = 7;');self.manifest['baseline_exclusions']=['intake-beta/public/app.js'];self.assertIn('normalized_code_clone',self.rules(self.run_gate()))
