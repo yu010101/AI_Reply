@@ -46,6 +46,8 @@ class QualityGate(unittest.TestCase):
  def test_absolute_path(self):self.manifest['changed_files']=[str(self.root/'intake-beta/public/app.js')];self.assertFalse(self.run_gate()['ok'])
  def test_empty_base_is_not_a_silent_skip(self):self.manifest['changed_files'].append('.quality/change.json');r=self.run_gate('');self.assertFalse(r['ok']);self.assertIn('base_missing_or_invalid',self.rules(r))
  def test_all_zero_base_from_branch_creation_push_rejected(self):self.manifest['changed_files'].append('.quality/change.json');self.assertIn('base_missing_or_invalid',self.rules(self.run_gate('0'*40)))
+ def test_deploy_approval_governance_in_scope(self):
+  self.assertTrue(all(q.in_scope(x) for x in ('scripts/deploy_with_approval.py','scripts/test_deploy_with_approval.py','scripts/test_deploy_verify_fixture.py','scripts/fixtures/approval/approval-ok.json')));self.assertFalse(q.in_scope('scripts/fixtures/other.json'))
  def test_deploy_preflight_governance_in_scope(self):
   self.assertTrue(all(q.in_scope(x) for x in ('scripts/deploy_preflight.py','scripts/test_deploy_preflight.py')));self.assertFalse(q.in_scope('scripts/other_tool.py'))
  def test_scope(self):self.manifest['changed_files']=['src/original.ts'];self.assertIn('changed_file_outside_initial_scope',self.rules(self.run_gate()))
