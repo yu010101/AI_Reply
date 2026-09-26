@@ -1,26 +1,33 @@
 {
-  "task_id": "shared-secret-definitions-20260925",
-  "owner": "Codex / AI会社整備",
+  "task_id": "intake-worker-hardening-20260926",
+  "owner": "Claude Code / AI会社整備",
   "acceptance": [
-    "Preserve both existing secret detector pattern sets",
-    "Reject missing, altered, or truncated shared definitions",
-    "Keep existing file, path, size and change scope checks"
+    "Quota rows reserved by a refused attempt are released so total (lifetime) and day: do not drain",
+    "Origin is checked against ALLOWED_ORIGINS (comma-separated; unset means url.origin only)",
+    "Markup, control, Bidi, zero-width, separator and lone-surrogate characters are refused before AI; draft stays plain text",
+    "Fallback paths log a reason code and error name only; cleanup also purges stale day: rows",
+    "Existing 15 worker tests stay green; each review item has a counterexample test that fails on the previous worker"
   ],
   "reuse": [
     {
-      "path": "package.json",
+      "path": "intake-beta/worker.mjs",
       "decision": "extend",
-      "reason": "既存ESLint/test依存を使いquality用入口のみ追加する"
-    },
-    {
-      "path": "src",
-      "decision": "reviewed_existing",
-      "reason": "既存アプリのsrcを比較対象として維持"
+      "reason": "既存のreserve/fallback/DELETEを拡張し、レスポンス形とCSPは変更しない"
     },
     {
       "path": "intake-beta/tests/worker.test.mjs",
+      "decision": "extend",
+      "reason": "既存のQuotaモックにUPDATEを追加し、反例試験を追記。実SQLはnode:sqliteで実行"
+    },
+    {
+      "path": "intake-beta/schema.sql",
       "decision": "reuse",
-      "reason": "既存の隔離API試験をqualityから実行する"
+      "reason": "quota表の定義を変えずにUPDATE count=MAX(count-1,0)で戻す"
+    },
+    {
+      "path": "intake-beta/public/app.js",
+      "decision": "reviewed_existing",
+      "reason": "draftはtextarea.valueで描画済み。平文契約の根拠として試験で固定し、変更しない"
     },
     {
       "path": "intake-beta/public/qrcode.min.js",
@@ -29,13 +36,9 @@
     }
   ],
   "changed_files": [
-    "scripts/quality_gate.py",
-    "scripts/test_quality_gate.py",
-    ".quality/change.json",
-    ".quality/README.md",
-    ".quality/secret_patterns.regex",
-    ".quality/secret-provenance.json",
-    ".env.example"
+    "intake-beta/worker.mjs",
+    "intake-beta/tests/worker.test.mjs",
+    ".quality/change.json"
   ],
-  "adoption_scope_note": "隔離worktree。公開済みβの最小ソースと検査を対象とする。元作業領域のnext-env.d.tsは変更しない。"
+  "adoption_scope_note": "隔離worktree。Devin静的レビュー5件の修正のみ。Turnstile・wrangler設定・配備は対象外。"
 }
