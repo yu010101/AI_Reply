@@ -1,0 +1,88 @@
+# intake-worker-hardening-20260926 verification (generated 2026-09-26T05:59:18Z)
+worktree: /private/tmp/intake-worker-fix-20260926  branch: fix/intake-worker-hardening-20260926  base: origin/main 26254fd17cb836b03bc8a731d363dac7e9e8f443
+
+## node --check
+worker.mjs: rc=0
+worker.test.mjs: rc=0
+
+## non-ASCII scan of worker.mjs (python; BSD grep has no -P, so the earlier grep attempt was NOT evidence)
+non-ascii lines: 2
+27 OTHER U+201C U+201D U+3001 U+3002 U+300C U+300D U+300E U+300F U+FF01 U+FF0C U+FF1F   <- unchangedMeaning punctuation regex, pre-existing, not in this diff
+63 model prompt line (Japanese prompt, unchanged)
+UNSAFE_CHARS line pure ASCII: True | len 180   (all rejected code points written as \u{...} escapes)
+
+## node --test (NEW worker + NEW tests)
+ok 1 - valid input limits and control characters
+ok 2 - bounded body rejects invalid UTF8 and oversize streamed bytes
+ok 3 - origin, method, MIME, JSON rejected before AI
+ok 4 - missing bindings and IP preserve original trimmed feedback
+ok 5 - same IP has max 10 AI attempts under concurrency
+ok 6 - global daily and lifetime ceilings hold with distinct IPs
+ok 7 - D1 outage prevents AI and stores no raw personal input
+ok 8 - AI failures and unsafe output preserve feedback
+ok 9 - AI timeout returns original at 10 seconds (mock clock)
+ok 10 - API never sends a browser fetch or Google POST
+ok 11 - static response has restrictive security policy
+ok 12 - meaning reversal and invented recommendation must fall back
+ok 13 - punctuation and whitespace only remain eligible
+ok 14 - unterminated body is bounded by a read deadline
+ok 15 - expiry stops AI even with all bindings available
+ok 16 - refused reservation releases rows already held: total and ip do not drain when day is exhausted
+ok 17 - refused total releases the ip row so the user keeps their attempts
+ok 18 - rejected model output keeps quota consumed (no refund after the model ran)
+ok 19 - reserve, release and cleanup SQL behave on real SQLite
+ok 20 - ALLOWED_ORIGINS list replaces the same-origin default
+ok 21 - markup is refused before AI; prose punctuation is returned verbatim under the plain-text contract
+ok 22 - bidi, zero-width, separators, C1, DEL, BOM and lone surrogates are refused; emoji sequences and newlines pass
+ok 23 - failures are logged with reason codes only, never body or IP
+# tests 23
+# pass 23
+# fail 0
+# skipped 0
+
+## node --test (OLD worker from origin/main:intake-beta/worker.mjs, copied to /private/tmp/claude-501/-Users-yu01/be9b1868-4bed-4cca-b3fc-21836f495f9a/scratchpad/oldcopy, + NEW tests)
+old copy sha256: 34c278860ccee4dcd222fb4da62281e4d6372c6e56672b5f6055942ef84f7e06
+not ok 16 - refused reservation releases rows already held: total and ip do not drain when day is exhausted
+not ok 17 - refused total releases the ip row so the user keeps their attempts
+not ok 19 - reserve, release and cleanup SQL behave on real SQLite
+not ok 20 - ALLOWED_ORIGINS list replaces the same-origin default
+not ok 21 - markup is refused before AI; prose punctuation is returned verbatim under the plain-text contract
+not ok 22 - bidi, zero-width, separators, C1, DEL, BOM and lone surrogates are refused; emoji sequences and newlines pass
+not ok 23 - failures are logged with reason codes only, never body or IP
+# tests 23
+# pass 16
+# fail 7
+# skipped 0
+
+## eslint (repo-installed /Users/yu01/projects/AI_Reply-work/node_modules/.bin/eslint v8.57.1, .quality/eslint.cjs)
+eslint rc=0
+
+## quality_gate.py --base origin/main (blake2 lines are local pyenv hashlib noise)
+  "ok": true,
+  "errors": [],
+  "changed_files_count": 3,
+  "base_checked": true,
+gate rc=0
+
+## git diff --stat (vs HEAD before commit)
+ .quality/change.json              | 43 +++++++++++++++++++++------------------
+ intake-beta/tests/worker.test.mjs | 28 ++++++++++++++++++++++++-
+ intake-beta/worker.mjs            | 41 ++++++++++++++++++++++++++-----------
+ 3 files changed, 79 insertions(+), 33 deletions(-)
+
+## sha256 (working tree)
+7735d32394bc349a86332da50d8401956d78b3536ddce3969d4f5aa40813974c  intake-beta/worker.mjs
+87ae1c6c2a044ff49476e4c2e0073d5881f2c2e67c4bac037d98b5ecbe5f5833  intake-beta/tests/worker.test.mjs
+312c2f86c92638fe64e4d66bac451f2442a8f57f2e186c413666478f3db07f1b  .quality/change.json
+
+## commit
+89a9620884cfa2067fcdbca5f2a41c5c44d9fd1e intake-beta: harden /api/draft quota, origin, input and logging
+ .quality/change.json              | 43 +++++++++++++++++++++------------------
+ intake-beta/tests/worker.test.mjs | 28 ++++++++++++++++++++++++-
+ intake-beta/worker.mjs            | 41 ++++++++++++++++++++++++++-----------
+ 3 files changed, 79 insertions(+), 33 deletions(-)
+
+## sha256 (committed blobs)
+7735d32394bc349a86332da50d8401956d78b3536ddce3969d4f5aa40813974c  intake-beta/worker.mjs
+87ae1c6c2a044ff49476e4c2e0073d5881f2c2e67c4bac037d98b5ecbe5f5833  intake-beta/tests/worker.test.mjs
+312c2f86c92638fe64e4d66bac451f2442a8f57f2e186c413666478f3db07f1b  .quality/change.json
