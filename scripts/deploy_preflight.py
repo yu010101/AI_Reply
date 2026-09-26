@@ -263,6 +263,7 @@ def main():
     ap.add_argument('--wrangler', default='wrangler')
     ap.add_argument('--receipt', default=DEFAULT_RECEIPT, help='判定結果の控え（root 相対、追跡しない）')
     ap.add_argument('--exec', action='store_true', help='receipt を再検証してから同一プロセスで wrangler を実行')
+    ap.add_argument('--expect-receipt-sha256', help='--exec 時: 読み込んだ receipt の中身の sha256 がこれと違えば拒否（承認後の差し替え防止）')
     ap.add_argument('--verify', action='store_true', help='配備後: receipt より新しい最新配備の注釈を照合')
     a = ap.parse_args()
     root = Path(a.root)
@@ -271,7 +272,10 @@ def main():
         if a.exec or a.verify:
             if not rpath.is_file():
                 raise Refuse('receipt_missing:' + a.receipt)
-            receipt = json.loads(rpath.read_text())
+            raw = rpath.read_bytes()
+            if a.expect_receipt_sha256 and hashlib.sha256(raw).hexdigest() != a.expect_receipt_sha256:
+                raise Refuse('receipt_changed_since_approval')
+            receipt = json.loads(raw)
         if a.verify:
             deps = sh([a.wrangler, 'deployments', 'list', '--config', CONFIG, '--json'], root)
             vers = sh([a.wrangler, 'versions', 'list', '--config', CONFIG, '--json'], root)

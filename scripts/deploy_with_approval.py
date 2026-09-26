@@ -13,7 +13,10 @@
                     receipt 発行以後かつ 30 分以内の承認なら、台帳記録 → exec → verify。
                     exec 側（deploy_preflight --exec）は fetch・CI照会・判定をやり直し、receipt と
                     今の状態（head/cfg/bundle/コマンド）が一致しなければ拒否する。承認後に main が進めば配備されない。
-限界: どれも「人間が操作した」ことを暗号的には証明しない。TTY は pty を作れるエージェントなら偽装でき、
+exec には承認した receipt の sha256 を --expect-receipt-sha256 で渡し、deploy_preflight が読み込んだ中身の
+ハッシュが違えば拒否する（承認後から exec までの receipt 差し替えを防ぐ）。
+限界: どれも「人間が操作した」ことを暗号的には証明しない。同じユーザー権限でリポジトリに書ける相手は、
+台帳の削除や wrangler の直接実行もできるので、この wrapper はそうした相手からは守らない。TTY は pty を作れるエージェントなら偽装でき、
 ファイルはエージェントでも書ける。承認の実体は運用規則（エージェントは承認ファイルを書かない・yes を打たない）で守る。
 """
 import argparse
@@ -208,7 +211,7 @@ def main(argv=None, run=subprocess.run, stdin=sys.stdin, stdout=sys.stdout, isat
             out['approval'] = 'file'
         consume(root, receipt_sha)
         out['stage'] = 'exec'
-        p = run(base + ['--exec'], cwd=str(root))
+        p = run(base + ['--exec', '--expect-receipt-sha256', receipt_sha], cwd=str(root))
         out['exec_rc'] = p.returncode
         if p.returncode != 0:
             raise Deny('exec_failed_rc_%d' % p.returncode)

@@ -202,6 +202,13 @@ class Gates(Base):
         with self.assertRaises(SystemExit):
             w.main(['--root', str(self.root)], run=self.run_())
 
+    def test_exec_is_pinned_to_the_approved_receipt_hash(self):
+        # Devin 反例: 台帳記録後・exec 前に receipt を差し替える → exec 側がハッシュ不一致で拒否できるよう承認ハッシュを渡す
+        p, run = self.place('approval-ok.json'), self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        ex = [c for c in run.calls if '--exec' in c][0]
+        self.assertEqual(ex[ex.index('--expect-receipt-sha256') + 1], out['receipt_sha256'])
+
     def test_wrapper_never_calls_wrangler_directly(self):
         p, run = self.place('approval-ok.json'), self.run_()
         self.go(['--approval-file', str(p)], run)

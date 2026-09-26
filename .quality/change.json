@@ -9,8 +9,8 @@
   "reuse": [
     {
       "path": "scripts/deploy_preflight.py",
-      "decision": "reuse",
-      "reason": "判定・receipt・revalidate・--verify をそのまま呼ぶ。本体は変更しない"
+      "decision": "extend",
+      "reason": "--exec に --expect-receipt-sha256 を1つ足すだけ。指定時は読み込んだ receipt の中身の sha256 が違えば gather 前に拒否。既存の判定・再検証は変更しない"
     },
     {
       "path": "scripts/quality_gate.py",
@@ -21,6 +21,11 @@
       "path": "scripts/test_quality_gate.py",
       "decision": "extend",
       "reason": "範囲追加の試験を1件追加"
+    },
+    {
+      "path": "scripts/test_deploy_preflight.py",
+      "decision": "extend",
+      "reason": "receipt 差し替え拒否の試験を1件追加"
     }
   ],
   "changed_files": [
@@ -37,7 +42,9 @@
     "scripts/test_deploy_with_approval.py",
     ".quality/change.json",
     "scripts/quality_gate.py",
-    "scripts/test_quality_gate.py"
+    "scripts/test_quality_gate.py",
+    "scripts/deploy_preflight.py",
+    "scripts/test_deploy_preflight.py"
   ],
   "adoption_scope_note": "origin/main a8385dc を基点にした隔離worktree。配備なし。証跡は ai-company-visibility/live-ops/development-throughput-ops/parallel-handoffs/01/wave3/。"
 }
