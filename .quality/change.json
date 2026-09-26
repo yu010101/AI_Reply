@@ -2,7 +2,7 @@
   "task_id": "coding-standard-enforcement-deploy-with-approval-wave3-20260926",
   "owner": "parallel-handoffs/01 wave3 (Claude調査) → 統合担当が適用",
   "acceptance": [
-    "deploy_with_approval.py は deploy_preflight の判定と receipt を再検証し、本人承認(TTYでyes または head/bundle/cfg に束縛され30分で失効する承認ファイル)が無ければ --exec に進まない(隔離試験22件)",
+    "deploy_with_approval.py は承認を receipt の sha256 と head/bundle/cfg に束縛し、使った receipt_sha256 を追記台帳で拒否する。承認ファイル方式は --prepare と --approval-file の2段で、後者は preflight を再実行せず exec 側の再検証に委ねる（隔離試験22件。旧実装では15件失敗）",
     "deploy_preflight.py --verify の読み方を fixture で固定する(receipt より古い配備を採用しない)",
     "既存 deploy_preflight の27試験・quality_gate を維持。配備・wrangler 書込は行わない"
   ],
@@ -15,7 +15,7 @@
     {
       "path": "scripts/quality_gate.py",
       "decision": "extend",
-      "reason": "GOVERNANCE と in_scope に承認wrapper・試験・fixture を追加するだけ。既存規則は維持"
+      "reason": "GOVERNANCE に承認wrapper・試験2本・fixture 8件をファイル名で列挙して追加するだけ。接頭辞での範囲拡大はしない。既存規則は維持"
     },
     {
       "path": "scripts/test_quality_gate.py",
