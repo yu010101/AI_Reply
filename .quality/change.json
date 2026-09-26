@@ -1,41 +1,49 @@
 {
-  "task_id": "coding-standard-enforcement-deploy-preflight-wave2-20260926",
-  "owner": "parallel-handoffs/01 wave2 (Claude調査) → 統合担当が適用",
+  "task_id": "instruction-020-poster-print-20260925",
+  "owner": "parallel-handoffs/10 (Claude調査) → 統合担当が適用",
   "acceptance": [
-    "deploy_preflight.py が、古いsuccess receiptによる新しいpendingの上書き・pushのbase欠測・wrangler入力とハッシュ対象のずれ・ゲート後改変・deployment ID未取得時のlatest採用の5反例を全て拒否し、正常な固定版だけを受け入れる（隔離試験25件）",
-    "quality_gate.py は空または全ゼロのbaseを base_missing_or_invalid として失敗にし、既存の変更票・秘密・範囲検査は維持する（試験25件）",
-    "quality.yml は検査順序の変更のみ。配備ステップは追加しない。--exec は本人承認後に限る"
+    "店舗担当者が共有リンク作成後に、店名・QR・共有URL入りの掲示用カードを印刷でき、QRをSVGとして保存できる",
+    "画面表示・客画面・/api/draft・worker・D1・CSPは変更しない。サーバー保存やlocalStorageを追加しない",
+    "既存ESLint・既存API試験15件・変更票ゲートを通し、隔離ブラウザ試験で印刷時に掲示カードだけが残ることを確認する"
   ],
   "reuse": [
     {
-      "path": "scripts/quality_gate.py",
-      "decision": "extend",
-      "reason": "既存の変更票ゲートに base 妥当性検査だけを追加する。既存の検査規則と出力形式は維持"
-    },
-    {
-      "path": "scripts/test_quality_gate.py",
-      "decision": "extend",
-      "reason": "既存25件の試験に base 異常系を追加する"
-    },
-    {
-      "path": ".github/workflows/quality.yml",
-      "decision": "extend",
-      "reason": "既存 Quality policy ワークフローの検査順序を、古いsuccessが新しいpendingを上書きしない順に直す"
-    },
-    {
       "path": "intake-beta/public/qrcode.min.js",
       "decision": "vendor_reuse",
-      "reason": "既存の固定バージョンQRライブラリ。全体コピー比較からの除外は維持し秘密検査は免除しない"
+      "reason": "既存の固定バージョンQRライブラリが出すSVG（xmlns付き）をそのまま保存対象にする。全体コピー比較からの除外は維持し秘密検査は免除しない"
+    },
+    {
+      "path": "intake-beta/public/app.js",
+      "decision": "extend",
+      "reason": "既存の共有リンク作成ハンドラ内でQR生成成功後に掲示情報と保存URLを用意する。validGoogle・copy・showCustomerは変更しない"
+    },
+    {
+      "path": "intake-beta/public/styles.css",
+      "decision": "extend",
+      "reason": "既存の.hidden/.secondary/.text-link/#qr-areaを使い、print媒体の上書きだけを追加する"
+    },
+    {
+      "path": "intake-beta/public/index.html",
+      "decision": "extend",
+      "reason": "既存の#share-result内へ印刷専用要素と操作を追加する。LP・店舗フォーム・客画面は変更しない"
+    },
+    {
+      "path": "intake-beta/tests/worker.test.mjs",
+      "decision": "reuse",
+      "reason": "既存の隔離API試験をそのまま通す。worker.mjsは変更しない"
+    },
+    {
+      "path": "intake-beta/tests/poster_browser.py",
+      "decision": "extend",
+      "reason": "既存のlive_browser.py（ローカル作業領域）の方式を踏襲し、ディスク配信・外部通信遮断・API呼出0の隔離ブラウザ試験を追加する"
     }
   ],
   "changed_files": [
-    ".github/workflows/quality.yml",
-    ".gitignore",
-    "scripts/deploy_preflight.py",
-    "scripts/test_deploy_preflight.py",
-    "scripts/quality_gate.py",
-    "scripts/test_quality_gate.py",
+    "intake-beta/public/index.html",
+    "intake-beta/public/styles.css",
+    "intake-beta/public/app.js",
+    "intake-beta/tests/poster_browser.py",
     ".quality/change.json"
   ],
-  "adoption_scope_note": "origin/main 26254fd17cb836b03bc8a731d363dac7e9e8f443 を基点にした隔離worktree。配備なし。証跡は ai-company-visibility/live-ops/development-throughput-ops/parallel-handoffs/01/wave2/。"
+  "adoption_scope_note": "差分案。origin/main 26254fd17cb836b03bc8a731d363dac7e9e8f443 を基点に隔離クローンで作成。commit/push/deployなし。適用と配備は統合担当。ローカル作業領域の未追跡intake-beta/docs等は本変更票に含めない。"
 }
