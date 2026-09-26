@@ -9,7 +9,9 @@ R=Path(__file__).resolve().parents[1];PUB=R/'public'
 BASE='https://hitokoto.example';GOOGLE='https://g.page/r/qa-fictional-store/review';STORE='QA用の架空店舗'
 # Same policy the worker sets on every static response (worker.mjs); kept in sync by the assertion below.
 SECURITY_HEADERS={'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer'}
-HIDDEN_IN_PRINT=['header','footer','#store-form','.lp-hero','#faq','#copy-link','#preview-link','#poster-actions','#share-url']
+HIDDEN_IN_PRINT=['header','footer','#store-form','.lp-hero','#faq','#copy-link','#preview-link','#poster-actions','#share-url','#how-it-works','.closing-cta','#customer-view']
+PRINT_ALLOWLIST={'share-result'}  # #store-view の直下でprint時に残ってよい要素はこれだけ
+LONG_GOOGLE='https://g.page/r/'+'A'*2400+'/review'  # validGoogle は通るが QR(v40-M 2331B) に入らない
 SHOWN_IN_PRINT=['#print-store','#print-url','#qr-area svg']
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);args=ap.parse_args()
@@ -46,6 +48,8 @@ def main():
   hidden={s:page.locator(s).first.evaluate('e=>getComputedStyle(e).display') for s in HIDDEN_IN_PRINT}
   shown={s:page.locator(s).first.evaluate('e=>getComputedStyle(e).display') for s in SHOWN_IN_PRINT}
   assert all(v=='none' for v in hidden.values()),hidden;assert all(v!='none' for v in shown.values()),shown
+  leaked=page.locator('#store-view>*').evaluate_all('ns=>ns.filter(e=>getComputedStyle(e).display!="none").map(e=>e.id||e.className)');assert set(leaked)<=PRINT_ALLOWLIST,('elements outside the poster leak into print',leaked)
+  result['print_store_view_visible_children']=leaked
   result['print_media']={'hidden':hidden,'shown':shown};page.screenshot(path=str(Path(args.out).with_suffix('.print.png')),full_page=True)
   pdf=page.pdf(format='A4',print_background=True);pages=pdf.count(b'/Type /Page')-pdf.count(b'/Type /Pages');Path(args.out).with_suffix('.print.pdf').write_bytes(pdf)
   assert pages==1,('print must fit one page',pages)
@@ -54,6 +58,13 @@ def main():
   page.screenshot(path=str(Path(args.out).with_suffix('.desktop.png')),full_page=True)
   # regenerating with the same inputs yields the same share URL (store keeps no record)
   page.locator('#store-form button').click();assert page.locator('#share-url').input_value()==share
+  # failed regeneration must not leave the previous poster in the print sheet (Devin review finding 1)
+  page.locator('#review-url').fill(LONG_GOOGLE);page.locator('#store-form button').click()
+  assert '長すぎ' in (page.locator('#qr-area').text_content() or ''),'over-long url must fall back to the share link';assert page.locator('#qr-area svg').count()==0
+  expect(page.locator('#poster-actions')).to_be_hidden();assert page.locator('#print-store').text_content()=='' and page.locator('#print-url').text_content()=='',('stale poster text after failed regeneration',page.locator('#print-store').text_content())
+  assert page.locator('#download-qr').get_attribute('href') is None,'stale download href after failed regeneration'
+  page.emulate_media(media='print');assert page.locator('#print-store').evaluate('e=>e.textContent')=='' and page.locator('#qr-area svg').count()==0,'stale poster visible in print after failed regeneration';page.emulate_media(media='screen')
+  result['failed_regeneration_clears_poster']=True
   assert not result['errors'],result['errors'];assert result['draft_api_requests']==0 and not result['external_requests_blocked']
   b.close()
  result.update(served_with_worker_csp=True,poster_actions_after_qr=True,print_caption_hidden_on_screen=True,download_svg_matches_screen_qr=True,print_layout_isolated=True,same_inputs_same_share_url=True,mobile_and_desktop_no_overflow=True)
