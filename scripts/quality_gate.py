@@ -14,7 +14,7 @@ CODE = {'.js','.jsx','.ts','.tsx','.mjs','.cjs','.py','.css','.html'}
 EXCLUDED_DIRS = {'node_modules','.git','.next','.open-next','dist','build','coverage','__pycache__','vendor','archive','archives'}
 EXCLUDED_FILES = {'intake-beta/public/qrcode.min.js'}  # pinned MIT upstream artifact
 ENV_TEMPLATES = {'.env.example','.env.sample','.env.template'}
-GOVERNANCE = {'AGENTS.md','CLAUDE.md','CONTRIBUTING.md','package.json','package-lock.json','tsconfig.json','next-env.d.ts','.gitignore','.eslintrc.json','.eslintrc.js','eslint.config.mjs','jest.config.js','scripts/quality_gate.py','scripts/test_quality_gate.py'}
+GOVERNANCE = {'AGENTS.md','CLAUDE.md','CONTRIBUTING.md','package.json','package-lock.json','tsconfig.json','next-env.d.ts','.gitignore','.eslintrc.json','.eslintrc.js','eslint.config.mjs','jest.config.js','scripts/quality_gate.py','scripts/test_quality_gate.py','scripts/deploy_preflight.py','scripts/test_deploy_preflight.py'}
 SECRET_DEFINITION_SHA256 = "582affe53ff190b3e3b42e759638baaca0ad2b4287e430c50fa5e04ee5d1876a"
 
 def load_secret_rules(path=None):
@@ -89,7 +89,10 @@ def gate(root,manifest='.quality/change.json',base=None):
    except ValueError:fail('changed_path_invalid');continue
    if not in_scope(path):fail('changed_file_outside_initial_scope',path)
    changed.append(path)
- if base:
+ if base is not None:
+  # 空文字・全ゼロ(新規ブランチの push)・非SHAは「照合できない」であって「照合不要」ではない。
+  if not re.fullmatch(r'[0-9a-fA-F]{40}',base or '') or set(base)=={'0'}:fail('base_missing_or_invalid')
+ if base and not any(e.get('rule')=='base_missing_or_invalid' for e in errors):
   try:
    actual=actual_changes(root,base)
    for path in sorted(actual):

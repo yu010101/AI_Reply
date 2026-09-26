@@ -1,6 +1,9 @@
 name: Quality policy
 on:
   pull_request:
+  # main head itself needs a check-run so a deploy preflight can bind HEAD to a verified SHA.
+  push:
+    branches: [main]
 permissions:
   contents: read
 concurrency:
@@ -22,7 +25,8 @@ jobs:
           cache: npm
       - name: Verify declared changes against the actual PR base
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # pull_request: base.sha / push: before. 空や全ゼロは quality_gate が拒否する（黙って差分照合を省かない）。
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python3 scripts/quality_gate.py --base "$BASE_SHA"
       - name: Test the policy checker
         run: python3 scripts/test_quality_gate.py

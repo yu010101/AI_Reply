@@ -53,3 +53,5 @@ temp/
 google_credentials.txt
 *_credentials.txt
 *_secrets.txt
+# deploy_preflight.py の控え（ローカル専用、追跡しない）
+.quality/preflight-receipt.json

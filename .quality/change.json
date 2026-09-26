@@ -1,44 +1,41 @@
 {
-  "task_id": "intake-worker-hardening-20260926",
-  "owner": "Claude Code / AI会社整備",
+  "task_id": "coding-standard-enforcement-deploy-preflight-wave2-20260926",
+  "owner": "parallel-handoffs/01 wave2 (Claude調査) → 統合担当が適用",
   "acceptance": [
-    "Quota rows reserved by a refused attempt are released so total (lifetime) and day: do not drain",
-    "Origin is checked against ALLOWED_ORIGINS (comma-separated; unset means url.origin only)",
-    "Markup, control, Bidi, zero-width, separator and lone-surrogate characters are refused before AI; draft stays plain text",
-    "Fallback paths log a reason code and error name only; cleanup also purges stale day: rows",
-    "Existing 15 worker tests stay green; each review item has a counterexample test that fails on the previous worker"
+    "deploy_preflight.py が、古いsuccess receiptによる新しいpendingの上書き・pushのbase欠測・wrangler入力とハッシュ対象のずれ・ゲート後改変・deployment ID未取得時のlatest採用の5反例を全て拒否し、正常な固定版だけを受け入れる（隔離試験25件）",
+    "quality_gate.py は空または全ゼロのbaseを base_missing_or_invalid として失敗にし、既存の変更票・秘密・範囲検査は維持する（試験25件）",
+    "quality.yml は検査順序の変更のみ。配備ステップは追加しない。--exec は本人承認後に限る"
   ],
   "reuse": [
     {
-      "path": "intake-beta/worker.mjs",
+      "path": "scripts/quality_gate.py",
       "decision": "extend",
-      "reason": "既存のreserve/fallback/DELETEを拡張し、レスポンス形とCSPは変更しない"
+      "reason": "既存の変更票ゲートに base 妥当性検査だけを追加する。既存の検査規則と出力形式は維持"
     },
     {
-      "path": "intake-beta/tests/worker.test.mjs",
+      "path": "scripts/test_quality_gate.py",
       "decision": "extend",
-      "reason": "既存のQuotaモックにUPDATEを追加し、反例試験を追記。実SQLはnode:sqliteで実行"
+      "reason": "既存25件の試験に base 異常系を追加する"
     },
     {
-      "path": "intake-beta/schema.sql",
-      "decision": "reuse",
-      "reason": "quota表の定義を変えずにUPDATE count=MAX(count-1,0)で戻す"
-    },
-    {
-      "path": "intake-beta/public/app.js",
-      "decision": "reviewed_existing",
-      "reason": "draftはtextarea.valueで描画済み。平文契約の根拠として試験で固定し、変更しない"
+      "path": ".github/workflows/quality.yml",
+      "decision": "extend",
+      "reason": "既存 Quality policy ワークフローの検査順序を、古いsuccessが新しいpendingを上書きしない順に直す"
     },
     {
       "path": "intake-beta/public/qrcode.min.js",
       "decision": "vendor_reuse",
-      "reason": "MITの固定バージョンQRライブラリを維持。全体コピー比較からこの既知vendorだけ除外し、秘密検査は免除しない"
+      "reason": "既存の固定バージョンQRライブラリ。全体コピー比較からの除外は維持し秘密検査は免除しない"
     }
   ],
   "changed_files": [
-    "intake-beta/worker.mjs",
-    "intake-beta/tests/worker.test.mjs",
+    ".github/workflows/quality.yml",
+    ".gitignore",
+    "scripts/deploy_preflight.py",
+    "scripts/test_deploy_preflight.py",
+    "scripts/quality_gate.py",
+    "scripts/test_quality_gate.py",
     ".quality/change.json"
   ],
-  "adoption_scope_note": "隔離worktree。Devin静的レビュー5件の修正のみ。Turnstile・wrangler設定・配備は対象外。"
+  "adoption_scope_note": "origin/main 26254fd17cb836b03bc8a731d363dac7e9e8f443 を基点にした隔離worktree。配備なし。証跡は ai-company-visibility/live-ops/development-throughput-ops/parallel-handoffs/01/wave2/。"
 }
