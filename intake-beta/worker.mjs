@@ -24,7 +24,7 @@ export function validInput(data) {
   return data && typeof data.text==='string' && data.text.trim().length>0 && data.text.length<=600 &&
     typeof data.storeName==='string' && data.storeName.length<=80 && !UNSAFE_CHARS.test(data.text) && !UNSAFE_CHARS.test(data.storeName);
 }
-// Usage metric (x-request-05): one row per store, keyed by a salted hash of its Google review link, so the count needs no store names or links in D1.
+// Usage metric (x-request-05): one row per store, keyed by a salted hash of the canonical key of its Google review link (see storeKey), so the count needs no store names or links in D1.
 export async function storeHash(salt,review){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+'store:'+review));return Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');}
 // Same allowlist as public/app.js validGoogle, reduced to a canonical key so trailing slashes, host case and extra query parameters do not split one link into several rows.
 // Limit: one store reachable by two link forms (e.g. g.page short ID and placeid) still counts twice, so the metric is an upper bound on stores.
@@ -32,7 +32,8 @@ export function storeKey(raw){if(typeof raw!=='string'||raw.length>300||UNSAFE_C
   if(h==='maps.app.goo.gl'&&(m=/^\/([A-Za-z0-9_-]+)$/.exec(p)))return 'goo:'+m[1];
   if(h==='g.page'&&(m=/^\/(?:r\/)?([A-Za-z0-9_-]+)\/review$/.exec(p)))return 'gpage:'+m[1];
   if(h==='search.google.com'&&p==='/local/writereview'&&(m=/^([A-Za-z0-9_-]+)$/.exec(u.searchParams.get('placeid')||'')))return 'place:'+m[1];
-  if(['www.google.com','google.com','www.google.co.jp','maps.google.com'].includes(h)&&/^\/maps(?:\/|$)/.test(u.pathname))return 'maps:'+p;
+  // /maps links can identify the store only in the query (?cid=, ?q=, ?place_id=), so keep every parameter except locale and utm_* noise; dropping them would merge different stores and break the upper bound.
+  if(['www.google.com','google.com','www.google.co.jp','maps.google.com'].includes(h)&&/^\/maps(?:\/|$)/.test(u.pathname)){const q=[...u.searchParams].filter(([k])=>!/^(?:hl|gl|utm_.*)$/i.test(k)).map(([k,v])=>k+'='+v).sort().join('&');return 'maps:'+p+(q?'?'+q:'');}
   return null;}
 export const countableReview=r=>storeKey(r)!==null;
 async function recordStore(env,review){const hash=await storeHash(env.QUOTA_SALT,storeKey(review));await env.QUOTA.prepare('INSERT OR IGNORE INTO store_seen (hash, first_day) VALUES (?,?)').bind(hash,new Date().toISOString().slice(0,10)).run();}
@@ -40,7 +41,7 @@ export const unchangedMeaning = (a,b) => a.replace(/[\s。、，,.!?！？「」
 export default {
   async fetch(request,env,ctx) {
     const url=new URL(request.url);
-    if(url.pathname==='/api/health')return json({status:'ok',service:'hitokoto-beta',stores_saved:false,reviews_posted:false});
+    if(url.pathname==='/api/health')return json({status:'ok',service:'hitokoto-beta',stores_saved:false,store_count_hashes:true,reviews_posted:false});
     if(url.pathname==='/api/draft'){
       if(request.method!=='POST')return json({error:'method_not_allowed'},405);
       // ALLOWED_ORIGINS: comma-separated origins. When set it is the whole allowlist (url.origin is not implied); unset means url.origin only.

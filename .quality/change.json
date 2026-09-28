@@ -3,9 +3,9 @@
   "owner": "x-request-05 (Claude調査・差分案) → 本人「全部おすすめで」承認(2026-09-28)で PR 化",
   "acceptance": [
     "業種別の観点チップ(最大3つ)を表示し、4つ目は「選べるのは3つまでです。」で拒否する。文言は評価語を含まない(飲食=料理・飲み物/接客/店内の雰囲気/待ち時間/価格 ほか)",
-    "/api/draft で口コミリンクを正規化キーにして salted hash だけを D1 store_seen に INSERT OR IGNORE する。記録失敗は応答を変えない",
+    "/api/draft で口コミリンクを正規化キーにして salted hash だけを D1 store_seen に INSERT OR IGNORE する。/maps 系はクエリ(cid,q等)を保持し hl/gl/utm_* だけ除く(別店舗が1件に潰れない)。記録失敗は応答を変えない。/api/health に store_count_hashes:true を追加(既存キーは不変)",
     "privacy.html に、投稿先URLをハッシュにして利用店舗数を数えるためだけに記録する旨を追記",
-    "node --test intake-beta/tests/worker.test.mjs 28/28 合格。配備・D1書込はこの PR では行わない"
+    "node --test intake-beta/tests/worker.test.mjs 29/29 合格(追加の maps 試験は修正前コードで1件失敗を確認)。配備・D1書込はこの PR では行わない"
   ],
   "reuse": [
     {
