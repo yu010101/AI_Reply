@@ -333,6 +333,27 @@ class ReceiptWrite(unittest.TestCase):
         self.assertEqual(led.read_bytes(), b'a' * 64 + b'\n')
         self.assertFalse((a_root / 'x.json').exists())
 
+    def test_receipt_must_be_json_directly_under_quality(self):
+        # Codex PR#10 第4回審査: root 内に入れ子の別 checkout A があると A/.quality/deploy-approval-used.log を名指しできた
+        import io, contextlib, sys
+        root = Path(tempfile.mkdtemp())
+        led = root / 'A' / m.USED_LEDGER
+        led.parent.mkdir(parents=True)
+        led.write_bytes(b'a' * 64 + b'\n')
+        for rel in ('A/' + m.USED_LEDGER, 'A/.quality/r.json', '.quality/other.log', '.quality/.hidden.json', 'r.json', '.quality/..'):
+            argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(root), '--receipt', rel]
+            og, od = m.gather, m.decide
+            m.gather, m.decide = (lambda r: dict(self.G)), (lambda *a: 'direct')
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    rc = m.main()
+            finally:
+                sys.argv, m.gather, m.decide = argv, og, od
+            self.assertEqual((rc, json.loads(out.getvalue().strip().splitlines()[-1]).get('reason')), (1, 'receipt_location_invalid'), rel)
+        self.assertEqual(led.read_bytes(), b'a' * 64 + b'\n')
+        self.assertFalse((root / 'A' / '.quality' / 'r.json').exists())
+
     def test_writes_plain_utf8_receipt_that_exec_can_load(self):
         root = Path(tempfile.mkdtemp())
         rc, out = self.judge(root)

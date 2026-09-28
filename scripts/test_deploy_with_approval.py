@@ -160,6 +160,15 @@ class ApprovalFile(Base):
         self.assertEqual((rc, out['reason']), (1, 'approval_already_used'))
         self.assertNotIn('exec', run.stages())
 
+    def test_receipt_must_be_json_directly_under_quality(self):
+        # Codex PR#10 第4回審査: 入れ子の別 checkout の台帳を名指しできた
+        p = self.place('approval-ok.json')
+        for rel in ('A/.quality/deploy-approval-used.log', 'A/.quality/r.json', '.quality/other.log', 'r.json'):
+            run = self.run_()
+            rc, out = self.go(['--receipt', rel, '--prepare'], run)
+            self.assertEqual((rc, out['reason']), (1, 'receipt_location_invalid'), rel)
+            self.assertEqual(run.stages(), [])
+
     def test_receipt_outside_root_refused(self):
         p, run = self.place('approval-ok.json'), self.run_()
         rc, out = self.go(['--receipt', '../x.json', '--approval-file', str(p)], run)

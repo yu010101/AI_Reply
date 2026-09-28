@@ -292,6 +292,18 @@ def receipt_inside_root(root, rel):
         return False
 
 
+def receipt_location_ok(root, rel):
+    """receipt は <root>/.quality/ の直下の *.json に限る（親だけ解決して比べる）。台帳（*.log）や、root の中に
+    入れ子になった別 checkout の台帳を名指しできないようにする（Codex PR#10 第4回審査）。"""
+    try:
+        raw = Path(root) / rel
+        name = raw.name
+        return (raw.parent.resolve() == (Path(root) / '.quality').resolve()
+                and name.casefold().endswith('.json') and not name.startswith('.'))
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def is_used_ledger(root, rel):
     """receipt の置き場所が使用済み承認台帳を指すか。親ディレクトリだけ解決し、最後の要素は辿らない。
     大文字小文字を区別しない APFS では別綴りの名前でも同じ台帳を指すので、綴りの比較（casefold）に加えて
@@ -366,6 +378,8 @@ def main():
             raise Refuse('receipt_outside_root')
         if is_used_ledger(root, a.receipt):
             raise Refuse('receipt_is_used_ledger')
+        if not receipt_location_ok(root, a.receipt):
+            raise Refuse('receipt_location_invalid')
         if a.exec and not a.expect_receipt_sha256:
             raise Refuse('exec_requires_expect_receipt_sha256')
         if a.exec or a.verify:

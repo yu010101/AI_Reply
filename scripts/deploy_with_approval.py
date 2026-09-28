@@ -183,6 +183,13 @@ def receipt_path(root, rel):
     if is_ledger:
         # receipt を台帳へ書かせると preflight の書込が台帳を置き換え、使用済みの承認がまた通る（Codex PR#10 審査）
         raise Deny('receipt_is_used_ledger')
+    try:
+        in_quality = p.parent == (root / '.quality').resolve()
+    except (OSError, RuntimeError):
+        in_quality = False
+    if not (in_quality and p.name.casefold().endswith('.json') and not p.name.startswith('.')):
+        # receipt は <root>/.quality/ 直下の *.json に限る。入れ子の別 checkout の台帳などを名指しさせない（Codex PR#10 第4回審査）
+        raise Deny('receipt_location_invalid')
     return p
 
 
