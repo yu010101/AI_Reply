@@ -18,7 +18,8 @@ exec には承認した receipt の sha256 を --expect-receipt-sha256 で渡し
 ハッシュが違えば拒否する（承認後から exec までの receipt 差し替えを防ぐ）。verify にも同じハッシュを渡し、
 配備後に receipt を差し替えて照合結果を偽らせることも防ぐ。deploy_preflight --exec はこのハッシュ無しでは動かない。
 限界: どれも「人間が操作した」ことを暗号的には証明しない。同じユーザー権限でリポジトリに書ける相手は、
-台帳の削除や wrangler の直接実行もできるので、この wrapper はそうした相手からは守らない。TTY は pty を作れるエージェントなら偽装でき、
+台帳の削除や wrangler の直接実行もできるので、この wrapper はそうした相手からは守らない。
+利用者単位の台帳は $HOME 単位・マシン単位で、HOME を変えた実行や別マシンでの実行とは共有しない。TTY は pty を作れるエージェントなら偽装でき、
 ファイルはエージェントでも書ける。承認の実体は運用規則（エージェントは承認ファイルを書かない・yes を打たない）で守る。
 """
 import argparse
@@ -154,21 +155,28 @@ def consume(root, receipt_sha):
             if (st.st_dev, st.st_ino) not in ids:
                 ids.add((st.st_dev, st.st_ino))
                 targets.append(fd)
-        for fd in targets:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-        for fd in targets:
-            os.lseek(fd, 0, os.SEEK_SET)
-            seen = b''
-            while True:
-                chunk = os.read(fd, 65536)
-                if not chunk:
-                    break
-                seen += chunk
-            if receipt_sha.encode() in seen.split():
-                raise Deny('approval_already_used')
-        for fd in targets:
-            os.write(fd, (receipt_sha + '\n').encode())
-            os.fsync(fd)
+        try:
+            for fd in targets:
+                fcntl.flock(fd, fcntl.LOCK_EX)
+            for fd in targets:
+                os.lseek(fd, 0, os.SEEK_SET)
+                seen = b''
+                while True:
+                    chunk = os.read(fd, 65536)
+                    if not chunk:
+                        break
+                    seen += chunk
+                if receipt_sha.encode() in seen.split():
+                    raise Deny('approval_already_used')
+            line = (receipt_sha + '\n').encode()
+            for fd in targets:
+                done = 0
+                while done < len(line):  # 短い書込みでも行を欠けさせない
+                    done += os.write(fd, line[done:])
+                os.fsync(fd)
+        except OSError:
+            # ロック・読込・書込の失敗は traceback でなく拒否として返す（Devin PR#10 第6回審査）。exec には進まない
+            raise Deny('used_ledger_unusable')
     finally:
         for fd in fds:
             os.close(fd)
