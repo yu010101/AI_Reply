@@ -167,6 +167,14 @@ def receipt_path(root, rel):
         raise Deny('receipt_missing')
     if not inside:
         raise Deny('receipt_outside_root')
+    led = root / USED_LEDGER
+    try:
+        is_ledger = p == led.parent.resolve() / led.name
+    except (OSError, RuntimeError):
+        is_ledger = True
+    if is_ledger:
+        # receipt を台帳へ書かせると preflight の書込が台帳を置き換え、使用済みの承認がまた通る（Codex PR#10 審査）
+        raise Deny('receipt_is_used_ledger')
     return p
 
 

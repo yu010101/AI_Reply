@@ -141,6 +141,23 @@ class ApprovalFile(Base):
         self.assertEqual(out['reason'], 'approval_is_symlink_or_unreadable')
         self.assertNotIn('exec', run.stages())
 
+    def test_receipt_pointed_at_used_ledger_is_refused_before_preflight(self):
+        # Codex PR#10 審査の反例: --prepare --receipt <台帳> で台帳を上書きし、同じ承認で再度 exec に進めた
+        p = self.place('approval-ok.json')
+        self.go(['--approval-file', str(p)], self.run_())
+        ledger = (self.root / w.USED_LEDGER).read_bytes()
+        for argv in (['--receipt', w.USED_LEDGER, '--prepare'], ['--receipt', './.quality/../.quality/deploy-approval-used.log', '--prepare'],
+                     ['--receipt', w.USED_LEDGER, '--approval-file', str(p)]):
+            run = self.run_()
+            rc, out = self.go(argv, run)
+            self.assertEqual((rc, out['reason']), (1, 'receipt_is_used_ledger'), argv)
+            self.assertEqual(run.stages(), [])
+        self.assertEqual((self.root / w.USED_LEDGER).read_bytes(), ledger)
+        run = self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        self.assertEqual((rc, out['reason']), (1, 'approval_already_used'))
+        self.assertNotIn('exec', run.stages())
+
     def test_receipt_outside_root_refused(self):
         p, run = self.place('approval-ok.json'), self.run_()
         rc, out = self.go(['--receipt', '../x.json', '--approval-file', str(p)], run)

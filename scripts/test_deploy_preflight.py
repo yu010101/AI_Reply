@@ -291,6 +291,26 @@ class ReceiptWrite(unittest.TestCase):
             sys.argv, m.gather, m.decide = argv, og, od
         return rc, json.loads(out.getvalue().strip().splitlines()[-1])
 
+    def test_receipt_at_used_ledger_is_refused_and_ledger_untouched(self):
+        # Codex PR#10 審査: 判定モードの receipt 書込が使用済み承認台帳を置き換えていた
+        import io, contextlib, sys
+        root = Path(tempfile.mkdtemp())
+        led = root / m.USED_LEDGER
+        led.parent.mkdir(parents=True)
+        led.write_bytes(b'a' * 64 + b'\n')
+        for rel in (m.USED_LEDGER, '.quality/../.quality/deploy-approval-used.log'):
+            argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(root), '--receipt', rel]
+            og, od = m.gather, m.decide
+            m.gather, m.decide = (lambda r: dict(self.G)), (lambda *a: 'direct')
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    rc = m.main()
+            finally:
+                sys.argv, m.gather, m.decide = argv, og, od
+            self.assertEqual((rc, json.loads(out.getvalue().strip().splitlines()[-1])['reason']), (1, 'receipt_is_used_ledger'), rel)
+        self.assertEqual(led.read_bytes(), b'a' * 64 + b'\n')
+
     def test_writes_plain_utf8_receipt_that_exec_can_load(self):
         root = Path(tempfile.mkdtemp())
         rc, out = self.judge(root)

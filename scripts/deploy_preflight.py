@@ -36,6 +36,8 @@ CONFIG = 'intake-beta/wrangler.json'
 CHECK_NAME = 'quality'
 SHA40 = re.compile(r'^[0-9a-f]{40}$')
 DEFAULT_RECEIPT = '.quality/preflight-receipt.json'
+# deploy_with_approval.py の使用済み承認台帳。receipt をここへ書くと台帳が消え、同じ承認を再利用できてしまう（Codex PR#10 審査）
+USED_LEDGER = '.quality/deploy-approval-used.log'
 RECEIPT_MAX_AGE_SEC = 30 * 60
 
 
@@ -280,6 +282,15 @@ def read_nofollow_regular(path):
         os.close(fd)
 
 
+def is_used_ledger(root, rel):
+    """receipt の置き場所が使用済み承認台帳と同じ名前を指すか。親ディレクトリだけ解決して比べる（最後の要素は辿らない）。"""
+    try:
+        raw, led = Path(root) / rel, Path(root) / USED_LEDGER
+        return raw.parent.resolve() / raw.name == led.parent.resolve() / led.name
+    except (OSError, RuntimeError):
+        return True
+
+
 def write_receipt(rpath, data):
     """同じディレクトリの一時ファイルに書いてから rename で置き換える。rename は置き場所の名前そのものを差し替えるので、
     そこが symlink でも辿って先を書き換えず、FIFO でも読み手待ちで止まらない（ディレクトリなら OSError）。"""
@@ -332,6 +343,8 @@ def main():
     root = Path(a.root)
     rpath = root / a.receipt
     try:
+        if is_used_ledger(root, a.receipt):
+            raise Refuse('receipt_is_used_ledger')
         if a.exec and not a.expect_receipt_sha256:
             raise Refuse('exec_requires_expect_receipt_sha256')
         if a.exec or a.verify:
