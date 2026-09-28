@@ -3,7 +3,8 @@
 
 承認は「どの receipt を承認したか」に束縛する。receipt は判定のたびに issued_at 付きで作り直されるので、
 その内容の sha256（receipt_sha256）が承認の対象になる。使った receipt_sha256 は台帳
-（.quality/deploy-approval-used.log、追記のみ）に記録し、同じ receipt で二度 exec しない。
+（checkout 内の .quality/deploy-approval-used.log と、利用者単位の ~/.deploy-approvals/deploy-approval-used.log の両方、
+追記のみ）に記録し、同じ receipt で二度 exec しない（別の checkout に写しても通らない）。
 ファイル名の改名や置き場所には依存しない（別名・ハードリンク・.used ファイルの再指定でも通らない）。
 
 3方式（どれか必須）:
@@ -35,6 +36,9 @@ PREFLIGHT = HERE / 'deploy_preflight.py'
 DEFAULT_RECEIPT = '.quality/preflight-receipt.json'
 APPROVAL_MAX_AGE_SEC = 30 * 60
 USED_LEDGER = '.quality/deploy-approval-used.log'
+# checkout の外に置く利用者単位の台帳。配備は毎回新しい隔離 worktree から行うので、checkout 内の台帳だけでは
+# 同じ承認と receipt を別の checkout へ写すと再び通ってしまう（Codex PR#10 第5回審査）。両方を照合し両方に記録する。
+USER_LEDGER = Path.home() / '.deploy-approvals' / 'deploy-approval-used.log'
 
 
 class Deny(Exception):
@@ -128,31 +132,43 @@ def check_approval(receipt, receipt_sha, raw, now=None):
 
 
 def consume(root, receipt_sha):
-    """台帳に receipt_sha256 が無ければ追記する。あれば Deny。exec の前に記録する（exec が失敗しても再利用させない）。"""
+    """checkout 内と利用者単位の両方の台帳に receipt_sha256 が無ければ両方へ追記する。どちらかにあれば Deny。
+    exec の前に記録する（exec が失敗しても再利用させない）。"""
     import fcntl
-    ledger = root / USED_LEDGER
-    ledger.parent.mkdir(parents=True, exist_ok=True)
+    fds = []
     try:
-        fd = os.open(str(ledger), os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, 'O_NOFOLLOW', 0), 0o600)
-    except OSError:
-        raise Deny('used_ledger_unusable')
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise Deny('used_ledger_unusable')
-        os.lseek(fd, 0, os.SEEK_SET)
-        seen = b''
-        while True:
-            chunk = os.read(fd, 65536)
-            if not chunk:
-                break
-            seen += chunk
-        if receipt_sha.encode() in seen.split():
-            raise Deny('approval_already_used')
-        os.write(fd, (receipt_sha + '\n').encode())
-        os.fsync(fd)
+        for ledger in (Path(USER_LEDGER), root / USED_LEDGER):
+            try:
+                ledger.parent.mkdir(parents=True, exist_ok=True)
+                fd = os.open(str(ledger), os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+            except OSError:
+                raise Deny('used_ledger_unusable')
+            fds.append(fd)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise Deny('used_ledger_unusable')
+        targets, ids = [], set()
+        for fd in fds:  # 同じ実体（root が利用者台帳と重なる構成）なら1回だけ照合・記録する
+            ident = (os.fstat(fd).st_dev, os.fstat(fd).st_ino)
+            if ident not in ids:
+                ids.add(ident)
+                targets.append(fd)
+        for fd in targets:
+            os.lseek(fd, 0, os.SEEK_SET)
+            seen = b''
+            while True:
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                seen += chunk
+            if receipt_sha.encode() in seen.split():
+                raise Deny('approval_already_used')
+        for fd in targets:
+            os.write(fd, (receipt_sha + '\n').encode())
+            os.fsync(fd)
     finally:
-        os.close(fd)
+        for fd in fds:
+            os.close(fd)
     return True
 
 

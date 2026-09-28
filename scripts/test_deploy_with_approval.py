@@ -42,6 +42,11 @@ class FakeRun:
 class Base(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
+        # 利用者単位の台帳は本物の ~ を触らないよう試験ごとの一時場所へ差し替える
+        self.home = Path(tempfile.mkdtemp())
+        self._user_ledger, w.USER_LEDGER = w.USER_LEDGER, self.home / '.deploy-approvals' / 'deploy-approval-used.log'
+        self.addCleanup(setattr, w, 'USER_LEDGER', self._user_ledger)
+        self.addCleanup(shutil.rmtree, self.home, True)
         (self.root / '.quality').mkdir()
         (self.root / '.quality' / 'preflight-receipt.json').write_bytes(RECEIPT_BYTES)
 
@@ -159,6 +164,23 @@ class ApprovalFile(Base):
         rc, out = self.go(['--approval-file', str(p)], run)
         self.assertEqual((rc, out['reason']), (1, 'approval_already_used'))
         self.assertNotIn('exec', run.stages())
+
+    def test_same_approval_copied_to_another_checkout_is_refused(self):
+        # Codex PR#10 第5回審査: 同じ receipt と承認を別の checkout B に写すと、B の台帳が空なので再び exec に進めた
+        p = self.place('approval-ok.json')
+        rc, out = self.go(['--approval-file', str(p)], self.run_())
+        self.assertEqual((rc, out['ok']), (0, True))
+        other = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, other, True)
+        (other / '.quality').mkdir()
+        (other / '.quality' / 'preflight-receipt.json').write_bytes(RECEIPT_BYTES)
+        shutil.copy(FX / 'approval-ok.json', other / 'approval.json')
+        run = FakeRun(other)
+        out_io = io.StringIO()
+        rc = w.main(['--root', str(other), '--approval-file', str(other / 'approval.json')], run=run, stdin=io.StringIO(''),
+                    stdout=out_io, isatty=True, now=NOW)
+        self.assertEqual((rc, json.loads(out_io.getvalue().strip().splitlines()[-1])['reason']), (1, 'approval_already_used'))
+        self.assertNotIn('exec', run.stages())
+        self.assertFalse((other / w.USED_LEDGER).exists() and (other / w.USED_LEDGER).read_bytes())
 
     def test_receipt_must_be_json_directly_under_quality(self):
         # Codex PR#10 第4回審査: 入れ子の別 checkout の台帳を名指しできた
