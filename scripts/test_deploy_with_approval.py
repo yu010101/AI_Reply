@@ -42,6 +42,11 @@ class FakeRun:
 class Base(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
+        # 利用者単位の台帳は本物の ~ を触らないよう試験ごとの一時場所へ差し替える
+        self.home = Path(tempfile.mkdtemp())
+        self._user_ledger, w.USER_LEDGER = w.USER_LEDGER, self.home / '.deploy-approvals' / 'deploy-approval-used.log'
+        self.addCleanup(setattr, w, 'USER_LEDGER', self._user_ledger)
+        self.addCleanup(shutil.rmtree, self.home, True)
         (self.root / '.quality').mkdir()
         (self.root / '.quality' / 'preflight-receipt.json').write_bytes(RECEIPT_BYTES)
 
@@ -141,6 +146,77 @@ class ApprovalFile(Base):
         self.assertEqual(out['reason'], 'approval_is_symlink_or_unreadable')
         self.assertNotIn('exec', run.stages())
 
+    def test_receipt_pointed_at_used_ledger_is_refused_before_preflight(self):
+        # Codex PR#10 審査の反例: --prepare --receipt <台帳> で台帳を上書きし、同じ承認で再度 exec に進めた
+        p = self.place('approval-ok.json')
+        self.go(['--approval-file', str(p)], self.run_())
+        ledger = (self.root / w.USED_LEDGER).read_bytes()
+        os.link(self.root / w.USED_LEDGER, self.root / '.quality' / 'alias.json')
+        for argv in (['--receipt', w.USED_LEDGER, '--prepare'], ['--receipt', './.quality/../.quality/deploy-approval-used.log', '--prepare'],
+                     ['--receipt', '.quality/DEPLOY-APPROVAL-USED.LOG', '--prepare'], ['--receipt', '.quality/alias.json', '--prepare'],
+                     ['--receipt', w.USED_LEDGER, '--approval-file', str(p)]):
+            run = self.run_()
+            rc, out = self.go(argv, run)
+            self.assertEqual((rc, out['reason']), (1, 'receipt_is_used_ledger'), argv)
+            self.assertEqual(run.stages(), [])
+        self.assertEqual((self.root / w.USED_LEDGER).read_bytes(), ledger)
+        run = self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        self.assertEqual((rc, out['reason']), (1, 'approval_already_used'))
+        self.assertNotIn('exec', run.stages())
+
+    def test_same_approval_copied_to_another_checkout_is_refused(self):
+        # Codex PR#10 第5回審査: 同じ receipt と承認を別の checkout B に写すと、B の台帳が空なので再び exec に進めた
+        p = self.place('approval-ok.json')
+        rc, out = self.go(['--approval-file', str(p)], self.run_())
+        self.assertEqual((rc, out['ok']), (0, True))
+        other = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, other, True)
+        (other / '.quality').mkdir()
+        (other / '.quality' / 'preflight-receipt.json').write_bytes(RECEIPT_BYTES)
+        shutil.copy(FX / 'approval-ok.json', other / 'approval.json')
+        run = FakeRun(other)
+        out_io = io.StringIO()
+        rc = w.main(['--root', str(other), '--approval-file', str(other / 'approval.json')], run=run, stdin=io.StringIO(''),
+                    stdout=out_io, isatty=True, now=NOW)
+        self.assertEqual((rc, json.loads(out_io.getvalue().strip().splitlines()[-1])['reason']), (1, 'approval_already_used'))
+        self.assertNotIn('exec', run.stages())
+        self.assertFalse((other / w.USED_LEDGER).exists() and (other / w.USED_LEDGER).read_bytes())
+
+    def test_hardlinked_ledgers_do_not_deadlock_and_record_once(self):
+        # Codex PR#10 第6回審査: 同じ実体の台帳2本を別々に flock して自己デッドロックした
+        w.USER_LEDGER.parent.mkdir(parents=True)
+        w.USER_LEDGER.write_bytes(b'')
+        os.link(w.USER_LEDGER, self.root / w.USED_LEDGER)
+        import threading
+        res = {}
+        t = threading.Thread(target=lambda: res.setdefault('r', w.consume(self.root, 'f' * 64)), daemon=True)
+        t.start(); t.join(10)
+        self.assertFalse(t.is_alive(), 'consume がロック待ちで止まった')
+        self.assertEqual(res.get('r'), True)
+        self.assertEqual(w.USER_LEDGER.read_bytes(), b'f' * 64 + b'\n')
+        with self.assertRaises(w.Deny):
+            w.consume(self.root, 'f' * 64)
+
+    def test_torn_last_line_does_not_swallow_the_next_sha(self):
+        # Codex PR#10 第7回審査: 途中で切れた行の後ろに次の SHA が連結され、その SHA の使用済み判定が漏れた
+        w.USER_LEDGER.parent.mkdir(parents=True)
+        w.USER_LEDGER.write_bytes(b'a' * 10)
+        self.assertTrue(w.consume(self.root, 'b' * 64))
+        other = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, other, True)
+        with self.assertRaises(w.Deny) as cm:
+            w.consume(other, 'b' * 64)
+        self.assertEqual(str(cm.exception), 'approval_already_used')
+        self.assertEqual(w.USER_LEDGER.read_bytes(), b'a' * 10 + b'\n' + b'b' * 64 + b'\n')
+
+    def test_receipt_must_be_json_directly_under_quality(self):
+        # Codex PR#10 第4回審査: 入れ子の別 checkout の台帳を名指しできた
+        p = self.place('approval-ok.json')
+        for rel in ('A/.quality/deploy-approval-used.log', 'A/.quality/r.json', '.quality/other.log', 'r.json'):
+            run = self.run_()
+            rc, out = self.go(['--receipt', rel, '--prepare'], run)
+            self.assertEqual((rc, out['reason']), (1, 'receipt_location_invalid'), rel)
+            self.assertEqual(run.stages(), [])
+
     def test_receipt_outside_root_refused(self):
         p, run = self.place('approval-ok.json'), self.run_()
         rc, out = self.go(['--receipt', '../x.json', '--approval-file', str(p)], run)
@@ -208,6 +284,41 @@ class Gates(Base):
         rc, out = self.go(['--approval-file', str(p)], run)
         ex = [c for c in run.calls if '--exec' in c][0]
         self.assertEqual(ex[ex.index('--expect-receipt-sha256') + 1], out['receipt_sha256'])
+
+    def test_verify_is_pinned_to_the_approved_receipt_hash(self):
+        # Devin 追補1: 配備後に receipt を差し替えて verify を偽らせない
+        p, run = self.place('approval-ok.json'), self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        self.assertEqual(rc, 0)
+        ve = [c for c in run.calls if '--verify' in c][0]
+        self.assertEqual(ve[ve.index('--expect-receipt-sha256') + 1], out['receipt_sha256'])
+
+    def test_bom_receipt_is_refused_before_ledger_and_exec(self):
+        # Codex 追補: bytes のまま json.loads すると BOM 付きを受け入れていた
+        (self.root / '.quality' / 'preflight-receipt.json').write_bytes(b'\xef\xbb\xbf' + RECEIPT_BYTES)
+        p, run = self.place('approval-ok.json'), self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        self.assertEqual((rc, out['reason']), (1, 'receipt_invalid_json'))
+        self.assertEqual(run.calls, [])
+        self.assertFalse((self.root / w.USED_LEDGER).exists())
+
+    def test_missing_loop_fifo_or_symlinked_receipt_is_a_denial(self):
+        # Devin 追補3 + Codex 反証: 確認と読込を1回の open(O_NOFOLLOW) にし、差し替え後も traceback・停止しない
+        rp = self.root / '.quality' / 'preflight-receipt.json'
+        for make in ('missing', 'loop', 'fifo', 'same_content_symlink'):
+            if rp.is_symlink() or rp.exists():
+                rp.unlink()
+            if make == 'loop':
+                rp.symlink_to(rp.name)
+            elif make == 'fifo':
+                os.mkfifo(str(rp))
+            elif make == 'same_content_symlink':
+                real = self.root / 'real.json'; real.write_bytes(RECEIPT_BYTES); rp.symlink_to(real)
+            p, run = self.place('approval-ok.json'), self.run_()
+            rc, out = self.go(['--approval-file', str(p)], run)
+            self.assertEqual((rc, out['reason']), (1, 'receipt_missing'), make)
+            self.assertEqual(run.calls, [], make)
+            self.assertFalse((self.root / w.USED_LEDGER).exists(), make)
 
     def test_wrapper_never_calls_wrangler_directly(self):
         p, run = self.place('approval-ok.json'), self.run_()
