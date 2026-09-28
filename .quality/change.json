@@ -1,50 +1,37 @@
 {
-  "task_id": "coding-standard-enforcement-deploy-with-approval-wave3-20260926",
-  "owner": "parallel-handoffs/01 wave3 (Claude調査) → 統合担当が適用",
+  "task_id": "x-request-05-aspects-store-count-20260928",
+  "owner": "x-request-05 (Claude調査・差分案) → 本人「全部おすすめで」承認(2026-09-28)で PR 化",
   "acceptance": [
-    "deploy_with_approval.py は承認を receipt の sha256 と head/bundle/cfg に束縛し、使った receipt_sha256 を追記台帳で拒否する。承認ファイル方式は --prepare と --approval-file の2段で、後者は preflight を再実行せず exec 側の再検証に委ねる（隔離試験22件。旧実装では15件失敗）",
-    "deploy_preflight.py --verify の読み方を fixture で固定する(receipt より古い配備を採用しない)",
-    "既存 deploy_preflight の27試験・quality_gate を維持。配備・wrangler 書込は行わない"
+    "業種別の観点チップ(最大3つ)を表示し、4つ目は「選べるのは3つまでです。」で拒否する。文言は評価語を含まない(飲食=料理・飲み物/接客/店内の雰囲気/待ち時間/価格 ほか)",
+    "/api/draft で口コミリンクを正規化キーにして salted hash だけを D1 store_seen に INSERT OR IGNORE する。/maps 系はクエリ(cid,q等)を保持し hl/gl/utm_* だけ除く(別店舗が1件に潰れない)。記録失敗は応答を変えない。/api/health に store_count_hashes:true を追加(既存キーは不変)",
+    "privacy.html に、投稿先URLをハッシュにして利用店舗数を数えるためだけに記録する旨を追記",
+    "node --test intake-beta/tests/worker.test.mjs 29/29 合格(追加の maps 試験は修正前コードで1件失敗を確認)。配備・D1書込はこの PR では行わない"
   ],
   "reuse": [
     {
-      "path": "scripts/deploy_preflight.py",
+      "path": "intake-beta/worker.mjs",
       "decision": "extend",
-      "reason": "--exec に --expect-receipt-sha256 を1つ足すだけ。指定時は読み込んだ receipt の中身の sha256 が違えば gather 前に拒否。既存の判定・再検証は変更しない"
+      "reason": "既存の QUOTA(D1) バインディングと validGoogle と同じ許可リストを使い、store_seen への記録を1関数足すだけ。既存の quota 判定は変更しない"
     },
     {
-      "path": "scripts/quality_gate.py",
+      "path": "intake-beta/public/app.js",
       "decision": "extend",
-      "reason": "GOVERNANCE に承認wrapper・試験2本・fixture 8件をファイル名で列挙して追加するだけ。接頭辞での範囲拡大はしない。既存規則は維持"
+      "reason": "既存の業種選択に aspectSets を足し、選んだ観点を下書きの前に付けるだけ"
     },
     {
-      "path": "scripts/test_quality_gate.py",
+      "path": "intake-beta/tests/worker.test.mjs",
       "decision": "extend",
-      "reason": "範囲追加の試験を1件追加"
-    },
-    {
-      "path": "scripts/test_deploy_preflight.py",
-      "decision": "extend",
-      "reason": "receipt 差し替え拒否の試験を1件追加"
+      "reason": "storeKey 正規化と記録の試験を既存ファイルに追加"
     }
   ],
   "changed_files": [
-    "scripts/deploy_with_approval.py",
-    "scripts/fixtures/approval/approval-before-receipt.json",
-    "scripts/fixtures/approval/approval-no-tz.json",
-    "scripts/fixtures/approval/approval-ok.json",
-    "scripts/fixtures/approval/approval-wrong-bundle.json",
-    "scripts/fixtures/approval/approval-wrong-head.json",
-    "scripts/fixtures/approval/interactive-y.txt",
-    "scripts/fixtures/approval/interactive-yes.txt",
-    "scripts/fixtures/approval/receipt-a8385dc.json",
-    "scripts/test_deploy_verify_fixture.py",
-    "scripts/test_deploy_with_approval.py",
-    ".quality/change.json",
-    "scripts/quality_gate.py",
-    "scripts/test_quality_gate.py",
-    "scripts/deploy_preflight.py",
-    "scripts/test_deploy_preflight.py"
+    "intake-beta/public/app.js",
+    "intake-beta/public/index.html",
+    "intake-beta/public/privacy.html",
+    "intake-beta/schema.sql",
+    "intake-beta/tests/worker.test.mjs",
+    "intake-beta/worker.mjs",
+    ".quality/change.json"
   ],
-  "adoption_scope_note": "origin/main a8385dc を基点にした隔離worktree。配備なし。証跡は ai-company-visibility/live-ops/development-throughput-ops/parallel-handoffs/01/wave3/。"
+  "adoption_scope_note": "origin/main b3d2606 基点の新規クローン(~/tasks/x-request-05/repo)。配備なし。差分の原本は ai-company-visibility/live-ops/store-saas-ops/x-request-05/hitokoto-aspects-store-count.patch"
 }
