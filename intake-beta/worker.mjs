@@ -24,17 +24,28 @@ export function validInput(data) {
   return data && typeof data.text==='string' && data.text.trim().length>0 && data.text.length<=600 &&
     typeof data.storeName==='string' && data.storeName.length<=80 && !UNSAFE_CHARS.test(data.text) && !UNSAFE_CHARS.test(data.storeName);
 }
+// Shared gate for POST APIs: method, same-origin (or ALLOWED_ORIGINS), JSON MIME.
+// ALLOWED_ORIGINS: comma-separated origins. When set it is the whole allowlist (url.origin is not implied); unset means url.origin only.
+function refuse(request,env,url) {
+  if(request.method!=='POST')return json({error:'method_not_allowed'},405);
+  const allowedOrigins=((env.ALLOWED_ORIGINS||'').trim()||url.origin).split(',').map(o=>o.trim()).filter(Boolean);
+  if(!allowedOrigins.includes(request.headers.get('origin')))return json({error:'origin_not_allowed'},403);
+  if(request.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json')return json({error:'json_required'},415);
+  return null;
+}
+// Anonymous funnel counts (instruction-025 A). Only the step name and the UTC day are kept, as quota rows 'ev:YYYY-MM-DD:<step>'.
+// No store name, text, IP, hash or session id is sent or stored, so the counts cannot be tied to a store or a person.
+// Rows are outside the 3-day ip:/day: cleanup; each step caps at EVENT_DAILY_CAP per day and never touches the AI quota rows.
+export const FUNNEL_EVENTS=['view','draft','copy','google','direct'];
+export const EVENT_DAILY_CAP=5000;
+export const validEvent=data=>Boolean(data)&&typeof data==='object'&&!Array.isArray(data)&&Object.keys(data).length===1&&FUNNEL_EVENTS.includes(data.event);
 export const unchangedMeaning = (a,b) => a.replace(/[\s。、，,.!?！？「」『』"“”]/gu,'')===b.replace(/[\s。、，,.!?！？「」『』"“”]/gu,'');
 export default {
   async fetch(request,env,ctx) {
     const url=new URL(request.url);
     if(url.pathname==='/api/health')return json({status:'ok',service:'hitokoto-beta',stores_saved:false,reviews_posted:false});
     if(url.pathname==='/api/draft'){
-      if(request.method!=='POST')return json({error:'method_not_allowed'},405);
-      // ALLOWED_ORIGINS: comma-separated origins. When set it is the whole allowlist (url.origin is not implied); unset means url.origin only.
-      const allowedOrigins=((env.ALLOWED_ORIGINS||'').trim()||url.origin).split(',').map(o=>o.trim()).filter(Boolean);
-      if(!allowedOrigins.includes(request.headers.get('origin')))return json({error:'origin_not_allowed'},403);
-      if(request.headers.get('content-type')?.split(';')[0].trim().toLowerCase()!=='application/json')return json({error:'json_required'},415);
+      const refused=refuse(request,env,url);if(refused)return refused;
       let data;try{data=await boundedJSON(request);}catch(e){return json({error:'invalid_input'},e.message==='large'?413:400);}
       if(!validInput(data))return json({error:'invalid_input'},400);
       const text=data.text.trim();
@@ -72,6 +83,14 @@ export default {
         if(rejected)return fallback('ai_rejected_'+rejected);
         return json({draft,mode:'ai'});
       } catch(e) {return fallback('error',e);}
+    }
+    if(url.pathname==='/api/event'){
+      const refused=refuse(request,env,url);if(refused)return refused;
+      let data;try{data=await boundedJSON(request);}catch(e){return json({error:'invalid_input'},e.message==='large'?413:400);}
+      if(!validEvent(data))return json({error:'invalid_input'},400);
+      if(!env.QUOTA)return json({recorded:false});
+      try{return json({recorded:await reserve(env.QUOTA,'ev:'+new Date().toISOString().slice(0,10)+':'+data.event,EVENT_DAILY_CAP)});}
+      catch(e){console.error('event_error',String((e&&e.name)||'Error').slice(0,40));return json({recorded:false});}
     }
     if(url.pathname.startsWith('/api/'))return json({error:'not_found'},404);
     if(!['GET','HEAD'].includes(request.method))return json({error:'method_not_allowed'},405);
