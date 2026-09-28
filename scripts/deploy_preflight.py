@@ -25,7 +25,9 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -257,25 +259,83 @@ def verify_against_receipt(receipt, deployments_json, versions_json):
             'checks': checks, 'tag': ann.get('workers/tag')}
 
 
+def read_nofollow_regular(path):
+    """最後の要素が symlink なら開かない。開いた fd が通常ファイルのときだけ中身を返し、それ以外は None。
+    O_NONBLOCK は FIFO に差し替えられた場合に open で止まらないため（通常ファイルには影響しない）。"""
+    try:
+        fd = os.open(str(path), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        chunks = []
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b''.join(chunks)
+    finally:
+        os.close(fd)
+
+
+def write_receipt(rpath, data):
+    """同じディレクトリの一時ファイルに書いてから rename で置き換える。rename は置き場所の名前そのものを差し替えるので、
+    そこが symlink でも辿って先を書き換えず、FIFO でも読み手待ちで止まらない（ディレクトリなら OSError）。"""
+    import tempfile
+    rpath.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(rpath.parent), prefix='.preflight-receipt-')
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, str(rpath))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def load_receipt(rpath, rel, expect_sha=None):
+    """receipt を1回だけ読み、その同じバイト列でハッシュ照合と解釈を行う。
+    preflight 自身が BOM 無しの UTF-8 で書くので、BOM 付き・UTF-8 でない・JSON object でないものは拒否する
+    （bytes を json.loads に渡すと BOM を黙って受け入れるため、str に厳格に復号してから解釈する）。
+    確認と読み込みを1回の open（O_NOFOLLOW・fstat で通常ファイルか確認）で行うので、確認後に symlink・FIFO・
+    循環リンクへ差し替えられても辿らず、消された場合も含めて traceback でなく receipt_missing で止める。"""
+    raw = read_nofollow_regular(rpath)
+    if raw is None:
+        raise Refuse('receipt_missing:' + rel)
+    if expect_sha and hashlib.sha256(raw).hexdigest() != expect_sha:
+        raise Refuse('receipt_changed_since_approval')
+    try:
+        receipt = json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError, ValueError):
+        raise Refuse('receipt_invalid_json')
+    if not isinstance(receipt, dict):
+        raise Refuse('receipt_invalid_json')
+    return receipt
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--root', default=str(Path(__file__).resolve().parents[1]))
     ap.add_argument('--wrangler', default='wrangler')
     ap.add_argument('--receipt', default=DEFAULT_RECEIPT, help='判定結果の控え（root 相対、追跡しない）')
     ap.add_argument('--exec', action='store_true', help='receipt を再検証してから同一プロセスで wrangler を実行')
-    ap.add_argument('--expect-receipt-sha256', help='--exec 時: 読み込んだ receipt の中身の sha256 がこれと違えば拒否（承認後の差し替え防止）')
+    ap.add_argument('--expect-receipt-sha256', help='--exec では必須、--verify では任意: 読み込んだ receipt の中身の sha256 がこれと違えば拒否（承認後の差し替え防止）')
     ap.add_argument('--verify', action='store_true', help='配備後: receipt より新しい最新配備の注釈を照合')
     a = ap.parse_args()
     root = Path(a.root)
     rpath = root / a.receipt
     try:
+        if a.exec and not a.expect_receipt_sha256:
+            raise Refuse('exec_requires_expect_receipt_sha256')
         if a.exec or a.verify:
-            if not rpath.is_file():
-                raise Refuse('receipt_missing:' + a.receipt)
-            raw = rpath.read_bytes()
-            if a.expect_receipt_sha256 and hashlib.sha256(raw).hexdigest() != a.expect_receipt_sha256:
-                raise Refuse('receipt_changed_since_approval')
-            receipt = json.loads(raw)
+            receipt = load_receipt(rpath, a.receipt, a.expect_receipt_sha256)
         if a.verify:
             deps = sh([a.wrangler, 'deployments', 'list', '--config', CONFIG, '--json'], root)
             vers = sh([a.wrangler, 'versions', 'list', '--config', CONFIG, '--json'], root)
@@ -298,8 +358,11 @@ def main():
     cmd = build_command(a.wrangler, g, basis)
     receipt = {'issued_at': now_utc(), 'head': g['head'], 'cfg_sha': g['cfg_sha'], 'bundle_sha': g['bundle_sha'],
                'inputs': g['inputs'], 'ci_run_id': g['run_id'], 'basis': basis, 'command': cmd}
-    rpath.parent.mkdir(parents=True, exist_ok=True)
-    rpath.write_text(json.dumps(receipt, ensure_ascii=False, indent=1))
+    try:
+        write_receipt(rpath, json.dumps(receipt, ensure_ascii=False, indent=1).encode('utf-8'))
+    except OSError:
+        print(json.dumps({'allow': False, 'reason': 'receipt_unwritable:' + a.receipt}))
+        return 1
     print(json.dumps({'allow': True, 'basis': basis, 'head': g['head'], 'ci_run_id': g['run_id'],
                       'cfg_sha12': g['cfg_sha'][:12], 'bundle_sha12': g['bundle_sha'][:12],
                       'inputs': g['inputs'], 'receipt': a.receipt, 'command': cmd}, ensure_ascii=False))

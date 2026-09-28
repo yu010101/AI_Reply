@@ -191,6 +191,140 @@ class ExecPinnedReceipt(unittest.TestCase):
         self.assertEqual(called, [])
 
 
+
+class ReceiptLoadFollowUps(unittest.TestCase):
+    """PR#8 審査の追補: --exec はハッシュ必須・--verify もハッシュ照合・BOM付きは拒否・読み込み競合は receipt_missing。"""
+    def run_main(self, root, args):
+        import io, contextlib, sys
+        called = []
+        orig_g, orig_sh = m.gather, m.sh
+        m.gather = lambda r: called.append('gather') or (_ for _ in ()).throw(AssertionError('gather must not run'))
+        m.sh = lambda *a, **k: called.append('sh') or (_ for _ in ()).throw(AssertionError('wrangler must not run'))
+        argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(root)] + args
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                rc = m.main()
+        finally:
+            sys.argv, m.gather, m.sh = argv, orig_g, orig_sh
+        return rc, json.loads(out.getvalue().strip().splitlines()[-1]), called
+
+    def root_with(self, raw):
+        root = Path(tempfile.mkdtemp()); (root / '.quality').mkdir()
+        (root / m.DEFAULT_RECEIPT).write_bytes(raw)
+        return root
+
+    def sha(self, raw):
+        import hashlib
+        return hashlib.sha256(raw).hexdigest()
+
+    GOOD = json.dumps({'head': H, 'issued_at': '2026-09-25T10:00:00+00:00'}).encode()
+
+    def test_exec_without_pin_is_refused_before_gather(self):
+        rc, out, called = self.run_main(self.root_with(self.GOOD), ['--exec'])
+        self.assertEqual((rc, out['reason'], called), (1, 'exec_requires_expect_receipt_sha256', []))
+
+    def test_bom_receipt_is_refused_even_when_hash_matches(self):
+        raw = b'\xef\xbb\xbf' + self.GOOD
+        rc, out, called = self.run_main(self.root_with(raw), ['--exec', '--expect-receipt-sha256', self.sha(raw)])
+        self.assertEqual((rc, out['reason'], called), (1, 'receipt_invalid_json', []))
+        rc, out, called = self.run_main(self.root_with(raw), ['--verify'])
+        self.assertEqual((rc, out['reason'], called), (1, 'receipt_invalid_json', []))
+
+    def test_non_object_or_non_utf8_receipt_is_refused(self):
+        for raw in (b'[1, 2]', b'\xff\xfe{}', b'not json'):
+            rc, out, called = self.run_main(self.root_with(raw), ['--exec', '--expect-receipt-sha256', self.sha(raw)])
+            self.assertEqual((rc, out['reason'], called), (1, 'receipt_invalid_json', []), raw)
+
+    def test_verify_with_mismatched_pin_does_not_query_wrangler(self):
+        root = self.root_with(json.dumps({'head': 'b' * 40, 'issued_at': '2026-09-25T10:01:00+00:00'}).encode())
+        rc, out, called = self.run_main(root, ['--verify', '--expect-receipt-sha256', self.sha(self.GOOD)])
+        self.assertEqual((rc, out['reason'], called), (1, 'receipt_changed_since_approval', []))
+
+    def test_missing_loop_or_fifo_receipt_is_a_refusal_not_a_traceback_or_hang(self):
+        # Codex 反証: 確認後の差し替え（循環リンク=ELOOP, FIFO=open で停止）は、確認と読込を1回の open にして塞ぐ
+        import os
+        for make in ('missing', 'loop', 'fifo', 'dir'):
+            root = self.root_with(self.GOOD); rp = root / m.DEFAULT_RECEIPT; rp.unlink()
+            if make == 'loop':
+                rp.symlink_to(rp.name)
+            elif make == 'fifo':
+                os.mkfifo(str(rp))
+            elif make == 'dir':
+                rp.mkdir()
+            rc, out, called = self.run_main(root, ['--exec', '--expect-receipt-sha256', self.sha(self.GOOD)])
+            self.assertEqual((rc, out['reason'], called), (1, 'receipt_missing:' + m.DEFAULT_RECEIPT, []), make)
+
+    def test_receipt_is_read_with_one_nofollow_open(self):
+        # 確認(is_file/is_symlink)と読込を分けない: 読込関数だけで symlink を辿らないこと
+        root = self.root_with(self.GOOD)
+        real = root / 'same.json'; real.write_bytes(self.GOOD)
+        link = root / 'link.json'; link.symlink_to(real)
+        self.assertIsNone(m.read_nofollow_regular(link))
+        self.assertEqual(m.read_nofollow_regular(real), self.GOOD)
+        src = Path(m.__file__).read_text().split('def load_receipt(')[1].split('\ndef ')[0]
+        self.assertNotIn('is_file()', src); self.assertNotIn('read_bytes()', src)
+
+    def test_symlinked_receipt_is_refused(self):
+        root = self.root_with(self.GOOD)
+        real = root / 'elsewhere.json'; real.write_bytes(self.GOOD)
+        (root / m.DEFAULT_RECEIPT).unlink(); (root / m.DEFAULT_RECEIPT).symlink_to(real)
+        rc, out, called = self.run_main(root, ['--exec', '--expect-receipt-sha256', self.sha(self.GOOD)])
+        self.assertEqual((rc, out['reason'], called), (1, 'receipt_missing:' + m.DEFAULT_RECEIPT, []))
+
+
+class ReceiptWrite(unittest.TestCase):
+    """Codex 反証(第2版): 判定モードの receipt 書込が symlink を辿り、FIFO で止まっていた。rename で置き換える。"""
+    G = {'head': H, 'origin_main': H, 'dirty': [], 'conclusions': {'quality': 'success'}, 'fallback': None,
+         'cfg_sha': 'c' * 64, 'bundle_sha': 'b' * 64, 'inputs': ['intake-beta/worker.mjs'], 'run_id': 1}
+
+    def judge(self, root):
+        import io, contextlib, sys
+        og, od = m.gather, m.decide
+        m.gather, m.decide = (lambda r: dict(self.G)), (lambda *a: 'direct')
+        argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(root)]
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                rc = m.main()
+        finally:
+            sys.argv, m.gather, m.decide = argv, og, od
+        return rc, json.loads(out.getvalue().strip().splitlines()[-1])
+
+    def test_writes_plain_utf8_receipt_that_exec_can_load(self):
+        root = Path(tempfile.mkdtemp())
+        rc, out = self.judge(root)
+        rp = root / m.DEFAULT_RECEIPT
+        self.assertEqual((rc, out['allow']), (0, True))
+        raw = rp.read_bytes()
+        self.assertFalse(raw.startswith(b'\xef\xbb\xbf'))
+        self.assertEqual(m.load_receipt(rp, m.DEFAULT_RECEIPT)['head'], H)
+        self.assertEqual([x.name for x in rp.parent.iterdir()], [rp.name])  # 一時ファイルを残さない
+
+    def test_symlink_at_receipt_path_is_replaced_not_followed(self):
+        root = Path(tempfile.mkdtemp()); (root / '.quality').mkdir()
+        victim = root / 'victim.txt'; victim.write_bytes(b'keep')
+        (root / m.DEFAULT_RECEIPT).symlink_to(victim)
+        rc, out = self.judge(root)
+        self.assertEqual(rc, 0)
+        self.assertEqual(victim.read_bytes(), b'keep')
+        self.assertFalse((root / m.DEFAULT_RECEIPT).is_symlink())
+
+    def test_fifo_at_receipt_path_does_not_hang(self):
+        import os
+        root = Path(tempfile.mkdtemp()); (root / '.quality').mkdir()
+        os.mkfifo(str(root / m.DEFAULT_RECEIPT))
+        rc, out = self.judge(root)  # 旧実装はここで読み手待ちのまま止まる
+        self.assertEqual(rc, 0)
+        self.assertTrue((root / m.DEFAULT_RECEIPT).is_file())
+
+    def test_directory_at_receipt_path_is_a_refusal(self):
+        root = Path(tempfile.mkdtemp()); (root / m.DEFAULT_RECEIPT).mkdir(parents=True)
+        (root / m.DEFAULT_RECEIPT / 'x').write_bytes(b'')
+        rc, out = self.judge(root)
+        self.assertEqual((rc, out['allow'], out['reason']), (1, False, 'receipt_unwritable:' + m.DEFAULT_RECEIPT))
+        self.assertEqual(sorted(x.name for x in (root / '.quality').iterdir()), ['preflight-receipt.json'])
+
 class VerifyAfterReceipt(unittest.TestCase):
     """統合レビュー指摘5: deployment を確定できないときに『最新』を採用してはいけない。"""
     R = {'head': H, 'cfg_sha': 'c' * 64, 'bundle_sha': 'b' * 64, 'issued_at': '2026-09-25T10:00:00+00:00'}

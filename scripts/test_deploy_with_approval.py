@@ -209,6 +209,41 @@ class Gates(Base):
         ex = [c for c in run.calls if '--exec' in c][0]
         self.assertEqual(ex[ex.index('--expect-receipt-sha256') + 1], out['receipt_sha256'])
 
+    def test_verify_is_pinned_to_the_approved_receipt_hash(self):
+        # Devin 追補1: 配備後に receipt を差し替えて verify を偽らせない
+        p, run = self.place('approval-ok.json'), self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        self.assertEqual(rc, 0)
+        ve = [c for c in run.calls if '--verify' in c][0]
+        self.assertEqual(ve[ve.index('--expect-receipt-sha256') + 1], out['receipt_sha256'])
+
+    def test_bom_receipt_is_refused_before_ledger_and_exec(self):
+        # Codex 追補: bytes のまま json.loads すると BOM 付きを受け入れていた
+        (self.root / '.quality' / 'preflight-receipt.json').write_bytes(b'\xef\xbb\xbf' + RECEIPT_BYTES)
+        p, run = self.place('approval-ok.json'), self.run_()
+        rc, out = self.go(['--approval-file', str(p)], run)
+        self.assertEqual((rc, out['reason']), (1, 'receipt_invalid_json'))
+        self.assertEqual(run.calls, [])
+        self.assertFalse((self.root / w.USED_LEDGER).exists())
+
+    def test_missing_loop_fifo_or_symlinked_receipt_is_a_denial(self):
+        # Devin 追補3 + Codex 反証: 確認と読込を1回の open(O_NOFOLLOW) にし、差し替え後も traceback・停止しない
+        rp = self.root / '.quality' / 'preflight-receipt.json'
+        for make in ('missing', 'loop', 'fifo', 'same_content_symlink'):
+            if rp.is_symlink() or rp.exists():
+                rp.unlink()
+            if make == 'loop':
+                rp.symlink_to(rp.name)
+            elif make == 'fifo':
+                os.mkfifo(str(rp))
+            elif make == 'same_content_symlink':
+                real = self.root / 'real.json'; real.write_bytes(RECEIPT_BYTES); rp.symlink_to(real)
+            p, run = self.place('approval-ok.json'), self.run_()
+            rc, out = self.go(['--approval-file', str(p)], run)
+            self.assertEqual((rc, out['reason']), (1, 'receipt_missing'), make)
+            self.assertEqual(run.calls, [], make)
+            self.assertFalse((self.root / w.USED_LEDGER).exists(), make)
+
     def test_wrapper_never_calls_wrangler_directly(self):
         p, run = self.place('approval-ok.json'), self.run_()
         self.go(['--approval-file', str(p)], run)

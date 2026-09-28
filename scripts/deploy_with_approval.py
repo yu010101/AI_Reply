@@ -14,7 +14,8 @@
                     exec 側（deploy_preflight --exec）は fetch・CI照会・判定をやり直し、receipt と
                     今の状態（head/cfg/bundle/コマンド）が一致しなければ拒否する。承認後に main が進めば配備されない。
 exec には承認した receipt の sha256 を --expect-receipt-sha256 で渡し、deploy_preflight が読み込んだ中身の
-ハッシュが違えば拒否する（承認後から exec までの receipt 差し替えを防ぐ）。
+ハッシュが違えば拒否する（承認後から exec までの receipt 差し替えを防ぐ）。verify にも同じハッシュを渡し、
+配備後に receipt を差し替えて照合結果を偽らせることも防ぐ。deploy_preflight --exec はこのハッシュ無しでは動かない。
 限界: どれも「人間が操作した」ことを暗号的には証明しない。同じユーザー権限でリポジトリに書ける相手は、
 台帳の削除や wrangler の直接実行もできるので、この wrapper はそうした相手からは守らない。TTY は pty を作れるエージェントなら偽装でき、
 ファイルはエージェントでも書ける。承認の実体は運用規則（エージェントは承認ファイルを書かない・yes を打たない）で守る。
@@ -78,6 +79,27 @@ def read_regular_file(path):
         os.close(fd)
 
 
+def read_receipt_file(path):
+    """receipt を確認と読み込みを兼ねた1回の open で読む（O_NOFOLLOW・fstat で通常ファイルか確認）。
+    確認後に symlink・FIFO・循環リンクへ差し替えられても辿らず、消えた場合も含めて receipt_missing で止める。"""
+    try:
+        fd = os.open(str(path), os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+    except OSError:
+        raise Deny('receipt_missing')
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise Deny('receipt_missing')
+        chunks = []
+        while True:
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        return b''.join(chunks)
+    finally:
+        os.close(fd)
+
+
 def check_approval(receipt, receipt_sha, raw, now=None):
     """承認内容が、この receipt（sha256 と head/bundle/cfg）に束縛され、新しいことを確かめる。純粋関数。"""
     if len(raw) > 65536:
@@ -135,8 +157,15 @@ def consume(root, receipt_sha):
 
 
 def receipt_path(root, rel):
-    p = (root / rel).resolve()
-    if not p.is_relative_to(root.resolve()):
+    """親ディレクトリだけを解決し、最後の要素は辿らない（receipt 自体が symlink なら read_receipt_file が拒否する）。
+    以前は最後の要素まで resolve していたため、root 内を指す symlink の receipt を実体として受け入れ、循環リンクでは traceback になった。"""
+    raw = root / rel
+    try:
+        p = raw.parent.resolve() / raw.name
+        inside = p.is_relative_to(root.resolve())
+    except (OSError, RuntimeError):
+        raise Deny('receipt_missing')
+    if not inside:
         raise Deny('receipt_outside_root')
     return p
 
@@ -183,12 +212,13 @@ def main(argv=None, run=subprocess.run, stdin=sys.stdin, stdout=sys.stdout, isat
             rc, res = run_json(run, base, root)
             if rc != 0 or not res.get('allow'):
                 raise Deny('preflight_refused:%s' % res.get('reason'))
-        if rpath.is_symlink() or not rpath.is_file():
-            raise Deny('receipt_missing')
-        raw_receipt = rpath.read_bytes()
+        raw_receipt = read_receipt_file(rpath)
         try:
-            receipt = json.loads(raw_receipt)
-        except ValueError:
+            # deploy_preflight と同じく BOM 付き・非UTF-8 は拒否する（bytes のまま json.loads すると BOM を受け入れる）
+            receipt = json.loads(raw_receipt.decode('utf-8'))
+        except (UnicodeDecodeError, ValueError):
+            raise Deny('receipt_invalid_json')
+        if not isinstance(receipt, dict):
             raise Deny('receipt_invalid_json')
         receipt_sha = hashlib.sha256(raw_receipt).hexdigest()
         out['receipt_sha256'] = receipt_sha
@@ -216,7 +246,7 @@ def main(argv=None, run=subprocess.run, stdin=sys.stdin, stdout=sys.stdout, isat
         if p.returncode != 0:
             raise Deny('exec_failed_rc_%d' % p.returncode)
         out['stage'] = 'verify'
-        rc, ver = run_json(run, base + ['--verify'], root)
+        rc, ver = run_json(run, base + ['--verify', '--expect-receipt-sha256', receipt_sha], root)
         out['verify'] = ver
         if rc != 0:
             raise Deny('verify_failed')
