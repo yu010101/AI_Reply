@@ -158,6 +158,7 @@ def consume(root, receipt_sha):
         try:
             for fd in targets:
                 fcntl.flock(fd, fcntl.LOCK_EX)
+            tails = []
             for fd in targets:
                 os.lseek(fd, 0, os.SEEK_SET)
                 seen = b''
@@ -168,8 +169,10 @@ def consume(root, receipt_sha):
                     seen += chunk
                 if receipt_sha.encode() in seen.split():
                     raise Deny('approval_already_used')
-            line = (receipt_sha + '\n').encode()
-            for fd in targets:
+                tails.append(bool(seen) and not seen.endswith(b'\n'))
+            for fd, torn in zip(targets, tails):
+                # 前回の書込みが途中で切れて改行が無いなら、先に改行を足して次の SHA が前の断片と連結されないようにする（Codex PR#10 第7回審査）
+                line = (b'\n' if torn else b'') + (receipt_sha + '\n').encode()
                 done = 0
                 while done < len(line):  # 短い書込みでも行を欠けさせない
                     done += os.write(fd, line[done:])

@@ -197,6 +197,17 @@ class ApprovalFile(Base):
         with self.assertRaises(w.Deny):
             w.consume(self.root, 'f' * 64)
 
+    def test_torn_last_line_does_not_swallow_the_next_sha(self):
+        # Codex PR#10 第7回審査: 途中で切れた行の後ろに次の SHA が連結され、その SHA の使用済み判定が漏れた
+        w.USER_LEDGER.parent.mkdir(parents=True)
+        w.USER_LEDGER.write_bytes(b'a' * 10)
+        self.assertTrue(w.consume(self.root, 'b' * 64))
+        other = Path(tempfile.mkdtemp()); self.addCleanup(shutil.rmtree, other, True)
+        with self.assertRaises(w.Deny) as cm:
+            w.consume(other, 'b' * 64)
+        self.assertEqual(str(cm.exception), 'approval_already_used')
+        self.assertEqual(w.USER_LEDGER.read_bytes(), b'a' * 10 + b'\n' + b'b' * 64 + b'\n')
+
     def test_receipt_must_be_json_directly_under_quality(self):
         # Codex PR#10 第4回審査: 入れ子の別 checkout の台帳を名指しできた
         p = self.place('approval-ok.json')
