@@ -312,6 +312,27 @@ class ReceiptWrite(unittest.TestCase):
             self.assertEqual((rc, json.loads(out.getvalue().strip().splitlines()[-1])['reason']), (1, 'receipt_is_used_ledger'), rel)
         self.assertEqual(led.read_bytes(), b'a' * 64 + b'\n')
 
+    def test_receipt_outside_root_is_refused(self):
+        # Codex PR#10 第3回審査: 別 checkout A の台帳を --root B --receipt <A の絶対パス> で書き換えられた
+        import io, contextlib, sys
+        a_root, b_root = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp())
+        led = a_root / m.USED_LEDGER
+        led.parent.mkdir(parents=True)
+        led.write_bytes(b'a' * 64 + b'\n')
+        for rel in (str(led), '../' + a_root.name + '/' + m.USED_LEDGER, str(a_root / 'x.json')):
+            argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(b_root), '--receipt', rel]
+            og, od = m.gather, m.decide
+            m.gather, m.decide = (lambda r: dict(self.G)), (lambda *a: 'direct')
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    rc = m.main()
+            finally:
+                sys.argv, m.gather, m.decide = argv, og, od
+            self.assertEqual((rc, json.loads(out.getvalue().strip().splitlines()[-1]).get('reason')), (1, 'receipt_outside_root'), rel)
+        self.assertEqual(led.read_bytes(), b'a' * 64 + b'\n')
+        self.assertFalse((a_root / 'x.json').exists())
+
     def test_writes_plain_utf8_receipt_that_exec_can_load(self):
         root = Path(tempfile.mkdtemp())
         rc, out = self.judge(root)

@@ -282,6 +282,16 @@ def read_nofollow_regular(path):
         os.close(fd)
 
 
+def receipt_inside_root(root, rel):
+    """receipt の置き場所（親ディレクトリだけ解決）が root の中か。wrapper の receipt_path と同じ規則。
+    root 外を許すと、別 checkout の台帳（絶対パス指定）を書き換えられる（Codex PR#10 第3回審査）。"""
+    try:
+        raw = Path(root) / rel
+        return (raw.parent.resolve() / raw.name).is_relative_to(Path(root).resolve())
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
 def is_used_ledger(root, rel):
     """receipt の置き場所が使用済み承認台帳を指すか。親ディレクトリだけ解決し、最後の要素は辿らない。
     大文字小文字を区別しない APFS では別綴りの名前でも同じ台帳を指すので、綴りの比較（casefold）に加えて
@@ -352,6 +362,8 @@ def main():
     root = Path(a.root)
     rpath = root / a.receipt
     try:
+        if not receipt_inside_root(root, a.receipt):
+            raise Refuse('receipt_outside_root')
         if is_used_ledger(root, a.receipt):
             raise Refuse('receipt_is_used_ledger')
         if a.exec and not a.expect_receipt_sha256:
