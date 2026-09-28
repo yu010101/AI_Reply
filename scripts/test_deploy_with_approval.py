@@ -182,6 +182,21 @@ class ApprovalFile(Base):
         self.assertNotIn('exec', run.stages())
         self.assertFalse((other / w.USED_LEDGER).exists() and (other / w.USED_LEDGER).read_bytes())
 
+    def test_hardlinked_ledgers_do_not_deadlock_and_record_once(self):
+        # Codex PR#10 第6回審査: 同じ実体の台帳2本を別々に flock して自己デッドロックした
+        w.USER_LEDGER.parent.mkdir(parents=True)
+        w.USER_LEDGER.write_bytes(b'')
+        os.link(w.USER_LEDGER, self.root / w.USED_LEDGER)
+        import threading
+        res = {}
+        t = threading.Thread(target=lambda: res.setdefault('r', w.consume(self.root, 'f' * 64)), daemon=True)
+        t.start(); t.join(10)
+        self.assertFalse(t.is_alive(), 'consume がロック待ちで止まった')
+        self.assertEqual(res.get('r'), True)
+        self.assertEqual(w.USER_LEDGER.read_bytes(), b'f' * 64 + b'\n')
+        with self.assertRaises(w.Deny):
+            w.consume(self.root, 'f' * 64)
+
     def test_receipt_must_be_json_directly_under_quality(self):
         # Codex PR#10 第4回審査: 入れ子の別 checkout の台帳を名指しできた
         p = self.place('approval-ok.json')

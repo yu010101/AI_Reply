@@ -144,15 +144,18 @@ def consume(root, receipt_sha):
             except OSError:
                 raise Deny('used_ledger_unusable')
             fds.append(fd)
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
-                raise Deny('used_ledger_unusable')
+        # 同じ実体（hardlink や root の重なり）を2本の fd で flock すると自分同士で待ち合って止まるので、
+        # ロックの前に実体で重複を除き、残った1本ずつだけをロック・照合・記録する（Codex PR#10 第6回審査）
         targets, ids = [], set()
-        for fd in fds:  # 同じ実体（root が利用者台帳と重なる構成）なら1回だけ照合・記録する
-            ident = (os.fstat(fd).st_dev, os.fstat(fd).st_ino)
-            if ident not in ids:
-                ids.add(ident)
+        for fd in fds:
+            st = os.fstat(fd)
+            if not stat.S_ISREG(st.st_mode):
+                raise Deny('used_ledger_unusable')
+            if (st.st_dev, st.st_ino) not in ids:
+                ids.add((st.st_dev, st.st_ino))
                 targets.append(fd)
+        for fd in targets:
+            fcntl.flock(fd, fcntl.LOCK_EX)
         for fd in targets:
             os.lseek(fd, 0, os.SEEK_SET)
             seen = b''
