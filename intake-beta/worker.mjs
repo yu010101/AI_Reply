@@ -32,8 +32,8 @@ export function storeKey(raw){if(typeof raw!=='string'||raw.length>300||UNSAFE_C
   if(h==='maps.app.goo.gl'&&(m=/^\/([A-Za-z0-9_-]+)$/.exec(p)))return 'goo:'+m[1];
   if(h==='g.page'&&(m=/^\/(?:r\/)?([A-Za-z0-9_-]+)\/review$/.exec(p)))return 'gpage:'+m[1];
   if(h==='search.google.com'&&p==='/local/writereview'&&(m=/^([A-Za-z0-9_-]+)$/.exec(u.searchParams.get('placeid')||'')))return 'place:'+m[1];
-  // /maps links can identify the store only in the query (?cid=, ?q=, ?place_id=), so keep every parameter except locale and utm_* noise; dropping them would merge different stores and break the upper bound.
-  if(['www.google.com','google.com','www.google.co.jp','maps.google.com'].includes(h)&&/^\/maps(?:\/|$)/.test(u.pathname)){const q=[...u.searchParams].filter(([k])=>!/^(?:hl|gl|utm_.*)$/i.test(k)).map(([k,v])=>k+'='+v).sort().join('&');return 'maps:'+p+(q?'?'+q:'');}
+  // /maps links can identify the store only in the query (?cid=, ?q=, ?place_id=), so keep every parameter except locale and utm_* noise; dropping them would merge different stores and break the upper bound. A bare /maps link names no store and is not counted.
+  if(['www.google.com','google.com','www.google.co.jp','maps.google.com'].includes(h)&&/^\/maps(?:\/|$)/.test(u.pathname)){const q=[...u.searchParams].filter(([k])=>!/^(?:hl|gl|utm_.*)$/i.test(k)).map(([k,v])=>k+'='+v).sort().join('&');return p==='/maps'&&!q?null:'maps:'+p+(q?'?'+q:'');}
   return null;}
 export const countableReview=r=>storeKey(r)!==null;
 async function recordStore(env,review){const hash=await storeHash(env.QUOTA_SALT,storeKey(review));await env.QUOTA.prepare('INSERT OR IGNORE INTO store_seen (hash, first_day) VALUES (?,?)').bind(hash,new Date().toISOString().slice(0,10)).run();}
