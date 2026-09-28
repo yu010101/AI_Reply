@@ -283,10 +283,19 @@ def read_nofollow_regular(path):
 
 
 def is_used_ledger(root, rel):
-    """receipt の置き場所が使用済み承認台帳と同じ名前を指すか。親ディレクトリだけ解決して比べる（最後の要素は辿らない）。"""
+    """receipt の置き場所が使用済み承認台帳を指すか。親ディレクトリだけ解決し、最後の要素は辿らない。
+    大文字小文字を区別しない APFS では別綴りの名前でも同じ台帳を指すので、綴りの比較（casefold）に加えて
+    その名前が既にあれば lstat の (st_dev, st_ino) で台帳と同じ実体かも見る（Codex/Devin PR#10 再審査）。"""
     try:
         raw, led = Path(root) / rel, Path(root) / USED_LEDGER
-        return raw.parent.resolve() / raw.name == led.parent.resolve() / led.name
+        cand, target = raw.parent.resolve() / raw.name, led.parent.resolve() / led.name
+        if str(cand).casefold() == str(target).casefold():
+            return True
+        try:
+            a, b = os.lstat(cand), os.lstat(target)
+        except FileNotFoundError:
+            return False
+        return (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
     except (OSError, RuntimeError):
         return True
 

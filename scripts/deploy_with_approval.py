@@ -169,7 +169,15 @@ def receipt_path(root, rel):
         raise Deny('receipt_outside_root')
     led = root / USED_LEDGER
     try:
-        is_ledger = p == led.parent.resolve() / led.name
+        target = led.parent.resolve() / led.name
+        # 大文字小文字を区別しない APFS では別綴りでも同じ台帳を指す。綴りの casefold 比較と、既にある名前なら lstat の実体比較
+        is_ledger = str(p).casefold() == str(target).casefold()
+        if not is_ledger:
+            try:
+                a, b = os.lstat(p), os.lstat(target)
+                is_ledger = (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
+            except FileNotFoundError:
+                pass
     except (OSError, RuntimeError):
         is_ledger = True
     if is_ledger:

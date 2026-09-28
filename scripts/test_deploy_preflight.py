@@ -293,12 +293,13 @@ class ReceiptWrite(unittest.TestCase):
 
     def test_receipt_at_used_ledger_is_refused_and_ledger_untouched(self):
         # Codex PR#10 審査: 判定モードの receipt 書込が使用済み承認台帳を置き換えていた
-        import io, contextlib, sys
+        import io, contextlib, os, sys
         root = Path(tempfile.mkdtemp())
         led = root / m.USED_LEDGER
         led.parent.mkdir(parents=True)
         led.write_bytes(b'a' * 64 + b'\n')
-        for rel in (m.USED_LEDGER, '.quality/../.quality/deploy-approval-used.log'):
+        os.link(led, root / '.quality' / 'alias.json')
+        for rel in (m.USED_LEDGER, '.quality/../.quality/deploy-approval-used.log', '.quality/DEPLOY-APPROVAL-USED.LOG', '.quality/alias.json'):
             argv, sys.argv = sys.argv, ['deploy_preflight.py', '--root', str(root), '--receipt', rel]
             og, od = m.gather, m.decide
             m.gather, m.decide = (lambda r: dict(self.G)), (lambda *a: 'direct')

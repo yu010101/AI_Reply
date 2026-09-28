@@ -146,7 +146,9 @@ class ApprovalFile(Base):
         p = self.place('approval-ok.json')
         self.go(['--approval-file', str(p)], self.run_())
         ledger = (self.root / w.USED_LEDGER).read_bytes()
+        os.link(self.root / w.USED_LEDGER, self.root / '.quality' / 'alias.json')
         for argv in (['--receipt', w.USED_LEDGER, '--prepare'], ['--receipt', './.quality/../.quality/deploy-approval-used.log', '--prepare'],
+                     ['--receipt', '.quality/DEPLOY-APPROVAL-USED.LOG', '--prepare'], ['--receipt', '.quality/alias.json', '--prepare'],
                      ['--receipt', w.USED_LEDGER, '--approval-file', str(p)]):
             run = self.run_()
             rc, out = self.go(argv, run)
