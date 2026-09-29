@@ -120,3 +120,8 @@ test('trial: migration file and schema.sql define the same trial_applications ta
   assert.equal(cols('../migrations/0001_trial_applications.sql'),cols('../schema.sql'));assert.ok(cols('../schema.sql').includes('store_name'));
   assert.ok(!/^\s*(DROP|DELETE|UPDATE|ALTER|INSERT)\b/im.test(readFileSync(new URL('../migrations/0001_trial_applications.sql',import.meta.url),'utf8').replace(/--.*$/gm,'')),'migration only adds');});
 test('trial: validTrial normalizes whitespace and keeps the message optional',()=>{assert.deepEqual(validTrial({storeName:' 店 ',name:' 名 ',contact:' a@example.jp ',message:''}),{storeName:'店',name:'名',contact:'a@example.jp',message:''});assert.equal(validTrial({...trialOk,website:'x'}),'honeypot');});
+test('trial: a release that fails halfway is never repeated, so the per-sender count cannot drop below what was stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  s.q.db.exec("INSERT INTO quota VALUES ('trday:"+day+"',"+TRIAL_CAPS.day+")");const prep=s.q.prepare.bind(s.q);let releases=0;
+  s.q.prepare=sql=>{if(sql.startsWith('UPDATE quota SET count=MAX')){releases++;throw Error('D1_ERROR: flaky');}return prep(sql);};
+  const r=await invoke(trialRequest(),s.env);assert.ok([429,503].includes(r.status));assert.equal(releases,1,'released once only');
+  s.q.prepare=prep;const sender=Object.entries(s.q.rows()).find(([k])=>k.startsWith('trip:'));assert.equal(sender[1],1,'failed release leaves the row counted (safe side)');assert.equal(trialRows(s.q).length,0);});

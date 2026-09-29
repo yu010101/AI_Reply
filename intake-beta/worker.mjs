@@ -136,7 +136,8 @@ export default {
         const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
         for(const [key,limit] of [['trip:'+day+':'+hash,TRIAL_CAPS.perSenderDay],['trday:'+day,TRIAL_CAPS.day],['trtotal',TRIAL_CAPS.total]]){
           if(await reserve(env.QUOTA,key,limit)){held.push(key);continue;}
-          await release(env.QUOTA,held);return json({error:'rate_limited'},429);
+          // splice first: if this release throws halfway, the catch below must not release the same rows a second time.
+          await release(env.QUOTA,held.splice(0));return json({error:'rate_limited'},429);
         }
         await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) VALUES (?,?,?,?,?)').bind(new Date().toISOString(),app.storeName,app.name,app.contact,app.message).run();
         const cutoff=new Date(Date.now()-3*86400000).toISOString().slice(0,10);
@@ -144,7 +145,7 @@ export default {
         // No notification binding exists yet (wrangler.json has AI, D1 and ASSETS only): applications are saved and read from D1.
         return json({ok:true});
       }catch(e){
-        await release(env.QUOTA,held).catch(()=>{});
+        await release(env.QUOTA,held.splice(0)).catch(()=>{});
         console.error('trial_error',String((e&&e.name)||'Error').slice(0,40));
         return json({error:'unavailable'},503);
       }
