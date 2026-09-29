@@ -33,10 +33,10 @@ const PHRASES={
       casual:{good:'{L}がよかった。',ok:'{L}はふつうだった。',concern:'{L}は気になった。'}},
   en:{short:{good:'Good: {L}.',ok:'Average: {L}.',concern:'Concern: {L}.'},
       polite:{good:'I found the {L} good.',ok:'I found the {L} average.',concern:'I had a concern about the {L}.'},
-      casual:{good:'Liked the {L}.',ok:'The {L} felt average.',concern:"Wasn't happy with the {L}."}},
+      casual:{good:'Liked the {L}.',ok:'The {L} felt average.',concern:'Had a concern about the {L}.'}},
   zh:{short:{good:'{L}：好。',ok:'{L}：一般。',concern:'{L}：有在意的地方。'},
       polite:{good:'我觉得{L}不错。',ok:'我觉得{L}一般。',concern:'{L}方面有我在意的地方。'},
-      casual:{good:'{L}挺好的。',ok:'{L}还行。',concern:'{L}让我有些在意。'}},
+      casual:{good:'{L}挺好的。',ok:'{L}感觉一般。',concern:'{L}让我有些在意。'}},
   ko:{short:{good:'{L}: 좋음.',ok:'{L}: 보통.',concern:'{L}: 신경 쓰임.'},
       polite:{good:'{L} 부분이 좋았습니다.',ok:'{L} 부분은 보통이었습니다.',concern:'{L} 부분은 신경 쓰이는 점이 있었습니다.'},
       casual:{good:'{L} 부분이 좋았어요.',ok:'{L} 부분은 보통이었어요.',concern:'{L} 부분이 신경 쓰였어요.'}}

@@ -12,12 +12,18 @@ const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 const JA={food:['料理・飲み物','接客','雰囲気・席','待ち時間','価格'],beauty:['仕上がり','カウンセリング','接客','雰囲気','待ち時間','価格'],
   retail:['品ぞろえ','接客','お店の雰囲気','お会計・待ち時間','価格'],general:['接客','雰囲気','待ち時間','価格','わかりやすさ']};
 // how each rating must read; a sentence carries exactly one of them
-const MARK={ja:{good:/よかった/,ok:/ふつう/,concern:/気にな/},en:{good:/\bgood\b|^Liked\b/i,ok:/\baverage\b/i,concern:/\bconcern\b|Wasn't happy/i},
-  zh:{good:/好|不错/,ok:/一般|还行/,concern:/在意/},ko:{good:/좋/,ok:/보통/,concern:/신경/}};
+const MARK={ja:{good:/よかった/,ok:/ふつう/,concern:/気にな/},en:{good:/\bgood\b|^Liked\b/i,ok:/\baverage\b/i,concern:/\bconcern\b/i},
+  zh:{good:/好|不错/,ok:/一般/,concern:/在意/},ko:{good:/좋/,ok:/보통/,concern:/신경/}};
 const SPLIT={ja:/(?<=。)/,zh:/(?<=。)/,en:/(?<=\.) /,ko:/(?<=\.) /};
 const FORBIDDEN={ja:['おすすめ','オススメ','お勧め','また来','また行','またリピ','リピート','最高','絶対','星5','星５','★','満点','一番','感動','ぜひ','大満足','とても','すごく'],
   en:['recommend','again','best','amazing','must','star','perfect','very','love','great'],zh:['推荐','再来','最好','一定','五星','完美','非常','超级'],ko:['추천','다시','최고','꼭','별','완벽','정말','아주']};
-const LIMIT=200; // characters per candidate before the optional addition; #draft-text holds 1600
+const LIMIT=200;
+// every sentence, with its topic nouns taken out, must be exactly one of these reviewed wordings (§ = the topic list):
+// nothing else can ride along in a candidate, and each wording keeps the plain strength of its rating
+const WORDING={ja:{good:['§、よかった。','§がよかったです。','§がよかった。'],ok:['§、ふつう。','§はふつうでした。','§はふつうだった。'],concern:['§、気になった。','§は気になるところがありました。','§は気になった。']},
+  en:{good:['Good: §.','I found the § good.','Liked the §.'],ok:['Average: §.','I found the § average.','The § felt average.'],concern:['Concern: §.','I had a concern about the §.','Had a concern about the §.']},
+  zh:{good:['§：好。','我觉得§不错。','§挺好的。'],ok:['§：一般。','我觉得§一般。','§感觉一般。'],concern:['§：有在意的地方。','§方面有我在意的地方。','§让我有些在意。']},
+  ko:{good:['§: 좋음.','§ 부분이 좋았습니다.','§ 부분이 좋았어요.'],ok:['§: 보통.','§ 부분은 보통이었습니다.','§ 부분은 보통이었어요.'],concern:['§: 신경 쓰임.','§ 부분은 신경 쓰이는 점이 있었습니다.','§ 부분이 신경 쓰였어요.']}}; // characters per candidate before the optional addition; #draft-text holds 1600
 const RATINGS=['good','ok','concern'];
 const kinds=Object.keys(JA);
 
@@ -37,6 +43,8 @@ function decode(lang,kind,text){
     let rest=sentence;const found=[];
     for(const l of labels)if(rest.includes(l)){found.push(l);rest=rest.split(l).join('\u0000');}
     assert.ok(found.length>0,'sentence without a topic: '+sentence);
+    const skeleton=rest.replace(/\u0000((と|、|, | and the |, the )\u0000)*/g,'§').trim();
+    assert.ok(WORDING[lang][hits[0]].includes(skeleton),lang+' unexpected wording: '+sentence+' → '+skeleton);
     for(const l of found){assert.ok(!(l in got),'topic repeated: '+l);got[l]=hits[0];}
   }
   return got;

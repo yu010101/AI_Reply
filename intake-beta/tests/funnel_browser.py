@@ -109,7 +109,7 @@ def main():
   ctx,pg=make('ja-JP');pg.goto(BASE+'/?'+q+'&lang=zh');pg.wait_for_load_state('networkidle');assert pg.locator('html').get_attribute('lang')=='zh-Hans';expect(pg.locator('h1').last).to_have_text('这次体验怎么样？')
   draft_status['code']=503;pg.locator('#topics button').nth(4).click();pg.locator('[name=rate-wait][value=ok]').check(force=True);pg.locator('#addition').fill('咖啡有点烫')
   pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible()
-  assert pg.locator('#cand-options .cand-text').all_text_contents()==['等待时间：一般。咖啡有点烫','我觉得等待时间一般。咖啡有点烫','等待时间还行。咖啡有点烫'],pg.locator('#cand-options .cand-text').all_text_contents()
+  assert pg.locator('#cand-options .cand-text').all_text_contents()==['等待时间：一般。咖啡有点烫','我觉得等待时间一般。咖啡有点烫','等待时间感觉一般。咖啡有点烫'],pg.locator('#cand-options .cand-text').all_text_contents()
   pg.locator('#cand-options .cand').first.click();expect(pg.locator('#draft-mode')).to_contain_text('按原文');draft_status['code']=200
   ctx.close()
   assert [e['event'] for e in res['event_bodies'][n:]]==['view','draft','view','draft'],res['event_bodies'][n:]
