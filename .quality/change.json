@@ -7,7 +7,8 @@
     "AI 期限を定数 AI_UNTIL にし 2027-04-01T00:00+09:00（2027-03-31 JST いっぱい）を仮置き",
     "D1 マイグレーションは intake-beta/migrations/0001_trial_applications.sql をファイルで用意するだけ（本番未適用）",
     "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない",
-    "LP v2（もっとリッチに）: 実UIから撮ったスマホ画面(tools/capture_screens.py→public/img/screen-*.webp)をCSSの端末枠でFVと3ステップに表示。AI生成の店舗写真4枚(Higgsfield z_image)に各「イメージ（AI生成）」表記。悩み・しくみ・約束・向いているお店に自作のインラインSVG線画アイコン。朱のアクセント(#b4441c, WCAG AA)。IntersectionObserverのふわっと表示（prefers-reduced-motionでは無効）。画像は同一オリジンのWebP・1枚200KB以下・loading=lazy・width/height指定。CSP変更なし"
+    "LP v2（もっとリッチに）: 実UIから撮ったスマホ画面(tools/capture_screens.py→public/img/screen-*.webp)をCSSの端末枠でFVと3ステップに表示。AI生成の店舗写真4枚(Higgsfield z_image)に各「イメージ（AI生成）」表記。悩み・しくみ・約束・向いているお店に自作のインラインSVG線画アイコン。朱のアクセント(#b4441c, WCAG AA)。IntersectionObserverのふわっと表示（prefers-reduced-motionでは無効）。画像は同一オリジンのWebP・1枚200KB以下・loading=lazy・width/height指定。CSP変更なし",
+    "LP v3（配色・写真・動画）: 配色を紺(#1b3a6b)＋明るい青(#2563d9, 白文字5.43:1・地5.10:1)に変更し変数名を --accent に。FVに人物入りのAI生成写真(hero-cafe.webp,「イメージ（AI生成）」表記・写真内QRは復号不可)＋実画面のスマホを重ね、FVの画像だけ eager。実例の欄にお客さま画面の録画デモ(tools/record_demo.py: CDP screencastで2倍解像度・/api/draftは架空例を返す・字幕は録画用の重ね表示)を mp4/webm で置き、画面内に入ったときだけ無音で再生・動きを減らす設定では再生しない"
   ],
   "reuse": [
     {
@@ -34,6 +35,11 @@
       "path": "intake-beta/tests/lp_browser.py",
       "decision": "extend",
       "reason": "同じ隔離配信(CSP付き)で v2 の画像・AI表記・動き・動きを減らす設定の検査とFVのスクショを追加"
+    },
+    {
+      "path": "intake-beta/tools/capture_screens.py",
+      "decision": "reuse",
+      "reason": "record_demo.py は同じ隔離配信・CSP・架空例の /api/draft 応答を流用して録画する"
     }
   ],
   "changed_files": [
@@ -58,7 +64,12 @@
     "intake-beta/public/img/scene-cafe-counter.webp",
     "intake-beta/public/img/scene-table.webp",
     "intake-beta/public/img/scene-salon.webp",
-    "intake-beta/public/img/scene-shop.webp"
+    "intake-beta/public/img/scene-shop.webp",
+    "intake-beta/public/img/hero-cafe.webp",
+    "intake-beta/public/video/demo-customer-poster.webp",
+    "intake-beta/public/video/demo-customer.mp4",
+    "intake-beta/public/video/demo-customer.webm",
+    "intake-beta/tools/record_demo.py"
   ],
   "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
 }

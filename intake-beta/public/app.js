@@ -75,3 +75,6 @@ $('trial-form').addEventListener('submit',async e=>{e.preventDefault();
   finally{$('trial-submit').disabled=false;}
 });
 
+
+// LP demo video: plays (muted) only while on screen, never with reduced motion; controls stay for manual play.
+(function(){const v=$('demo-video');if(!v||!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches)return;new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting)v.play().catch(()=>{});else v.pause();}},{threshold:.5}).observe(v);})();

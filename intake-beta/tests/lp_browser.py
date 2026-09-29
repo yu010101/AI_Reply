@@ -19,16 +19,18 @@ def settle(pg):
  h=pg.evaluate('document.documentElement.scrollHeight');y=0
  while y<h:pg.evaluate("y=>scrollTo({top:y,behavior:'instant'})",y);pg.wait_for_timeout(120);y+=400
  pg.evaluate("scrollTo({top:0,behavior:'instant'})");pg.wait_for_timeout(900)
-V2_IMAGES='''[...document.querySelectorAll('#lp img')].map(i=>({src:i.getAttribute('src'),w:i.getAttribute('width'),h:i.getAttribute('height'),lazy:i.getAttribute('loading'),alt:i.alt,ok:i.complete&&i.naturalWidth>0,ai:!!i.closest('.scene-img')&&!!i.closest('.scene-img').querySelector('.ai-badge')&&i.closest('.scene-img').querySelector('.ai-badge').textContent==='イメージ（AI生成）',scene:!!i.closest('.scene-img')}))'''
+V2_IMAGES='''[...document.querySelectorAll('#lp img')].map(i=>({src:i.getAttribute('src'),w:i.getAttribute('width'),h:i.getAttribute('height'),lazy:i.getAttribute('loading'),alt:i.alt,ok:i.complete&&i.naturalWidth>0,ai:!!i.closest('.scene-img')&&!!i.closest('.scene-img').querySelector('.ai-badge')&&i.closest('.scene-img').querySelector('.ai-badge').textContent==='イメージ（AI生成）',scene:!!i.closest('.scene-img'),hero:!!i.closest('.lp-hero')}))'''
 def check_images(pg,res,key):
  imgs=pg.evaluate(V2_IMAGES);res[key]=len(imgs)
  assert len(imgs)>=8,imgs
  for i in imgs:
   assert i['src'].startswith('img/') and i['src'].endswith('.webp'),i
-  assert i['w'] and i['h'] and i['lazy']=='lazy' and i['alt'],i
+  assert i['w'] and i['h'] and i['alt'],i
+  assert i['lazy']==('eager' if i['hero'] else 'lazy'),i  # first view loads at once, the rest on scroll
   assert i['ok'],('image did not load',i)
   if i['scene']:assert i['ai'],('AI photo without label',i)
  assert sum(i['scene'] for i in imgs)>=3,imgs
+ assert sum(i['hero'] and i['scene'] for i in imgs)==1,('hero photo missing or unlabeled',imgs)
  # the fade-in has revealed every element once the page was scrolled through
  hidden=pg.evaluate("[...document.querySelectorAll('#lp .reveal')].filter(e=>getComputedStyle(e).opacity!=='1').length")
  assert hidden==0,('reveal left hidden elements',hidden)
@@ -62,7 +64,7 @@ def main():
   expect(pg.locator('#store-form')).to_be_hidden();expect(pg.locator('#sticky-cta')).to_be_hidden();expect(pg.locator('#customer-view')).to_be_hidden()
   pg.locator('#worry').scroll_into_view_if_needed();expect(pg.locator('#sticky-cta')).to_be_visible();pg.evaluate('scrollTo(0,0)');expect(pg.locator('#sticky-cta')).to_be_hidden()
   assert pg.evaluate(no_overflow),'LP mobile overflow'
-  assert pg.locator('#hero-qr svg').count()==1 and pg.locator('#poster-qr svg').count()==1,'sample QR not drawn'
+  assert pg.locator('#poster-qr svg').count()==1,'sample QR not drawn'  # the hero shows a photo, the poster section keeps the QR sample
   body=pg.locator('#lp').inner_text()
   for must in ['架空の例です','星や感想で、振り分けません。','特典と引き換えにしません。','自動で投稿しません。','2,980','税込','先着10店','合同会社Radineer']:assert must in body,must
   ctas=pg.locator('a[href="#create"]:visible').count();res['visible_create_ctas_390']=ctas;assert ctas>=5,ctas
@@ -97,6 +99,16 @@ def main():
   assert pg.evaluate(no_overflow),'LP desktop overflow'
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_1280.jpg'),type='jpeg',quality=80)
   settle(pg);check_images(pg,res,'lp_images_1280')
+  # demo video: same-origin sources, plays muted once on screen
+  srcs=pg.evaluate("[...document.querySelectorAll('#demo-video source')].map(s=>[s.getAttribute('src'),s.type])")
+  assert srcs==[['video/demo-customer.mp4','video/mp4'],['video/demo-customer.webm','video/webm']],srcs
+  assert pg.evaluate("(v=>v.muted&&v.loop&&v.hasAttribute('playsinline')&&v.getAttribute('preload')==='none')(document.getElementById('demo-video'))")
+  pg.locator('#demo-video').scroll_into_view_if_needed();playing=False
+  for _ in range(40):  # wait_for_function evaluates a string, which this CSP (no unsafe-eval) refuses
+   if pg.evaluate("(v=>!v.paused&&v.currentTime>0.3)(document.getElementById('demo-video'))"):playing=True;break
+   pg.wait_for_timeout(200)
+  assert playing,'demo video did not start on screen'
+  res['demo_video_src']=pg.evaluate("document.getElementById('demo-video').currentSrc.split('/').pop()")
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_1280_full.jpg'),full_page=True,type='jpeg',quality=80)
   ctx.close()
   # prefers-reduced-motion: nothing is hidden or animated
@@ -104,6 +116,8 @@ def main():
   assert not pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in armed under reduced motion'
   assert pg.evaluate("[...document.querySelectorAll('#lp .reveal')].every(e=>getComputedStyle(e).opacity==='1')")
   assert pg.evaluate("getComputedStyle(document.querySelector('.hero-phone')).animationName")=='none'
+  pg.locator('#demo-video').scroll_into_view_if_needed();pg.wait_for_timeout(1500)
+  assert pg.evaluate("document.getElementById('demo-video').paused"),'demo video autoplayed under reduced motion'
   ctx.close()
   # customer view hides every owner element; a broken share link opens the create view with the message
   ctx,pg=make(390);pg.goto(BASE+'/?'+urlencode({'store':STORE,'review':GOOGLE}));pg.wait_for_load_state('networkidle')
@@ -113,5 +127,5 @@ def main():
   expect(pg.locator('#store-form')).to_be_visible();expect(pg.locator('#store-error')).to_contain_text('共有リンクを確認してください')
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
- print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
+ print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','demo_video_src','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
 if __name__=='__main__':main()
