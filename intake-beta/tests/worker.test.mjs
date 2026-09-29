@@ -4,7 +4,7 @@ beforeEach(()=>{Date.now=()=>Date.parse('2026-09-25T00:00:00Z');});
 afterEach(()=>{Date.now=realNow;});
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import worker, {boundedJSON,validInput} from '../worker.mjs';
+import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP,AI_UNTIL,validTrial,TRIAL_LIMITS,TRIAL_CAPS,trialNotice} from '../worker.mjs';
 const logs=[];const realWarn=console.warn,realError=console.error;
 beforeEach(()=>{logs.length=0;console.warn=(...a)=>logs.push(['warn',...a]);console.error=(...a)=>logs.push(['error',...a]);});
 afterEach(()=>{console.warn=realWarn;console.error=realError;});
@@ -46,7 +46,8 @@ test('meaning reversal and invented recommendation must fall back',async()=>{for
 test('punctuation and whitespace only remain eligible',async()=>{const s=setup();s.env.AI.run=async()=>({response:'「不満です。改善してほしい。」'});assert.deepEqual((await invoke(request({text:'不満です 改善してほしい',storeName:'s'}),s.env)).body,{draft:'「不満です。改善してほしい。」',mode:'ai'});});
 test('unterminated body is bounded by a read deadline',async()=>{const old=globalThis.setTimeout;let timeout,cancelled=false;globalThis.setTimeout=(fn,ms)=>{timeout=ms;queueMicrotask(fn);return 0;};try{const body=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{'));},cancel(){cancelled=true;}});await assert.rejects(boundedJSON(new Request(origin,{method:'POST',body,duplex:'half'})));assert.equal(timeout,3000);assert.equal(cancelled,true);}finally{globalThis.setTimeout=old;}});
 
-test("expiry stops AI even with all bindings available",async()=>{Date.now=()=>Date.parse("2026-10-09T00:00:00Z");const s=setup();assert.equal((await invoke(request(),s.env)).body.mode,"fallback");assert.equal(s.calls.length,0);});
+test("expiry stops AI even with all bindings available",async()=>{Date.now=()=>AI_UNTIL;const s=setup();assert.equal((await invoke(request(),s.env)).body.mode,"fallback");assert.equal(s.calls.length,0);});
+test('AI stays on until the provisional end (2027-03-31 JST) and past the old 2026-10-09 stop',async()=>{assert.equal(AI_UNTIL,Date.parse('2027-03-31T15:00:00Z'));for(const at of ['2026-10-09T00:00:00Z','2027-03-31T14:59:59Z']){Date.now=()=>Date.parse(at);const s=setup();assert.equal((await invoke(request(),s.env)).body.mode,'ai',at);assert.equal(s.calls.length,1);}});
 
 test('refused reservation releases rows already held: total and ip do not drain when day is exhausted',async()=>{const s=staleRead(setup({['day:'+day]:100,total:500}));await Promise.all(Array.from({length:20},(_,i)=>invoke(request(undefined,{'cf-connecting-ip':'192.0.2.'+(i+50)}),s.env)));assert.equal(s.calls.length,0);assert.equal(s.db.rows.get('total'),500);assert.equal(s.db.rows.get('day:'+day),100);for(const [key,count] of s.db.rows)if(key.startsWith('ip:'))assert.equal(count,0,key);});
 test('refused total releases the ip row so the user keeps their attempts',async()=>{const s=staleRead(setup({total:1000}));assert.equal((await invoke(request(),s.env)).body.mode,'fallback');assert.equal(s.calls.length,0);for(const [key,count] of s.db.rows)if(key.startsWith('ip:'))assert.equal(count,0,key);assert.equal(s.db.rows.get('total'),1000);});
@@ -55,7 +56,107 @@ test('reserve, release and cleanup SQL behave on real SQLite',async(t)=>{const q
   assert.equal((await invoke(request(),s.env)).body.mode,'fallback');assert.equal(s.calls.length,0);let rows=q.rows();assert.equal(rows.total,40,'total released after day refused');assert.equal(Object.entries(rows).filter(([k,v])=>k.startsWith('ip:'+day)&&v!==0).length,0,'ip row released');
   q.db.exec("UPDATE quota SET count=0 WHERE key='day:"+day+"'");assert.equal((await invoke(request(),s.env)).body.mode,'ai');rows=q.rows();assert.equal(rows.total,41);assert.equal(rows['day:'+day],1);assert.equal(rows['day:2026-09-20'],undefined,'stale day row purged');assert.equal(rows['ip:2026-09-20:old'],undefined,'stale ip row purged');assert.equal(Object.keys(rows).filter(k=>k.startsWith('ip:'+day)).length,1,'today ip row kept');});
 test('ALLOWED_ORIGINS list replaces the same-origin default',async()=>{const s=setup();s.env.ALLOWED_ORIGINS='https://kuchikomi.example, https://hitokoto.example';assert.equal((await invoke(request(undefined,{origin:'https://kuchikomi.example'}),s.env)).status,200);assert.equal((await invoke(request(),s.env)).status,200);assert.equal((await invoke(request(undefined,{origin:'https://evil.example'}),s.env)).status,403);const req=request();req.headers.delete('origin');assert.equal((await invoke(req,s.env)).status,403);s.env.ALLOWED_ORIGINS='https://other.example';assert.equal((await invoke(request(),s.env)).status,403,'url.origin is not implied once the list is set');s.env.ALLOWED_ORIGINS='';assert.equal((await invoke(request(),s.env)).status,200,'empty list falls back to url.origin');});
-test('markup is refused before AI; prose punctuation is returned verbatim under the plain-text contract',async()=>{for(const text of ['<b>最高</b>','a<script>x</script>','x > y','<'])assert.equal((await invoke(request({text,storeName:'s'}),setup().env)).status,400,text);let s=setup();assert.equal((await invoke(request({text:'ok',storeName:'<s>'}),s.env)).status,400);assert.equal(s.calls.length,0);s=setup();delete s.env.AI;const text=`A&W "最高" 'good' &amp;`;assert.deepEqual((await invoke(request({text,storeName:'s'}),s.env)).body,{draft:text,mode:'fallback'});const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');assert.ok(app.includes("$('draft-text').value=draft"),'client renders draft through textarea.value');assert.ok(!/innerHTML\s*=[^;]*draft/.test(app),'client never assigns draft to innerHTML');});
+test('markup is refused before AI; prose punctuation is returned verbatim under the plain-text contract',async()=>{for(const text of ['<b>最高</b>','a<script>x</script>','x > y','<'])assert.equal((await invoke(request({text,storeName:'s'}),setup().env)).status,400,text);let s=setup();assert.equal((await invoke(request({text:'ok',storeName:'<s>'}),s.env)).status,400);assert.equal(s.calls.length,0);s=setup();delete s.env.AI;const text=`A&W "最高" 'good' &amp;`;assert.deepEqual((await invoke(request({text,storeName:'s'}),s.env)).body,{draft:text,mode:'fallback'});const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');assert.ok(app.includes("function showResult(text,note){$('draft-text').value=text;")&&app.includes('showResult(draft,'),'client renders draft through textarea.value');assert.ok(!/innerHTML\s*=[^;]*(draft|cand|tidied)/.test(app),'client never assigns draft or candidates to innerHTML');assert.ok(!/insertAdjacentHTML|outerHTML\s*=/.test(app));});
 test('bidi, zero-width, separators, C1, DEL, BOM and lone surrogates are refused; emoji sequences and newlines pass',()=>{for(const bad of ['\u{202e}','\u{200b}','\u{200c}','\u{200e}','\u{202a}','\u{2060}','\u{2064}','\u{2028}','\u{2029}','\u{7f}','\u{85}','\u{9f}','\u{feff}','\ud800','\udfff'])assert.ok(!validInput({text:'最高でした'+bad+'worst',storeName:'s'}),JSON.stringify(bad));assert.ok(!validInput({text:'ok',storeName:'x\u{202e}y'}));for(const good of ['😀','👨\u{200d}👩\u{200d}👧','❤\u{fe0f}','\t','\n','\r\n','＜＞＆','A&W','"x" \'y\''])assert.ok(validInput({text:'最高'+good+'でした',storeName:'s'}),JSON.stringify(good));});
 test('failures are logged with reason codes only, never body or IP',async()=>{const s=setup();s.env.QUOTA={prepare(){throw Error('D1_ERROR: offline 192.0.2.4');}};await invoke(request({text:'秘密の本文',storeName:'架空デモ'}),s.env);const err=logs.filter(l=>l[0]==='error');assert.equal(err.length,1);assert.equal(err[0][1],'draft_fallback');assert.equal(err[0][2],'error');assert.equal(err[0][3],'Error');assert.ok(!JSON.stringify(logs).includes('192.0.2.4')&&!JSON.stringify(logs).includes('D1_ERROR'),'message must not be logged');const t=setup();t.env.AI.run=async()=>{throw Error('model offline');};await invoke(request(),t.env);assert.equal(logs.filter(l=>l[0]==='error').length,2);const u=setup();u.env.AI.run=async()=>({response:'5つ星です'});await invoke(request({text:'不満です',storeName:'s'}),u.env);assert.deepEqual(logs.at(-1),['warn','draft_fallback','ai_rejected_number','']);const v=setup({total:1000});await invoke(request(),v.env);assert.deepEqual(logs.at(-1),['warn','draft_fallback','ceiling','']);const v2=staleRead(setup({total:1000}));await invoke(request(),v2.env);assert.deepEqual(logs.at(-1),['warn','draft_fallback','quota_total','']);const w=setup();delete w.env.AI;await invoke(request(),w.env);assert.deepEqual(logs.at(-1),['warn','draft_fallback','bindings','']);const flat=JSON.stringify(logs.filter(l=>l[2]!=='error'));for(const secret of ['秘密の本文','架空デモ','接客','192.0.2.4'])assert.ok(!flat.includes(secret),secret);logs.length=0;const x=setup();await invoke(request(),x.env);assert.equal(logs.length,0,'success path logs nothing');});
 
+
+// instruction-025 A: anonymous funnel counts
+function eventRequest(body={event:'view'},extra={}) {return new Request(origin+'/api/event',{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':'192.0.2.4',...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
+test('event: each allowed step adds one to ev:<day>:<step> only, and never touches AI quota rows',async()=>{const s=setup({total:7});for(const ev of FUNNEL_EVENTS){const r=await invoke(eventRequest({event:ev}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{recorded:true});}
+  for(const ev of FUNNEL_EVENTS)assert.equal(s.db.rows.get('ev:'+day+':'+ev),1,ev);assert.equal(s.db.rows.get('total'),7);assert.deepEqual([...s.db.rows.keys()].filter(k=>!k.startsWith('ev:')),['total']);assert.equal(s.calls.length,0);
+  for(const b of s.db.bindings)for(const v of b)assert.ok(!String(v).includes('192.0.2.4'),'ip must not be bound');});
+test('event: unknown step, extra keys, arrays, text and store names are refused and nothing is stored',async()=>{const s=setup();for(const body of [{event:'post'},{event:'view',storeName:'架空デモ'},{event:'view',text:'本文'},['view'],{},'"view"','{',{event:'VIEW'}]){const r=await invoke(eventRequest(body),s.env);assert.equal(r.status,400,JSON.stringify(body));}assert.equal(s.db.rows.size,0);assert.ok(!validEvent(null));assert.ok(validEvent({event:'direct'}));});
+test('event: same origin, POST and JSON gates as /api/draft',async()=>{const s=setup();assert.equal((await invoke(eventRequest(undefined,{origin:'https://evil.example'}),s.env)).status,403);assert.equal((await invoke(eventRequest(undefined,{'content-type':'text/plain'}),s.env)).status,415);assert.equal((await invoke(new Request(origin+'/api/event'),s.env)).status,405);assert.equal((await invoke(eventRequest(' '.repeat(4097)),s.env)).status,413);assert.equal(s.db.rows.size,0);});
+test('event: daily cap per step and missing D1 binding answer recorded:false without error',async()=>{const s=setup({['ev:'+day+':copy']:EVENT_DAILY_CAP-1});assert.deepEqual((await invoke(eventRequest({event:'copy'}),s.env)).body,{recorded:true});assert.deepEqual((await invoke(eventRequest({event:'copy'}),s.env)).body,{recorded:false});assert.equal(s.db.rows.get('ev:'+day+':copy'),EVENT_DAILY_CAP);
+  const n=setup();delete n.env.QUOTA;const r=await invoke(eventRequest(),n.env);assert.equal(r.status,200);assert.deepEqual(r.body,{recorded:false});
+  const e=setup();e.env.QUOTA={prepare(){throw Error('D1_ERROR: offline 192.0.2.4');}};assert.deepEqual((await invoke(eventRequest(),e.env)).body,{recorded:false});const err=logs.filter(l=>l[0]==='error');assert.equal(err.length,1);assert.deepEqual(err[0].slice(1),['event_error','Error']);});
+test('event rows survive the 3-day draft cleanup on real SQLite',async(t)=>{const q=await sqliteQuota();if(!q)return t.skip('node:sqlite unavailable');const s=setup();s.env.QUOTA=q;q.db.exec("INSERT INTO quota VALUES ('ev:2026-09-01:view',12),('day:2026-09-01',3)");
+  assert.deepEqual((await invoke(eventRequest({event:'google'}),s.env)).body,{recorded:true});assert.equal((await invoke(request(),s.env)).body.mode,'ai');const rows=q.rows();assert.equal(rows['ev:2026-09-01:view'],12);assert.equal(rows['ev:'+day+':google'],1);assert.equal(rows['day:2026-09-01'],undefined);assert.equal(rows.total,1);});
+
+// LP 試用店舗募集: POST /api/trial (4 fields -> D1 trial_applications, rate limited through quota rows)
+const trialOk={storeName:'架空の喫茶店',name:'山田 花子',contact:'owner@example.com',message:'レジ横に置いてみたいです。\n平日昼が中心です。'};
+function trialRequest(body=trialOk,extra={}) {return new Request(origin+'/api/trial',{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':'192.0.2.9',...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
+async function trialEnv(t){const q=await sqliteQuota();if(!q){t.skip('node:sqlite unavailable');return null;}return {q,env:{QUOTA:q,QUOTA_SALT:'test-only-salt'}};}
+const trialRows=q=>q.db.prepare('SELECT store_name,contact_name,contact,message,status,created_at FROM trial_applications ORDER BY id').all().map(r=>({...r}));
+test('trial: valid application is stored with the four fields only, and no IP anywhere in D1',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const r=await invoke(trialRequest(),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
+  const rows=trialRows(s.q);assert.equal(rows.length,1);assert.deepEqual({...rows[0],created_at:undefined},{store_name:trialOk.storeName,contact_name:trialOk.name,contact:trialOk.contact,message:trialOk.message,status:'new',created_at:undefined});assert.match(rows[0].created_at,/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  const dump=JSON.stringify(s.q.db.prepare('SELECT * FROM quota').all())+JSON.stringify(s.q.db.prepare('SELECT * FROM trial_applications').all());assert.ok(!dump.includes('192.0.2.9'));
+  assert.equal(s.q.rows()['trday:'+day],1);assert.equal(s.q.rows().trtotal,1);assert.equal(s.q.rows().total,undefined,'AI quota untouched');
+  const phone=await invoke(trialRequest({...trialOk,contact:'090-1234-5678',message:''},{'cf-connecting-ip':'192.0.2.10'}),s.env);assert.equal(phone.status,200);
+  const wide=await invoke(trialRequest({...trialOk,contact:'０９０ー１２３４ー５６７８'},{'cf-connecting-ip':'192.0.2.11'}),s.env);assert.equal(wide.status,200,'full-width phone number is accepted');});
+test('trial: invalid fields are refused with 400 and nothing is stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const bad=[{},[],null,'"x"',{...trialOk,extra:'x'},{storeName:'a',name:'b',contact:'c@example.com'},{...trialOk,storeName:''},{...trialOk,name:'   '},{...trialOk,storeName:'a'.repeat(TRIAL_LIMITS.storeName+1)},{...trialOk,name:'a'.repeat(TRIAL_LIMITS.name+1)},{...trialOk,contact:'a@b.'+'c'.repeat(TRIAL_LIMITS.contact)},{...trialOk,message:'a'.repeat(TRIAL_LIMITS.message+1)},
+    {...trialOk,contact:'電話してください'},{...trialOk,contact:'12345'},{...trialOk,name:'山田\n花子'},{...trialOk,storeName:'<b>店</b>'},{...trialOk,message:'hi\u202e'},{...trialOk,contact:7},{...trialOk,website:3}];
+  for(const body of bad){const r=await invoke(trialRequest(body),s.env);assert.equal(r.status,400,JSON.stringify(body));assert.deepEqual(r.body,{error:'invalid_input'});}
+  assert.equal(trialRows(s.q).length,0);assert.deepEqual(s.q.rows(),{});
+  assert.equal((await invoke(trialRequest(JSON.stringify({...trialOk,message:'a'.repeat(5000)})),s.env)).status,413);});
+test('trial: same sender is limited per day, other senders continue, daily and lifetime caps hold',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const codes=[];for(let i=0;i<TRIAL_CAPS.perSenderDay+2;i++)codes.push((await invoke(trialRequest(),s.env)).status);
+  assert.deepEqual(codes,[...Array(TRIAL_CAPS.perSenderDay).fill(200),429,429]);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);
+  assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.7'}),s.env)).status,200);
+  assert.equal(s.q.rows()['trday:'+day],TRIAL_CAPS.perSenderDay+1,'refused attempts released the day row');
+  s.q.db.exec("UPDATE quota SET count="+TRIAL_CAPS.day+" WHERE key='trday:"+day+"'");const r=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.8'}),s.env);assert.equal(r.status,429);assert.deepEqual(r.body,{error:'rate_limited'});
+  assert.equal(Object.entries(s.q.rows()).filter(([k,v])=>k.startsWith('trip:')&&v===0).length,1,'sender row released when the day cap refused');
+  s.q.db.exec("UPDATE quota SET count=0 WHERE key='trday:"+day+"'; UPDATE quota SET count="+TRIAL_CAPS.total+" WHERE key='trtotal'");assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.9'}),s.env)).status,429);
+  assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay+1);});
+test('trial: concurrent bursts from one sender store at most the per-sender cap',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const r=await Promise.all(Array.from({length:12},()=>invoke(trialRequest(),s.env)));assert.equal(r.filter(x=>x.status===200).length,TRIAL_CAPS.perSenderDay);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);});
+test('trial: same Origin, POST and JSON gates as the other APIs',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  assert.equal((await invoke(trialRequest(undefined,{origin:'https://evil.example'}),s.env)).status,403);assert.equal((await invoke(trialRequest(undefined,{'content-type':'text/plain'}),s.env)).status,415);assert.equal((await invoke(new Request(origin+'/api/trial'),s.env)).status,405);assert.equal(trialRows(s.q).length,0);});
+test('trial: filled hidden field answers ok but stores nothing and uses no quota',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const r=await invoke(trialRequest({...trialOk,website:'https://spam.example'}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});assert.equal(trialRows(s.q).length,0);assert.deepEqual(s.q.rows(),{});
+  assert.equal((await invoke(trialRequest({...trialOk,website:''}),s.env)).status,200);assert.equal(trialRows(s.q).length,1);});
+test('trial: missing binding, salt or IP answers 503; insert failure releases quota and logs a reason code only',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const env of [{QUOTA_SALT:'x'},{QUOTA:s.q}]){assert.equal((await invoke(trialRequest(),env)).status,503);}const req=trialRequest();req.headers.delete('cf-connecting-ip');assert.equal((await invoke(req,s.env)).status,503);
+  s.q.db.exec('DROP TABLE trial_applications');const r=await invoke(trialRequest(),s.env);assert.equal(r.status,503);assert.deepEqual(r.body,{error:'unavailable'});
+  for(const [k,v] of Object.entries(s.q.rows()))assert.equal(v,0,k+' released');
+  const err=logs.filter(l=>l[0]==='error');assert.equal(err.length,1);assert.equal(err[0][1],'trial_error');assert.ok(!JSON.stringify(err).includes('example.com')&&!JSON.stringify(err).includes('山田'));});
+test('trial: stale sender/day rows are purged after 3 days; AI and event rows are kept',async(t)=>{const s=await trialEnv(t);if(!s)return;s.q.db.exec("INSERT INTO quota VALUES ('trip:2026-09-20:old',3),('trday:2026-09-20',9),('ev:2026-09-20:view',4),('total',5)");
+  assert.equal((await invoke(trialRequest(),s.env)).status,200);const rows=s.q.rows();assert.equal(rows['trip:2026-09-20:old'],undefined);assert.equal(rows['trday:2026-09-20'],undefined);assert.equal(rows['ev:2026-09-20:view'],4);assert.equal(rows.total,5);});
+test('trial: migration file and schema.sql define the same trial_applications table',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
+  const cols=file=>{const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL(file,import.meta.url),'utf8'));return JSON.stringify(db.prepare("PRAGMA table_info(trial_applications)").all());};
+  assert.equal(cols('../migrations/0001_trial_applications.sql'),cols('../schema.sql'));assert.ok(cols('../schema.sql').includes('store_name'));
+  assert.ok(!/^\s*(DROP|DELETE|UPDATE|ALTER|INSERT)\b/im.test(readFileSync(new URL('../migrations/0001_trial_applications.sql',import.meta.url),'utf8').replace(/--.*$/gm,'')),'migration only adds');});
+test('trial: validTrial normalizes whitespace and keeps the message optional',()=>{assert.deepEqual(validTrial({storeName:' 店 ',name:' 名 ',contact:' a@example.jp ',message:''}),{storeName:'店',name:'名',contact:'a@example.jp',message:''});assert.equal(validTrial({...trialOk,website:'x'}),'honeypot');});
+test('trial: a release that fails halfway is never repeated, so the per-sender count cannot drop below what was stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  s.q.db.exec("INSERT INTO quota VALUES ('trday:"+day+"',"+TRIAL_CAPS.day+")");const prep=s.q.prepare.bind(s.q);let releases=0;
+  s.q.prepare=sql=>{if(sql.startsWith('UPDATE quota SET count=MAX')){releases++;throw Error('D1_ERROR: flaky');}return prep(sql);};
+  const r=await invoke(trialRequest(),s.env);assert.ok([429,503].includes(r.status));assert.equal(releases,1,'released once only');
+  s.q.prepare=prep;const sender=Object.entries(s.q.rows()).find(([k])=>k.startsWith('trip:'));assert.equal(sender[1],1,'failed release leaves the row counted (safe side)');assert.equal(trialRows(s.q).length,0);});
+
+// Slack notice for a saved application (SLACK_WEBHOOK_URL secret). Never sent for real here: globalThis.fetch is replaced.
+const HOOK='https://hooks.slack.test/services/T000/B000/fictional';
+async function withFetch(impl,fn){const old=globalThis.fetch;const calls=[];globalThis.fetch=async(url,init)=>{calls.push({url:String(url),init});return impl(url,init);};try{await fn(calls);}finally{globalThis.fetch=old;}}
+test('trial notice: without SLACK_WEBHOOK_URL nothing is fetched',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  await withFetch(()=>new Response('ok'),async calls=>{const r=await invoke(trialRequest(),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
+    s.env.SLACK_WEBHOOK_URL='';assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'192.0.2.20'}),s.env)).status,200);assert.equal(calls.length,0);});});
+test('trial notice: sent once per saved application, with the store name and receipt number only',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  await withFetch(()=>new Response('ok'),async calls=>{
+    s.q.db.exec("INSERT INTO trial_applications (created_at,store_name,contact_name,contact) VALUES ('2026-09-01T00:00:00.000Z','既存','x','x@example.com')");
+    const app={...trialOk,storeName:'架空の喫茶 A&B',message:'レジ横に置きたい。電話は夜がいいです'};
+    const r=await invoke(trialRequest(app),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
+    assert.equal(calls.length,1);const [c]=calls;assert.equal(c.url,HOOK);assert.equal(c.init.method,'POST');assert.notEqual(c.init.redirect,'error');assert.equal(c.init.redirect,'manual');
+    const id=s.q.db.prepare('SELECT id FROM trial_applications WHERE store_name=?').get(app.storeName).id;assert.equal(id,2);
+    const body=JSON.parse(c.init.body);assert.deepEqual(Object.keys(body),['text']);assert.deepEqual(body,trialNotice(app.storeName,id));
+    assert.equal(body.text,'ひとことβ 試用の申し込み：店名「架空の喫茶 A&amp;B」 受付番号 2');
+    for(const secret of [app.name,'山田','花子',app.contact,'owner@','example.com',app.message,'レジ横','電話','192.0.2.9'])assert.ok(!c.init.body.includes(secret),'notice leaks '+secret);
+    // nothing is logged on success
+    assert.equal(logs.length,0,JSON.stringify(logs));});});
+test('trial notice: a failing or refusing webhook never changes the answer, and logs no content',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  let n=0;
+  for(const impl of [()=>{throw new TypeError('network down owner@example.com');},()=>Promise.reject(new Error('D1? no: 架空の喫茶店')),()=>new Response('no',{status:500}),()=>new Response('',{status:302,headers:{location:'https://elsewhere.example/'}})]){
+    await withFetch(impl,async calls=>{const r=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.'+(n++)}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});assert.equal(calls.length,1);});}
+  assert.equal(trialRows(s.q).length,4);
+  const errs=logs.filter(l=>l[0]==='error');assert.deepEqual(errs.map(l=>l[1]),Array(4).fill('trial_notify_failed'));assert.deepEqual(errs.map(l=>l[2]),['TypeError','Error','500','302']);
+  const flat=JSON.stringify(logs);for(const secret of ['架空の喫茶店','山田','owner@example.com','レジ横',HOOK,'network down'])assert.ok(!flat.includes(secret),'log leaks '+secret);});
+test('trial notice: not sent for the hidden-field trap, invalid input, rate limits or a failed save',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  await withFetch(()=>new Response('ok'),async calls=>{
+    assert.deepEqual((await invoke(trialRequest({...trialOk,website:'https://spam.example'}),s.env)).body,{ok:true});
+    assert.equal((await invoke(trialRequest({...trialOk,contact:'x'}),s.env)).status,400);
+    for(let i=0;i<TRIAL_CAPS.perSenderDay;i++)assert.equal((await invoke(trialRequest(),s.env)).status,200);
+    assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'one per saved application');
+    assert.equal((await invoke(trialRequest(),s.env)).status,429);
+    s.q.db.exec('DROP TABLE trial_applications');assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.77'}),s.env)).status,503);
+    assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'no notice without a saved row');});});

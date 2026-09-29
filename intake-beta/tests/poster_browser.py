@@ -9,7 +9,7 @@ R=Path(__file__).resolve().parents[1];PUB=R/'public'
 BASE='https://hitokoto.example';GOOGLE='https://g.page/r/qa-fictional-store/review';STORE='QA用の架空店舗'
 # Same policy the worker sets on every static response (worker.mjs); kept in sync by the assertion below.
 SECURITY_HEADERS={'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer'}
-HIDDEN_IN_PRINT=['header','footer','#store-form','.lp-hero','#faq','#copy-link','#preview-link','#poster-actions','#share-url','#how-it-works','.closing-cta','#customer-view']
+HIDDEN_IN_PRINT=['header','footer','#store-form','.lp-hero','#faq','#copy-link','#preview-link','#poster-actions','#share-url','#how-it-works','#price','.lp-aside','#customer-view']
 PRINT_ALLOWLIST={'share-result'}  # #store-view の直下でprint時に残ってよい要素はこれだけ
 LONG_GOOGLE='https://g.page/r/'+'A'*2400+'/review'  # validGoogle は通るが QR(v40-M 2331B) に入らない
 SHOWN_IN_PRINT=['#print-store','#print-url','#qr-area svg']
@@ -29,7 +29,7 @@ def main():
    r.fulfill(status=200,body=f.read_bytes(),content_type=mimetypes.guess_type(path)[0] or 'application/octet-stream',headers=SECURITY_HEADERS)
   ctx.route('**/*',route);page=ctx.new_page();page.on('pageerror',lambda e:result['errors'].append(str(e)))
   page.add_init_script('window.__printed=0;window.print=()=>{window.__printed++;};')
-  page.goto(BASE+'/');page.wait_for_load_state('networkidle')
+  page.goto(BASE+'/#create');page.wait_for_load_state('networkidle')
   expect(page.locator('#poster-actions')).to_be_hidden();assert page.locator('.print-only').first.evaluate('e=>getComputedStyle(e).display')=='none','print caption must be hidden on screen'
   page.locator('#store-name').fill(STORE);page.locator('#review-url').fill(GOOGLE);page.locator('#store-form button').click()
   expect(page.locator('#share-result')).to_be_visible();share=page.locator('#share-url').input_value();result['share_url']=share

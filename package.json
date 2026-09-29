@@ -22,8 +22,8 @@
     "test:perf:report": "open playwright-report-performance/index.html",
     "validate-env": "npx ts-node scripts/validate-env.ts",
     "quality:policy": "python3 scripts/quality_gate.py",
-    "quality:lint": "ESLINT_USE_FLAT_CONFIG=false eslint --no-eslintrc --config .quality/eslint.cjs intake-beta/public/app.js intake-beta/worker.mjs",
-    "quality:test": "node --test intake-beta/tests/worker.test.mjs",
+    "quality:lint": "ESLINT_USE_FLAT_CONFIG=false eslint --no-eslintrc --config .quality/eslint.cjs intake-beta/public/app.js intake-beta/public/compose.js intake-beta/worker.mjs",
+    "quality:test": "node --test intake-beta/tests/worker.test.mjs intake-beta/tests/poster_kit.test.mjs intake-beta/tests/compose.test.mjs",
     "quality": "npm run quality:policy && npm run quality:lint && npm run quality:test"
   },
   "dependencies": {
