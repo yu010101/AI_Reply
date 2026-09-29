@@ -225,6 +225,36 @@ textarea{resize:vertical;line-height:1.8}
 .chips{display:flex;gap:9px;flex-wrap:wrap}
 .chips button{background:var(--paper);border:1px solid #c9d3e0;border-radius:24px;padding:10px 15px;font-size:14px;cursor:pointer;color:var(--ink)}
 .chips button[aria-pressed=true]{background:var(--ai-tint);border-color:var(--ai)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+/* pick-to-draft: topics → rating per topic → candidates. The three ratings share one look (no answer is favoured). */
+#pick-card h2{font-size:21px;margin-bottom:4px}
+.topic-chips{margin-top:14px}
+.chips button[aria-pressed=true]::before{content:"✓ ";color:var(--ai)}
+button.text-link{background:none;border:0;padding:6px 0;text-align:left;font:inherit;font-size:13px}
+.ratings{display:grid;gap:10px;margin-top:18px}
+.ratings:empty{display:none}
+.rate-row{border:1px solid var(--line);border-radius:10px;padding:12px 14px 14px;margin:0;min-width:0}
+.rate-row legend{padding:0 4px;font-size:14px;font-weight:600}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+.seg label{margin:0;font-weight:400;font-size:14px}
+.seg input,.cand input{position:absolute;opacity:0;width:1px;height:1px}
+.seg span{display:flex;align-items:center;justify-content:center;min-height:44px;padding:6px 4px;text-align:center;line-height:1.35;border:1px solid #c9d3e0;border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer}
+.seg input:checked+span{background:var(--ai-tint);border-color:var(--ai);box-shadow:inset 0 0 0 1px var(--ai)}
+.seg input:focus-visible+span,.cand input:focus-visible+.cand-body{outline:3px solid var(--focus);outline-offset:2px}
+.cand-list{border:0;margin:14px 0 0;padding:0;min-width:0;display:grid;gap:10px}
+#cand-options{display:grid;gap:10px}
+.cand{position:relative;margin:0;font-weight:400;cursor:pointer}
+.cand-body{display:block;padding:14px 16px 14px 44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);position:relative}
+.cand-body::before{content:"";position:absolute;left:14px;top:17px;width:18px;height:18px;border-radius:50%;border:1.5px solid #8a97a8;background:#fff}
+.cand input:checked+.cand-body{border-color:var(--ai);box-shadow:inset 0 0 0 1px var(--ai);background:var(--ai-tint)}
+.cand input:checked+.cand-body::before{border-color:var(--ai);box-shadow:inset 0 0 0 4px #fff;background:var(--ai)}
+.cand-style{display:block;font-size:12px;font-weight:600;color:var(--sub);margin-bottom:2px}
+.cand-text{display:block;font-size:16px;line-height:1.75;overflow-wrap:anywhere}
+.cand-own .cand-body{border-style:dashed}
+.cand-own .cand-text{font-size:14px;color:var(--sub)}
+#cand-title:focus{outline:none}
+#candidates,#write-own,#draft-result{scroll-margin-top:76px}
+#addition-part label{margin-top:22px}
 .writing-hint{padding:16px 18px;background:var(--paper);border-left:3px solid var(--ai);border-radius:4px;margin-top:24px}
 .writing-hint strong{font-size:13px}
 .writing-hint p{font-size:15px;margin:8px 0}

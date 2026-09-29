@@ -1,7 +1,8 @@
 """Record the LP demo video (public/video/demo-customer.mp4 + poster) of the real customer screen.
 Serves intake-beta/public from disk with the worker's CSP, like tools/capture_screens.py.
-Inputs are the LP's fictional example (喫茶 こもれび). /api/draft is answered here with the LP's before/after
-example (mode 'ai') so no AI is called; every other host is refused. Captions and the tap marker are overlays
+Inputs are the LP's fictional example (喫茶 こもれび: 料理・飲み物=よかった, 待ち時間=気になった). The candidates come from
+public/compose.js; nothing is added to the picks, so /api/draft must not be called (it is refused and recorded here);
+every other host is refused. Captions and the tap marker are overlays
 drawn only for the recording; they are not part of the product UI.
 Usage: python3 tools/record_demo.py --tmp DIR   (needs ffmpeg and cwebp)
 """
@@ -12,7 +13,7 @@ from playwright.sync_api import sync_playwright,expect
 R=Path(__file__).resolve().parents[1];PUB=R/'public';OUT=PUB/'video'
 BASE='https://hitokoto.example';STORE='喫茶 こもれび';GOOGLE='https://g.page/r/fictional-komorebi/review'
 CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-BEFORE='窓際でゆっくりできた コーヒーは少し熱かった';AFTER='窓際でゆっくりできた。コーヒーは少し熱かった。'
+POSTER_AT=13.5  # seconds: the candidate list
 W,H=390,780
 OVERLAY="""(t)=>{let c=document.getElementById('demo-cap');if(!c){c=document.createElement('div');c.id='demo-cap';
 c.style.cssText='position:fixed;left:12px;right:12px;bottom:14px;z-index:9999;background:rgba(27,38,51,.92);color:#fff;'+
@@ -34,7 +35,7 @@ def main():
    url=r.request.url
    if not url.startswith(BASE+'/'):blocked.append(url.split('?')[0]);return r.abort()
    path=url[len(BASE):].split('?')[0].split('#')[0]
-   if path=='/api/draft':return r.fulfill(status=200,content_type='application/json',body=json.dumps({'draft':AFTER,'mode':'ai'}))
+   if path=='/api/draft':blocked.append(path);return r.fulfill(status=503,body='')
    if path.startswith('/api/'):return r.fulfill(status=200,content_type='application/json',body='{"recorded":true}')
    f=PUB/(path.lstrip('/') or 'index.html')
    if not f.is_file():return r.fulfill(status=404,body='')
@@ -52,15 +53,21 @@ def main():
   pg.goto(BASE+'/?'+urlencode({'store':STORE,'review':GOOGLE,'kind':'food'}));pg.wait_for_load_state('networkidle')
   cdp.send('Page.startScreencast',{'format':'jpeg','quality':92,'maxWidth':W*2,'maxHeight':H*2,'everyNthFrame':1})
   cap('QRを読むと、この画面が開きます');pg.wait_for_timeout(2200)
-  scroll_to('#experience',200);cap('感想をひとこと。短くて大丈夫です');tap('#experience');pg.locator('#experience').click()
-  pg.locator('#experience').press_sequentially(BEFORE,delay=110);pg.wait_for_timeout(700)
-  tap('#draft-button');pg.locator('#draft-button').click();expect(pg.locator('#draft-result')).to_be_visible()
-  scroll_to('#draft-result');cap('AIが句読点を整えます。言葉は足しません');pg.wait_for_timeout(2600)
-  cap('内容を確かめて、チェック');tap('#confirm');pg.locator('#confirm').check();pg.wait_for_timeout(1200)
+  scroll_to('#pick-card');cap('何がありましたか？ タップで選びます');pg.wait_for_timeout(900)
+  for name in ['料理・飲み物','待ち時間']:
+   sel='#topics button[data-topic="%s"]'%{'料理・飲み物':'dish','待ち時間':'wait'}[name];tap(sel);pg.locator(sel).click();pg.wait_for_timeout(500)
+  scroll_to('#ratings',150);cap('どうだったかを選びます。気になったことも同じように');pg.wait_for_timeout(1000)
+  for topic,rating in [('dish','good'),('wait','concern')]:
+   sel='[name=rate-%s][value=%s]+span'%(topic,rating);tap(sel);pg.locator(sel).click();pg.wait_for_timeout(700)
+  scroll_to('#compose-button',520);tap('#compose-button');pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible();pg.wait_for_timeout(900)
+  cap('選んだことだけで、文章の候補ができます');pg.wait_for_timeout(2800)
+  cap('選んで、自由に直せます');sel='#cand-options .cand:nth-child(2) .cand-body';tap(sel);pg.locator(sel).click();pg.wait_for_timeout(600)
+  scroll_to('#draft-result');tap('#draft-text');pg.locator('#draft-text').click();pg.wait_for_timeout(1800)
+  cap('確かめて、Googleを開きます');tap('#confirm');pg.locator('#confirm').check();pg.wait_for_timeout(900)
   expect(pg.locator('#google-link')).to_have_attribute('aria-disabled','false')
-  cap('コピーして、Googleを開きます');tap('#google-link');pg.wait_for_timeout(1400)
+  tap('#google-link');pg.wait_for_timeout(1400)
   cap('投稿するのは、お客さま本人です');pg.wait_for_timeout(2400)
-  cap('画面は実物です。店名・感想・整えた文章は架空の例です');pg.wait_for_timeout(2600)
+  cap('画面は実物です。店名・内容は架空の例です');pg.wait_for_timeout(2600)
   cdp.send('Page.stopScreencast');ctx.close();b.close()
  assert not errors,errors;assert not blocked,blocked
  OUT.mkdir(exist_ok=True);mp4=OUT/'demo-customer.mp4';poster=OUT/'demo-customer-poster.webp'
@@ -72,7 +79,7 @@ def main():
   '-crf','30','-preset','slow','-movflags','+faststart','-an',str(mp4)],check=True)
  webm=OUT/'demo-customer.webm'
  subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(mp4),'-c:v','libvpx-vp9','-b:v','0','-crf','46','-row-mt','1','-an',str(webm)],check=True)
- png=tmp/'poster.png';subprocess.run(['ffmpeg','-y','-loglevel','error','-ss','9','-i',str(mp4),'-frames:v','1',str(png)],check=True)
+ png=tmp/'poster.png';subprocess.run(['ffmpeg','-y','-loglevel','error','-ss',str(POSTER_AT),'-i',str(mp4),'-frames:v','1',str(png)],check=True)
  subprocess.run(['cwebp','-quiet','-q','80','-metadata','none',str(png),'-o',str(poster)],check=True)
  dur=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',str(mp4)],capture_output=True,text=True,check=True).stdout.strip()
  print(json.dumps({'frames':len(frames),'mp4':mp4.stat().st_size,'webm':webm.stat().st_size,'poster':poster.stat().st_size,'duration_s':dur,'blocked_external':blocked,'page_errors':errors},ensure_ascii=False))

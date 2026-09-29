@@ -17,7 +17,7 @@ test('every customer-view data-i18n key exists in every language, and prompts co
   const keys=[...html.matchAll(/data-i18n="([^"]+)"/g)].map(x=>x[1]);assert.ok(keys.length>=20,String(keys.length));
   const base=Object.keys(I18N.ja).sort();
   for(const [lang,d] of Object.entries(I18N)){assert.deepEqual(Object.keys(d).sort(),base,lang);for(const k of keys)assert.equal(typeof d[k],'string',lang+':'+k);
-    assert.deepEqual(Object.keys(d.prompts).sort(),Object.keys(writingPrompts).sort(),lang);for(const k of ['tag_good','tag_usual','tag_concern'])assert.ok(d[k].length>0);
+    assert.deepEqual(Object.keys(d.prompts).sort(),Object.keys(writingPrompts).sort(),lang);for(const k of ['rate_good','rate_ok','rate_concern','style_short','style_polite','style_casual'])assert.ok(d[k].length>0);assert.ok(d.rateLegend('X').includes('X'));
     assert.equal(typeof d.suffix('X'),'string');assert.ok(d.suffix('X').includes('X'));}
   assert.equal(I18N.ja.prompts,writingPrompts);
 });

@@ -8,7 +8,8 @@
     "D1 マイグレーションは intake-beta/migrations/0001_trial_applications.sql をファイルで用意するだけ（本番未適用）",
     "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない",
     "LP v2（もっとリッチに）: 実UIから撮ったスマホ画面(tools/capture_screens.py→public/img/screen-*.webp)をCSSの端末枠でFVと3ステップに表示。AI生成の店舗写真4枚(Higgsfield z_image)に各「イメージ（AI生成）」表記。悩み・しくみ・約束・向いているお店に自作のインラインSVG線画アイコン。朱のアクセント(#b4441c, WCAG AA)。IntersectionObserverのふわっと表示（prefers-reduced-motionでは無効）。画像は同一オリジンのWebP・1枚200KB以下・loading=lazy・width/height指定。CSP変更なし",
-    "LP v3（配色・写真・動画）: 配色を紺(#1b3a6b)＋明るい青(#2563d9, 白文字5.43:1・地5.10:1)に変更し変数名を --accent に。FVに人物入りのAI生成写真(hero-cafe.webp,「イメージ（AI生成）」表記・写真内QRは復号不可)＋実画面のスマホを重ね、FVの画像だけ eager。実例の欄にお客さま画面の録画デモ(tools/record_demo.py: CDP screencastで2倍解像度・/api/draftは架空例を返す・字幕は録画用の重ね表示)を mp4/webm で置き、画面内に入ったときだけ無音で再生・動きを減らす設定では再生しない"
+    "LP v3（配色・写真・動画）: 配色を紺(#1b3a6b)＋明るい青(#2563d9, 白文字5.43:1・地5.10:1)に変更し変数名を --accent に。FVに人物入りのAI生成写真(hero-cafe.webp,「イメージ（AI生成）」表記・写真内QRは復号不可)＋実画面のスマホを重ね、FVの画像だけ eager。実例の欄にお客さま画面の録画デモ(tools/record_demo.py: CDP screencastで2倍解像度・/api/draftは架空例を返す・字幕は録画用の重ね表示)を mp4/webm で置き、画面内に入ったときだけ無音で再生・動きを減らす設定では再生しない",
+    "お客さま画面 v4（選ぶだけで下書き）: 業種(kind=general/food/beauty/retail)ごとの固定の中立な名詞の話題を選び、話題ごとに よかった/ふつう/気になった（同じ見た目・初期選択なし）を選ぶと、public/compose.js（AIなしの決定論・純関数）がその選択だけから3文体（短く/ていねい/くだけた）の候補を組み立てる。選んでいない話題・ほめ言葉の上乗せ・推薦/再訪意向・数字は入れず、気になったは必ず残る。任意の「ひとこと足す」だけを /api/draft に通して末尾に付ける（fallbackでも動く）。候補を選ぶと既存の編集欄→確認→コピー/Googleへ。「自分で書く」から既存の整文の流れも使える。ja/en/zh/ko すべてで候補を出す。tests/compose.test.mjs で全kind×全話題部分集合×全評価×4言語×3文体を網羅検査。デモ動画・スクショ・LPの#exampleを新しい流れに更新"
   ],
   "reuse": [
     {
@@ -40,6 +41,21 @@
       "path": "intake-beta/tools/capture_screens.py",
       "decision": "reuse",
       "reason": "record_demo.py は同じ隔離配信・CSP・架空例の /api/draft 応答を流用して録画する"
+    },
+    {
+      "path": "intake-beta/public/app.js",
+      "decision": "extend",
+      "reason": "既存の /api/draft 呼び出しを tidy() に切り出して「自分で書く」と「ひとこと足す」で共用し、編集欄・確認・コピー・Google・/api/event の流れはそのまま使う。旧来の単一チップ(data-tag)は話題×評価に置き換え"
+    },
+    {
+      "path": "intake-beta/tests/funnel_browser.py",
+      "decision": "extend",
+      "reason": "同じ隔離配信(CSP付き)とイベント検査のまま、お客さま画面の新しい流れ（話題→評価→候補→選択→編集→確認→Google）と多言語切替・/api/draft 障害時を検査"
+    },
+    {
+      "path": "intake-beta/tools/record_demo.py",
+      "decision": "extend",
+      "reason": "CDP screencast と字幕の重ね表示はそのまま、操作手順だけ新しい流れに差し替え"
     }
   ],
   "changed_files": [
@@ -69,7 +85,9 @@
     "intake-beta/public/video/demo-customer-poster.webp",
     "intake-beta/public/video/demo-customer.mp4",
     "intake-beta/public/video/demo-customer.webm",
-    "intake-beta/tools/record_demo.py"
+    "intake-beta/tools/record_demo.py",
+    "intake-beta/public/compose.js",
+    "intake-beta/tests/compose.test.mjs"
   ],
   "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
 }

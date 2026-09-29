@@ -65,7 +65,7 @@
 <figure class="hero-visual" aria-label="お店でQRを読み取ったお客さまと、お客さまのスマホ画面の見本">
 <div class="hero-stage">
 <div class="scene-img hero-photo"><img src="img/hero-cafe.webp" width="1200" height="900" loading="eager" fetchpriority="high" decoding="async" alt="窓際の席で、コーヒーを前にスマホを見て微笑む女性。テーブルにはQRの卓上カードが立っている"><span class="ai-badge">イメージ（AI生成）</span></div>
-<div class="phone hero-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="eager" decoding="async" alt="お客さまの画面。整えた文章「窓際でゆっくりできた。コーヒーは少し熱かった。」を自由に直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
+<div class="phone hero-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="eager" decoding="async" alt="お客さまの画面。選んだことから組み立てた文章「料理・飲み物がよかったです。待ち時間は気になるところがありました。」を自由に直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
 </div>
 <figcaption>スマホはお客さまの実際の画面です（店名・感想は架空の例）。写真はAIで生成したイメージで、実在のお店・人物ではありません。</figcaption>
 </figure>
@@ -98,15 +98,15 @@
 </li>
 <li class="reveal">
 <p class="step-who"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-scan"/></svg>お客さま</p>
-<h3>QRを読んで、感想をひとこと</h3>
-<p>「よかった」「いつもどおり」「気になった」から選んでも、自由に書いても。書き出しのヒントも出ます。</p>
-<div class="phone step-phone"><img src="img/screen-input.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。感想に近いものの選択肢、書き出しのヒント、感想の入力欄「窓際でゆっくりできた コーヒーは少し熱かった」、「文章を整えてみる」ボタン"></div>
+<h3>QRを読んで、タップで選ぶ</h3>
+<p>何があったかと、どうだったか（よかった・ふつう・気になった）を選ぶと、その内容だけで文章の候補ができます。自分で書くこともできます。</p>
+<div class="phone step-phone"><img src="img/screen-input.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。「何がありましたか？」で料理・飲み物と待ち時間を選び、料理・飲み物は「よかった」、待ち時間は「気になった」を選んだところ。「選ばずに、自分で書く」の案内もある"></div>
 </li>
 <li class="reveal">
 <p class="step-who"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-send-check"/></svg>お客さま本人</p>
 <h3>文章を確認して、自分でGoogleに投稿</h3>
 <p>自由に直してからコピーし、Googleで星と内容を確かめて投稿します。投稿せずに閉じてもかまいません。</p>
-<div class="phone step-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。整えた文章を直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
+<div class="phone step-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。選んだ候補の文章を直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
 </li>
 </ol>
 <p class="fiction-note">画面はひとことβの実際の画面です。店名・リンク・感想は架空の例です。</p>
@@ -132,36 +132,37 @@
 <section class="band" id="example">
 <div class="wrap">
 <p class="kicker reveal">実例</p>
-<h2 class="reveal">AIは、言葉を足しません。</h2>
-<p class="section-lead">整えるのは句読点と区切りだけ。ほめ言葉を足したり、気になった点を消したりはしません。</p>
+<h2 class="reveal">選んだことだけが、文章になる。</h2>
+<p class="section-lead">お客さまは「何があったか」と「どうだったか」をタップで選ぶだけ。その選択だけから、言い回しの違う文章の候補を3つ組み立てます。ほめ言葉や推薦を足したり、気になった点を消したりはしません。</p>
 <div class="example-grid">
-<figure class="demo reveal"><div class="phone demo-phone"><video id="demo-video" poster="video/demo-customer-poster.webp" width="600" height="1200" muted playsinline loop controls preload="none" aria-label="お客さまの画面の操作。感想を入れ、文章を整え、確認のチェックを入れてGoogleを開くまで（約18秒・音声なし）"><source src="video/demo-customer.mp4" type="video/mp4"><source src="video/demo-customer.webm" type="video/webm"></video></div>
-<figcaption>お客さまの画面を録画したものです（約18秒・音声なし）。店名・感想・整えた文章は架空の例で、字幕は説明のために重ねています。</figcaption></figure>
+<figure class="demo reveal"><div class="phone demo-phone"><video id="demo-video" poster="video/demo-customer-poster.webp" width="600" height="1200" muted playsinline loop controls preload="none" aria-label="お客さまの画面の操作。料理・飲み物は「よかった」、待ち時間は「気になった」を選び、できた候補から文章を選んで、確認のチェックを入れてGoogleを開くまで（約26秒・音声なし）"><source src="video/demo-customer.mp4" type="video/mp4"><source src="video/demo-customer.webm" type="video/webm"></video></div>
+<figcaption>お客さまの画面を録画したものです（約26秒・音声なし）。店名・選んだ内容・文章は架空の例で、字幕は説明のために重ねています。</figcaption></figure>
 <div class="example-col">
 <div class="before-after">
 <div class="ba-box reveal">
-<p class="ba-label">お客さまが入れた感想</p>
-<p class="ba-text">窓際でゆっくりできた コーヒーは少し熱かった</p>
+<p class="ba-label">お客さまが選んだこと</p>
+<p class="ba-text">料理・飲み物：よかった<br>待ち時間：気になった</p>
 </div>
 <div class="ba-box ba-after reveal">
-<p class="ba-label">整えた文章（このあと本人が自由に直せます）</p>
-<p class="ba-text">窓際でゆっくりできた。コーヒーは少し熱かった。</p>
+<p class="ba-label">できた文章の候補の一つ（ていねい）。このあと本人が自由に直せます</p>
+<p class="ba-text">料理・飲み物がよかったです。待ち時間は気になるところがありました。</p>
 </div>
 </div>
 <p class="fiction-note">架空の例です。実際のお客さまの口コミではありません。</p>
 </div>
 </div>
 <ul class="plain-notes">
-<li>「少し熱かった」のような気になった点も、そのまま残ります。</li>
-<li>AIが使えないときや上限に達したときは、入力した文章をそのまま編集して続けられます。</li>
+<li>「気になった」を選んだことは、どの候補にも必ず残ります。「よかった」「ふつう」「気になった」は同じ見た目で並び、最初はどれも選ばれていません。</li>
+<li>候補はAIを使わず、選んだ話題と評価だけで組み立てます。選べる話題はお店の種類ごとに決まった言葉で、お店が変えることはできません。</li>
+<li>候補を使わず、自分で書くこともできます。そのときAIが整えるのは句読点と区切りだけで、AIが使えないときは入力した文章をそのまま編集して続けられます。</li>
 <li>お客さまの画面は、日本語・英語・中国語（簡体字）・韓国語で表示できます。訳すのは画面の案内だけです。</li>
 </ul>
-<h3 class="sub-h">お店の種類で変わる、書き出しのヒント</h3>
+<h3 class="sub-h">お店の種類で変わる、選べる話題</h3>
 <dl class="prompt-list">
-<div><dt>飲食店・カフェ</dt><dd>料理・飲み物・過ごした時間で、印象に残ったことは？</dd></div>
-<div><dt>美容室・サロン</dt><dd>仕上がりや施術中の過ごし方は、どうでしたか？</dd></div>
-<div><dt>ショップ</dt><dd>商品や、お買い物のしやすさは、どうでしたか？</dd></div>
-<div><dt>その他</dt><dd>今日の体験で、印象に残ったことは？</dd></div>
+<div><dt>飲食店・カフェ</dt><dd>料理・飲み物／接客／雰囲気・席／待ち時間／価格</dd></div>
+<div><dt>美容室・サロン</dt><dd>仕上がり／カウンセリング／接客／雰囲気／待ち時間／価格</dd></div>
+<div><dt>ショップ</dt><dd>品ぞろえ／接客／お店の雰囲気／お会計・待ち時間／価格</dd></div>
+<div><dt>その他</dt><dd>接客／雰囲気／待ち時間／価格／わかりやすさ</dd></div>
 </dl>
 </div>
 </section>
@@ -340,7 +341,19 @@
 <div class="sticky-cta" id="sticky-cta"><a class="primary" href="#create">無料でQRを作る</a></div>
 </div>
 </section>
-<section id="customer-view" class="hidden"><div class="lang-switch" role="group" aria-label="Language / 言語"><button type="button" data-lang="ja" lang="ja" aria-pressed="true">日本語</button><button type="button" data-lang="en" lang="en" aria-pressed="false">English</button><button type="button" data-lang="zh" lang="zh-Hans" aria-pressed="false">简体中文</button><button type="button" data-lang="ko" lang="ko" aria-pressed="false">한국어</button></div><div class="eyebrow" id="customer-store"></div><h1 data-i18n="h1">どんな時間でしたか？</h1><p class="lead"><span data-i18n="lead1">短い言葉で大丈夫。</span><br><span data-i18n="lead2">あなたが実際に感じたことを教えてください。</span></p><div class="card"><form id="draft-form"><label><span data-i18n="tagLabel">感想に近いもの</span> <span class="optional" data-i18n="tagOptional">選ばなくてもOK</span></label><div class="chips" role="group" aria-label="感想タグ" id="chips"><button type="button" data-tag="good" aria-pressed="false" data-i18n="tag_good">よかった</button><button type="button" data-tag="usual" aria-pressed="false" data-i18n="tag_usual">いつもどおり</button><button type="button" data-tag="concern" aria-pressed="false" data-i18n="tag_concern">気になった</button></div><aside class="writing-hint"><strong data-i18n="hintTitle">何から書こう？と思ったら</strong><p id="writing-prompt">今日の体験で、印象に残ったことは？</p><p class="hint" data-i18n="hintNote">よかった点も、気になった点も。答えずに自由に書いても大丈夫です。</p></aside><label for="experience" data-i18n="expLabel">あなたの感想</label><textarea id="experience" rows="4" maxlength="580" placeholder="例：窓際の席でゆっくりできました。コーヒーは少し熱かったです。"></textarea><p class="hint" data-i18n="expNote">名前・連絡先などの個人情報は書かないでください。文章を整えるとき、入力文をAIへ送ります。感想は580文字まで。</p><button id="draft-button" class="primary" type="submit"><span data-i18n="draftBtn">文章を整えてみる</span> <span>→</span></button><p id="draft-status" class="hint" role="status" aria-live="polite"></p><a class="text-link direct-google" target="_blank" rel="noopener noreferrer"><span data-i18n="direct">文章を整えず、Googleで書く</span> ↗</a></form></div><section id="draft-result" class="card hidden"><div class="eyebrow" data-i18n="resultEyebrow">仕上げは、あなたの言葉で。</div><h2 data-i18n="resultH2">この内容で伝わりますか？</h2><label for="draft-text" data-i18n="editLabel">自由に直せます</label><textarea id="draft-text" rows="5" maxlength="1600"></textarea><p class="hint" id="draft-mode"></p><label class="check"><input id="confirm" type="checkbox"><span data-i18n="confirm">自分の体験と合っていることを確認しました</span></label><button id="copy-draft" class="primary" disabled data-i18n="copyBtn">感想をコピー</button><a id="google-link" class="secondary disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true"><span data-i18n="googleBtn">Googleを開く</span> ↗</a><p class="hint" data-i18n="googleNote">Googleで貼り付けて、星と内容を確認してください。投稿はご自身の操作で行います。自動では投稿されません。</p><p id="copy-status" role="status" aria-live="polite"></p></section></section>
+<section id="customer-view" class="hidden"><div class="lang-switch" role="group" aria-label="Language / 言語"><button type="button" data-lang="ja" lang="ja" aria-pressed="true">日本語</button><button type="button" data-lang="en" lang="en" aria-pressed="false">English</button><button type="button" data-lang="zh" lang="zh-Hans" aria-pressed="false">简体中文</button><button type="button" data-lang="ko" lang="ko" aria-pressed="false">한국어</button></div><div class="eyebrow" id="customer-store"></div><h1 data-i18n="h1">どんな時間でしたか？</h1><p class="lead"><span data-i18n="lead1">タップで選ぶだけで、文章の候補ができます。</span><br><span data-i18n="lead2">自分の言葉で書くこともできます。</span></p>
+<div class="card" id="pick-card">
+<h2 id="pick-title" data-i18n="pickTitle">何がありましたか？</h2><p class="hint" data-i18n="pickNote">いくつでも選べます。選んだことだけが文章になります。</p>
+<div class="chips topic-chips" role="group" aria-labelledby="pick-title" id="topics"></div>
+<button type="button" class="text-link write-own-toggle" id="write-own-toggle" aria-controls="write-own" aria-expanded="false"><span data-i18n="writeOwn">選ばずに、自分で書く</span> →</button>
+<div id="ratings" class="ratings"></div>
+<div id="addition-part" class="hidden"><label for="addition"><span data-i18n="addLabel">ひとこと足す</span> <span class="optional" data-i18n="addOptional">なくてもOK</span></label><textarea id="addition" rows="2" maxlength="200" placeholder="例：コーヒーは少し熱かった"></textarea><p class="hint" data-i18n="addNote">入れた言葉は、AIが句読点だけを整えて文章の最後に付けます。名前・連絡先などの個人情報は書かないでください。200文字まで。</p></div>
+<button id="compose-button" class="primary" type="button"><span data-i18n="composeBtn">文章の候補を見る</span> <span>→</span></button>
+<p id="compose-status" class="hint" role="status" aria-live="polite"></p>
+</div>
+<section id="candidates" class="card hidden" aria-labelledby="cand-title"><h2 id="cand-title" tabindex="-1" data-i18n="candH2">近いものを1つ選んでください</h2><p class="hint" data-i18n="candNote">あなたが選んだことだけで組み立てた文章です。言い回しだけが違います。選んだあとで自由に直せます。</p><fieldset class="cand-list"><legend class="sr-only" data-i18n="candLegend">文章の候補</legend><div id="cand-options"></div><label class="cand cand-own"><input type="radio" name="cand" value="own"><span class="cand-body"><span class="cand-style" data-i18n="ownOption">自分で書く</span><span class="cand-text" data-i18n="ownOptionNote">候補を使わず、自分の言葉で書きます。</span></span></label></fieldset></section>
+<div class="card hidden" id="write-own"><form id="draft-form"><aside class="writing-hint"><strong data-i18n="hintTitle">何から書こう？と思ったら</strong><p id="writing-prompt">今日の体験で、印象に残ったことは？</p><p class="hint" data-i18n="hintNote">よかった点も、気になった点も。答えずに自由に書いても大丈夫です。</p></aside><label for="experience" data-i18n="expLabel">あなたの感想</label><textarea id="experience" rows="4" maxlength="580" placeholder="例：窓際の席でゆっくりできました。コーヒーは少し熱かったです。"></textarea><p class="hint" data-i18n="expNote">名前・連絡先などの個人情報は書かないでください。文章を整えるとき、入力文をAIへ送ります。感想は580文字まで。</p><button id="draft-button" class="primary" type="submit"><span data-i18n="draftBtn">文章を整えてみる</span> <span>→</span></button><p id="draft-status" class="hint" role="status" aria-live="polite"></p><a class="text-link direct-google" target="_blank" rel="noopener noreferrer"><span data-i18n="direct">文章を整えず、Googleで書く</span> ↗</a></form></div>
+<section id="draft-result" class="card hidden"><div class="eyebrow" data-i18n="resultEyebrow">仕上げは、あなたの言葉で。</div><h2 data-i18n="resultH2">この内容で伝わりますか？</h2><label for="draft-text" data-i18n="editLabel">自由に直せます</label><textarea id="draft-text" rows="5" maxlength="1600"></textarea><p class="hint" id="draft-mode"></p><label class="check"><input id="confirm" type="checkbox"><span data-i18n="confirm">自分の体験と合っていることを確認しました</span></label><button id="copy-draft" class="primary" disabled data-i18n="copyBtn">感想をコピー</button><a id="google-link" class="secondary disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true"><span data-i18n="googleBtn">Googleを開く</span> ↗</a><p class="hint" data-i18n="googleNote">Googleで貼り付けて、星と内容を確認してください。投稿はご自身の操作で行います。自動では投稿されません。</p><p id="copy-status" role="status" aria-live="polite"></p></section></section>
 </main>
 <footer class="site-footer">
 <div class="wrap">
@@ -349,6 +362,7 @@
 </div>
 </footer>
 <script src="qrcode.min.js" defer></script>
+<script src="compose.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>
