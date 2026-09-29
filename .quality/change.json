@@ -12,7 +12,8 @@
     "お客さま画面 v4（選ぶだけで下書き）: 業種(kind=general/food/beauty/retail)ごとの固定の中立な名詞の話題を選び、話題ごとに よかった/ふつう/気になった（同じ見た目・初期選択なし）を選ぶと、public/compose.js（AIなしの決定論・純関数）がその選択だけから3文体（短く/ていねい/くだけた）の候補を組み立てる。選んでいない話題・ほめ言葉の上乗せ・推薦/再訪意向・数字は入れず、気になったは必ず残る。任意の「ひとこと足す」だけを /api/draft に通して末尾に付ける（fallbackでも動く）。候補を選ぶと既存の編集欄→確認→コピー/Googleへ。「自分で書く」から既存の整文の流れも使える。ja/en/zh/ko すべてで候補を出す。tests/compose.test.mjs で全kind×全話題部分集合×全評価×4言語×3文体を網羅検査。デモ動画・スクショ・LPの#exampleを新しい流れに更新",
     "お客さま画面 v5（どこが？の細目）: 話題の評価を選ぶと「よかったのはどこ？／どこがふつう？／気になったのはどこ？」で業種×話題ごとの固定の中立な名詞の細目チップ（任意・複数・初期選択なし・同じ見た目）を選べる。細目は話題の評価を受け継ぎ、その話題の文だけに入る（例「料理・飲み物は、味と温かさがよかったです。」）。細目なしなら従来の文のまま。ja/en/zh/ko の訳と文型あり。tests/compose.test.mjs は細目なしの全網羅に加え、細目を層化（話題単独×評価×細目の全部分集合／2話題×評価×細目の境界4通り／全話題×全細目と先頭細目×全評価割当／固定シードの無作為40,000件）で同じ検査(a)〜(f)＋文型の骨格を行う",
     "LP v5 文言: DECISIONS.md の約束①②④・予定価格の文・申込情報の保管期間を一字一句そのまま掲載（③は /api/trial 申込完了の画面メッセージ）。予定価格は無料試用とは別の段、打ち消し線・「通常」「今なら」なし（lp_browser.py で検査）。FVのリードを選ぶ流れに書き換え（H1は不変）",
-    "/api/trial の Slack 通知: D1 保存に成功し env.SLACK_WEBHOOK_URL があるときだけ ctx.waitUntil(fetch) で1回、本文は店名と受付番号(trial_applications.id)のみ。redirect:'manual'。失敗しても応答は200 ok、ログは状態コードかエラー種別だけ。隠し欄・不正入力・429・保存失敗では送らない。Webhook の本番設定は本人が wrangler secret put で行う（未設定）"
+    "/api/trial の Slack 通知: D1 保存に成功し env.SLACK_WEBHOOK_URL があるときだけ ctx.waitUntil(fetch) で1回、本文は店名と受付番号(trial_applications.id)のみ。redirect:'manual'。失敗しても応答は200 ok、ログは状態コードかエラー種別だけ。隠し欄・不正入力・429・保存失敗では送らない。Webhook の本番設定は本人が wrangler secret put で行う（未設定）",
+    "LP v6（縦スライド＋右に申込フォーム）: #lp を1節=1枚のスライド9枚（FV/悩み/しくみ/実例/約束/置く場所とポスター/料金/できること・データ/FAQ・運営・締め）にし、各 min-height:100svh・scroll-snap-type:y proximity（動きを減らす設定ではなし）・左上に「NN / 09」。1024px以上は既存の試用フォーム(#trial, 4項目・/api/trial・③④の文言そのまま)を右の列に position:sticky で常に表示し、ヘッダーのナビはスライド番号へのリンク（表示中のスライドに aria-current）。1024px未満は固定せず料金の次に置き、下部固定バーに「試用を申し込む」を追加（フォームが画面にある間はバーを隠す）。線付き小見出し・蛍光マーカー・線画アイコン・色付きの縁/縦線・枠で囲んだカード・丸い番号バッジ・チェック印をやめ、角丸は操作部品とスマホ以外8px以下、影は写真とスマホだけ、青は主ボタンとリンクだけ、紺の面は約束の1枚だけ。lp_browser.py で FORBID（computed style による機械検査）・スライドの高さと番号・1280x800 で全スライドと最下部でフォームが画面内・390 でバーからフォームへ移動・390/1024/1280/1440 で横スクロールなしを検査。#create とお客さま画面は変更なし"
   ],
   "reuse": [
     {
@@ -74,6 +75,16 @@
       "path": "intake-beta/worker.mjs",
       "decision": "extend",
       "reason": "/api/trial の保存を RETURNING id にして受付番号を得て、既存の ctx.waitUntil で通知。refuse()/validTrial()/quota はそのまま"
+    },
+    {
+      "path": "intake-beta/tests/lp_browser.py",
+      "decision": "extend",
+      "reason": "同じ隔離配信(CSP付き)と settle()/check_images()/試用フォームの検査はそのまま。v6 の検査は check_slides()/check_forbidden()/to_slide() を足しただけで、既存の決定文言・二重価格・AI表記・動きを減らす設定の検査は弱めていない（下部バーが2ボタンになったため #create のボタンを指定）"
+    },
+    {
+      "path": "intake-beta/tests/poster_browser.py",
+      "decision": "reuse",
+      "reason": "印刷時に隠す要素の一覧の .closing-cta（v6で締め節はFAQのスライド内に移動）を #lp 直下の #price と .lp-aside に差し替えただけ"
     }
   ],
   "changed_files": [

@@ -103,8 +103,18 @@ route(false);
 function sampleQr(id){const el=$(id);if(!el||typeof qrcode!=='function'||document.body.dataset.view==='customer')return;try{const q=qrcode(0,'M');q.addData(location.origin+'/');q.make();el.innerHTML=q.createSvgTag({cellSize:4,margin:0,scalable:true});el.querySelector('svg').setAttribute('aria-hidden','true');}catch{el.textContent='';}}
 sampleQr('hero-qr');sampleQr('poster-qr');
 
-// Phone bottom bar: hidden while the hero's own button is on screen, so the first view shows one primary action.
-(function(){const bar=$('sticky-cta'),hero=document.querySelector('.hero-actions');if(!bar||!hero||!('IntersectionObserver' in window))return;bar.classList.add('is-off');new IntersectionObserver(es=>{for(const e of es)bar.classList.toggle('is-off',e.isIntersecting||e.boundingClientRect.top>0);}).observe(hero);})();
+// Phone bottom bar (below 1024px): hidden while the hero's own buttons are on screen (the first view shows one set of actions)
+// and while the 試用 form is on screen (the bar would cover its button).
+(function(){const bar=$('sticky-cta'),hero=document.querySelector('.hero-actions'),form=$('trial');if(!bar||!hero||!form||!('IntersectionObserver' in window))return;
+  const off={hero:true,form:false};const sync=()=>bar.classList.toggle('is-off',off.hero||off.form);sync();
+  new IntersectionObserver(es=>{for(const e of es)off.hero=e.isIntersecting||e.boundingClientRect.top>0;sync();}).observe(hero);
+  new IntersectionObserver(es=>{for(const e of es)off.form=e.isIntersecting;sync();}).observe(form);})();
+
+// LP v6 slides: the header numbers mark the slide in view (aria-current). The 1024px+ layout keeps the 試用 form fixed on the right,
+// so links to #trial focus its first field instead of scrolling the page to the form's place in the document.
+(function(){const links=[...document.querySelectorAll('.owner-nav a[href^="#"]')];const slides=links.map(a=>document.getElementById(a.getAttribute('href').slice(1))).filter(Boolean);
+  if(slides.length&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting)for(const a of links){if(a.getAttribute('href')==='#'+e.target.id)a.setAttribute('aria-current','true');else a.removeAttribute('aria-current');}},{rootMargin:'-45% 0px -50% 0px'});slides.forEach(s=>io.observe(s));}
+  const box=$('trial');document.querySelectorAll('#lp a[href="#trial"]').forEach(a=>a.addEventListener('click',e=>{if(!box||getComputedStyle(box).position!=='sticky')return;e.preventDefault();const f=$('trial-done').classList.contains('hidden')?$('trial-store'):$('trial-done');f.focus({preventScroll:true});}));})();
 
 // LP v2: sections fade in once when scrolled into view. Hidden only after this runs (html.reveal-on), so without JS,
 // without IntersectionObserver, or with prefers-reduced-motion everything stays visible and still.

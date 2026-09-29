@@ -7,6 +7,11 @@ every AI photo carries 「イメージ（AI生成）」, the scroll fade-in reve
 v5 checks: the owner's decided wording is on the page verbatim (FV lead, price, promises ①②③④, retention), the planned price
 is a separate row below the free trial, and nothing is struck through or says 「通常」「今なら」. --shots also writes the price, data
 and trial-done sections (price_*.jpg, data_*.jpg, trial_done_390.jpg).
+v6 checks (slides + fixed form): the LP is 9 slides in order, each at least one screen tall and numbered 「NN / 09」; at 1280x800 the
+試用 form is fixed on the right, fully on screen below the header on every slide and at the very end, and links to it focus its
+first field without scrolling; below 1024px it is not fixed, sits after the price slide, and the phone bar's 「試用を申し込む」 reaches
+it; no horizontal scroll at 390/1024/1280/1440; and the “AI-looking” decorations are machine-checked away inside #lp (FORBID).
+--shots also writes every slide at 1280x800 (slide_01.jpg..) and 390x844 (slide_390_01.jpg..) and the first view at 1440 (fv_1440.jpg).
 Prints a JSON summary; exit 0 on success.
 """
 from pathlib import Path
@@ -28,6 +33,57 @@ KEEP='試用のお申し込み内容は、試用期間の終了から1年で削�
 # no double-price presentation (景表法): no struck-through price and none of these words anywhere on the page
 NO_WORDS=['通常','今なら']
 STRUCK="[...document.querySelectorAll('*')].filter(e=>['S','DEL','STRIKE'].includes(e.tagName)||getComputedStyle(e).textDecorationLine.includes('line-through')).map(e=>e.tagName+':'+e.textContent.slice(0,30))"
+SLIDES=['top','worry','how-it-works','example','promise','scenes','price','scope','faq']
+# v6: decorations the owner called “AI臭い” are gone from #lp. Controls (inputs, buttons, button-styled links) and the phone
+# mock-up are allowed their borders, rounding and shadow; photos may carry a shadow; blue is for buttons and links only.
+MAX_BOXED=0
+FORBID=r"""(()=>{const lp=document.getElementById('lp');const px=v=>parseFloat(v)||0;
+ const out={kicker:lp.querySelectorAll('.kicker').length,mark:lp.querySelectorAll('.mark').length,
+  icons:[...lp.querySelectorAll('svg')].filter(v=>!v.closest('.sample-qr')).length,  // only the poster sample QR is drawn as SVG
+  check_glyphs:(lp.textContent.match(/[\u2713\u2714\u2705\u2611\u2610]/g)||[]).length,
+  ink_bands:lp.querySelectorAll('.band-ink').length,left_rule:[],inset_rule:[],boxed:[],shadow:[],round:[],pseudo:[],blue:[],gradient:[]};
+ // blue = the accent family or anything close to it (clearly blue hue, bright enough to read as blue rather than navy ink)
+ const rgb=v=>(v.match(/[\d.]+/g)||[]).map(Number);
+ const isBlue=v=>{const [r,g,b,a=1]=rgb(v);return a>0&&((b-r>=100&&b>=150)||['rgb(225, 234, 252)','rgb(156, 192, 255)'].includes(v));};
+ const name=e=>e.tagName.toLowerCase()+(e.id?'#'+e.id:'')+(typeof e.className==='string'&&e.className?'.'+e.className.trim().split(/\s+/).join('.'):'');
+ for(const e of [lp,...lp.querySelectorAll('*')]){const cs=getComputedStyle(e);if(cs.display==='none')continue;
+  const phone=!!e.closest('.phone');const ctrl=e.matches('input,textarea,select,button,.primary,.secondary');
+  const w=['Top','Right','Bottom','Left'].map(k=>cs['border'+k+'Style']==='none'?0:px(cs['border'+k+'Width']));
+  const c=['Top','Right','Bottom','Left'].map(k=>cs['border'+k+'Color']);
+  if(w[3]>0&&(w[0]!==w[3]||w[1]!==w[3]||c[0]!==c[3]||c[1]!==c[3]))out.left_rule.push(name(e));
+  if(cs.boxShadow.includes('inset')&&!phone)out.inset_rule.push(name(e));
+  if(w.every(x=>x>0)&&!ctrl&&!phone)out.boxed.push(name(e));
+  if((cs.boxShadow!=='none'||cs.textShadow!=='none'||cs.filter.includes('drop-shadow'))&&!phone&&!e.matches('.hero-photo'))out.shadow.push(name(e));
+  if(cs.backgroundImage.includes('gradient'))out.gradient.push(name(e));
+  const r=Math.max(...['TopLeft','TopRight','BottomLeft','BottomRight'].map(k=>px(cs['border'+k+'Radius'])));
+  if(r>8&&!phone&&!ctrl)out.round.push(name(e)+':'+r);
+  const blue=[cs.color,cs.backgroundColor,...c.filter((_,i)=>w[i]>0)].some(isBlue);
+  if(blue&&!ctrl&&!e.closest('a,button'))out.blue.push(name(e));
+  if(!phone)for(const p of ['::before','::after']){const pc=getComputedStyle(e,p);if(pc.content==='none'||pc.content==='normal')continue;
+   const pw=['Top','Right','Bottom','Left'].some(k=>pc['border'+k+'Style']!=='none'&&px(pc['border'+k+'Width'])>0);
+   if(pw||pc.backgroundColor!=='rgba(0, 0, 0, 0)'||pc.backgroundImage!=='none'||pc.transform!=='none'||pc.boxShadow!=='none'||isBlue(pc.color)||/[\u2713\u2714\u2705\u2611\u2610]/.test(pc.content))out.pseudo.push(name(e)+p);}}
+ return out;})()"""
+def check_forbidden(pg,res,key):
+ f=pg.evaluate(FORBID);res[key]={k:(len(v) if isinstance(v,list) else v) for k,v in f.items()}
+ assert f['kicker']==0 and f['mark']==0 and f['icons']==0 and f['check_glyphs']==0,f
+ assert f['ink_bands']<=1,f
+ for k in ('left_rule','inset_rule','shadow','round','pseudo','blue','gradient'):assert f[k]==[],(k,f[k])
+ assert len(f['boxed'])<=MAX_BOXED,('boxed cards',f['boxed'])
+# on screen below the header, and actually the top-most thing at its centre (not covered by the header, the bar or anything else)
+IN_VIEW="s=>{const r=document.querySelector(s).getBoundingClientRect();const top=document.querySelector('.site-header').getBoundingClientRect().bottom;if(!(r.height>0&&r.top>=top-0.5&&r.left>=0&&r.bottom<=innerHeight+0.5&&r.right<=innerWidth+0.5))return false;const hit=document.elementFromPoint(r.left+r.width/2,r.top+Math.min(r.height/2,20));return !!hit&&(document.querySelector(s).contains(hit)||hit.contains(document.querySelector(s)))}"
+def to_slide(pg,sid):
+ pg.evaluate("id=>{const e=document.getElementById(id);scrollTo({top:e.getBoundingClientRect().top+scrollY-60,behavior:'instant'})}",sid);pg.wait_for_timeout(200)
+def check_slides(pg,res,key):
+ got=pg.evaluate("[...document.querySelectorAll('#lp > .slide')].map(s=>({id:s.id,h:s.getBoundingClientRect().height,no:s.querySelector(':scope > .slide-no').textContent.replace(/\\s/g,'')}))")
+ assert [g['id'] for g in got]==SLIDES,got
+ vh=pg.evaluate('innerHeight')
+ for i,g in enumerate(got,1):
+  assert g['no']==f'{i:02d}/09',g
+  assert g['h']>=vh-1,('slide shorter than one screen',g,vh)
+ res[key]={g['id']:round(g['h']) for g in got}
+def slide_shots(pg,d,prefix):
+ for i,sid in enumerate(SLIDES,1):to_slide(pg,sid);pg.screenshot(path=str(Path(d)/f'{prefix}{i:02d}.jpg'),type='jpeg',quality=82)
+ pg.evaluate("scrollTo({top:0,behavior:'instant'})")
 def section_shot(pg,sel,path):
  # the fixed header and phone bar would cover the section in an element shot; hide them for the shot only
  pg.evaluate("for(const e of document.querySelectorAll('.site-header,.sticky-cta'))e.style.visibility='hidden'")
@@ -101,6 +157,20 @@ def main():
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_390.jpg'),type='jpeg',quality=80)
   assert pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in not armed'
   settle(pg);check_images(pg,res,'lp_images_390')
+  # v6 at phone width: slides, no fixed form, the form sits after the price slide, the bar's 試用 button reaches it
+  check_slides(pg,res,'slides_390');check_forbidden(pg,res,'forbid_390')
+  assert pg.evaluate("getComputedStyle(document.getElementById('trial')).position")=='static'
+  assert pg.evaluate("(()=>{const a=document.querySelector('.lp-aside');return a.previousElementSibling.id==='price'&&a.nextElementSibling.id==='scope'})()"),'form must follow the price slide'
+  assert pg.locator('#sticky-cta a').evaluate_all("l=>l.map(a=>[a.getAttribute('href'),a.textContent])")==[['#create','無料でQRを作る'],['#trial','試用を申し込む']]
+  to_slide(pg,'faq');assert not pg.evaluate(IN_VIEW,'#trial'),'form must not be fixed on a phone'
+  expect(pg.locator('#sticky-cta')).to_be_visible();pg.locator('#sticky-cta a[href="#trial"]').click();reached=False
+  for _ in range(40):
+   if pg.evaluate("(()=>{const r=document.getElementById('trial').getBoundingClientRect();return r.top>=0&&r.top<innerHeight*0.5})()"):reached=True;break
+   pg.wait_for_timeout(100)
+  assert reached,'phone bar did not bring the form on screen'
+  expect(pg.locator('#sticky-cta')).to_be_hidden()  # the bar steps aside while the form is on screen
+  if args.shots:pg.evaluate("scrollTo({top:0,behavior:'instant'})");slide_shots(pg,args.shots,'slide_390_')
+  pg.evaluate("scrollTo({top:0,behavior:'instant'})")
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_390_full.jpg'),full_page=True,type='jpeg',quality=80)
   if args.shots:section_shot(pg,'#price',str(Path(args.shots)/'price_390.jpg'));section_shot(pg,'#data',str(Path(args.shots)/'data_390.jpg'))
   # header CTA -> create view; back link -> LP
@@ -110,7 +180,7 @@ def main():
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'create_390_full.jpg'),full_page=True,type='jpeg',quality=80)
   pg.locator('.back-link').click();expect(pg.locator('.lp-hero')).to_be_visible();expect(pg.locator('#store-form')).to_be_hidden()
   # an in-page link from the LP keeps the LP
-  pg.locator('#faq').scroll_into_view_if_needed();expect(pg.locator('#sticky-cta')).to_be_visible();pg.locator('#sticky-cta a').click();expect(pg.locator('#store-form')).to_be_visible();pg.go_back();expect(pg.locator('.lp-hero')).to_be_visible()
+  pg.locator('#faq').scroll_into_view_if_needed();expect(pg.locator('#sticky-cta')).to_be_visible();pg.locator('#sticky-cta a[href="#create"]').click();expect(pg.locator('#store-form')).to_be_visible();pg.go_back();expect(pg.locator('.lp-hero')).to_be_visible()
   # trial form: client-side checks send nothing
   pg.locator('#trial-submit').click();expect(pg.locator('#trial-status')).to_contain_text('店名・お名前・連絡先');assert res['trial_bodies']==[]
   pg.locator('#trial-store').fill('架空の喫茶店');pg.locator('#trial-name').fill('山田 花子');pg.locator('#trial-contact').fill('あとで');pg.locator('#trial-submit').click()
@@ -126,6 +196,45 @@ def main():
   assert len(res['trial_bodies'])==4,res['trial_bodies']
   assert res['other_api']==[],('LP and create view must not send events',res['other_api'])
   ctx.close()
+  # v6 desktop 1280x800: the 試用 form is fixed on the right and fully on screen (below the header) from the first view to the end
+  ctx,pg=make(1280,800);pg.goto(BASE+'/');pg.wait_for_load_state('networkidle')
+  assert pg.evaluate("getComputedStyle(document.getElementById('trial')).position")=='sticky'
+  for sel in ('#trial','#trial-submit','#trial-store'):assert pg.evaluate(IN_VIEW,sel),('form not on screen at first view',sel)
+  hdr=pg.locator('.site-header').bounding_box();tb=pg.locator('#trial').bounding_box();assert tb['y']>=hdr['y']+hdr['height'],(hdr,tb)
+  assert tb['x']>=1280-440 and 360<=tb['width']<=400,tb  # the right column, 360-400px
+  nav=pg.locator('.owner-nav a').evaluate_all("l=>l.map(a=>[a.textContent,a.getAttribute('href')])");assert nav==[[f'{i:02d}','#'+sid] for i,sid in enumerate(SLIDES,1)],nav
+  settle(pg);check_slides(pg,res,'slides_1280');check_forbidden(pg,res,'forbid_1280')
+  if args.shots:slide_shots(pg,args.shots,'slide_')
+  for sid in SLIDES:
+   to_slide(pg,sid)
+   for sel in ('#trial','#trial-submit'):assert pg.evaluate(IN_VIEW,sel),('form left the screen',sid,sel)
+  # and at every 100px from the top to the very end (snap off so each position is where the page really rests)
+  pg.evaluate("document.documentElement.style.scrollSnapType='none'");end=pg.evaluate('document.documentElement.scrollHeight-innerHeight');y=0;positions=0
+  while True:
+   pg.evaluate("y=>scrollTo({top:y,behavior:'instant'})",y);positions+=1
+   for sel in ('#trial .trial-h','#trial-store','#trial-message','#trial-submit'):assert pg.evaluate(IN_VIEW,sel),('form left the screen or is covered',y,sel)
+   if y>=end:break
+   y=min(end,y+100)
+  pg.evaluate("document.documentElement.style.scrollSnapType=''");res['form_checked_positions_1280']=positions
+  pg.evaluate("scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'})");pg.wait_for_timeout(300)
+  assert pg.evaluate("Math.ceil(scrollY+innerHeight)>=document.documentElement.scrollHeight-1")
+  for sel in ('#trial','#trial-submit'):assert pg.evaluate(IN_VIEW,sel),('form left the screen at the page end',sel)
+  res['trial_box_1280']=pg.locator('#trial').bounding_box()
+  # a link to the form focuses its first field and leaves the page where it was; Tab reaches the form's fields in order
+  to_slide(pg,'price');y0=pg.evaluate('scrollY');pg.locator('.price-trial a').click();pg.wait_for_timeout(300)
+  assert pg.evaluate('document.activeElement.id')=='trial-store' and abs(pg.evaluate('scrollY')-y0)<2
+  order=[]
+  for _ in range(5):pg.keyboard.press('Tab');order.append(pg.evaluate("[document.activeElement.id,document.activeElement.getAttribute('href')]"))
+  assert order==[['trial-name',None],['trial-contact',None],['trial-message',None],['','privacy.html#trial'],['trial-submit',None]],order
+  expect(pg.locator('#sticky-cta')).to_be_hidden()
+  ctx.close()
+  # no horizontal scroll at any of the checked widths
+  for w in (390,1024,1280,1440):
+   ctx,pg=make(w,900);pg.goto(BASE+'/');pg.wait_for_load_state('networkidle');settle(pg)
+   assert pg.evaluate(no_overflow),('horizontal scroll',w)
+   if w==1440 and args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_1440.jpg'),type='jpeg',quality=82)
+   ctx.close()
+  res['no_overflow_widths']=[390,1024,1280,1440]
   # desktop LP
   ctx,pg=make(1280,900);pg.goto(BASE+'/');pg.wait_for_load_state('networkidle');expect(pg.locator('#sticky-cta')).to_be_hidden();expect(pg.locator('.owner-nav')).to_be_visible()
   assert pg.evaluate(no_overflow),'LP desktop overflow'
@@ -166,5 +275,5 @@ def main():
   for w in NO_WORDS:assert w not in ptext,w
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
- print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','demo_video_src','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
+ print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
 if __name__=='__main__':main()
