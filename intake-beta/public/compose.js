@@ -134,11 +134,13 @@ function composeOne(lang,kind,picks,style){
   const D=DETAIL_PHRASES[L][style];const cap=s=>L==='en'?s.charAt(0).toUpperCase()+s.slice(1):s;
   const parts=[];
   for(const r of RATINGS){
-    // topics without details share one sentence per rating; each topic with details gets its own, with the same rating wording
-    const ids=picks.filter(p=>p.rating===r&&!p.details.length).map(p=>label(L,kind,p.topic));
-    if(ids.length)parts.push(cap(P[r].replace('{L}',joinList(L,ids,style))));
-    for(const p of picks.filter(x=>x.rating===r&&x.details.length))
-      parts.push(cap(D[r].replace('{T}',label(L,kind,p.topic)).replace('{D}',joinList(L,p.details.map(d=>detailLabel(L,d)),style))));
+    // in display order: adjacent topics without details share one sentence; a topic with details gets its own, with the same rating wording
+    let ids=[];const flush=()=>{if(ids.length)parts.push(cap(P[r].replace('{L}',joinList(L,ids,style))));ids=[];};
+    for(const p of picks.filter(x=>x.rating===r)){
+      if(!p.details.length){ids.push(label(L,kind,p.topic));continue;}
+      flush();parts.push(cap(D[r].replace('{T}',label(L,kind,p.topic)).replace('{D}',joinList(L,p.details.map(d=>detailLabel(L,d)),style))));
+    }
+    flush();
   }
   return parts.join(SEP[L]);
 }
