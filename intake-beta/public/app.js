@@ -140,5 +140,8 @@ $('trial-form').addEventListener('submit',async e=>{e.preventDefault();
 });
 
 
-// LP demo video: plays (muted) only while on screen, never with reduced motion; controls stay for manual play.
-(function(){const v=$('demo-video');if(!v||!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches)return;new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting)v.play().catch(()=>{});else v.pause();}},{threshold:.5}).observe(v);})();
+// LP videos (the demo and the v7 short loops, all video.lp-video): muted, play only while on screen, never with reduced motion.
+// With reduced motion (or without IntersectionObserver) they stay on the poster frame, and the loops get controls so they can still be played by hand.
+(function(){const vs=[...document.querySelectorAll('#lp video.lp-video')];if(!vs.length)return;
+  if(!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches){vs.forEach(v=>{v.controls=true;});return;}
+  const io=new IntersectionObserver(es=>{for(const e of es){const v=e.target;if(e.isIntersecting)v.play().catch(()=>{});else v.pause();}},{threshold:.5});vs.forEach(v=>io.observe(v));})();

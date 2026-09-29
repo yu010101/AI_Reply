@@ -12,6 +12,12 @@ v6 checks (slides + fixed form): the LP is 9 slides in order, each at least one 
 first field without scrolling; below 1024px it is not fixed, sits after the price slide, and the phone bar's 「試用を申し込む」 reaches
 it; no horizontal scroll at 390/1024/1280/1440; and the “AI-looking” decorations are machine-checked away inside #lp (FORBID).
 --shots also writes every slide at 1280x800 (slide_01.jpg..) and 390x844 (slide_390_01.jpg..) and the first view at 1440 (fv_1440.jpg).
+v7 checks (more pictures, fewer words): FORBID stays as in v6 except that Lucide icons (svg.ico) and drawings of real objects
+(svg.illus) are allowed; every icon is 20-28px, drawn in 紺 or 青 (the light 青 only on the 紺 slide), references a <symbol> of the
+inline sprite, and sits beside text: no frame, background, round shape or card around it (check_icons). Every #lp video is
+muted/loop/playsinline/preload=none with a poster and exactly two same-origin sources (mp4, webm); none is fetched on first view;
+each plays once on screen and pauses when scrolled away; with reduced motion none plays and they get controls (check_videos).
+At 1280x800 the running text of every slide except the long ones (04/06/08/09) is at most two lines (check_text_lines).
 Prints a JSON summary; exit 0 on success.
 """
 from pathlib import Path
@@ -39,7 +45,7 @@ SLIDES=['top','worry','how-it-works','example','promise','scenes','price','scope
 MAX_BOXED=0
 FORBID=r"""(()=>{const lp=document.getElementById('lp');const px=v=>parseFloat(v)||0;
  const out={kicker:lp.querySelectorAll('.kicker').length,mark:lp.querySelectorAll('.mark').length,
-  icons:[...lp.querySelectorAll('svg')].filter(v=>!v.closest('.sample-qr')).length,  // only the poster sample QR is drawn as SVG
+  icons:[...lp.querySelectorAll('svg')].filter(v=>!v.closest('.sample-qr')&&!v.closest('svg.ico')&&!v.closest('svg.illus')).length,  // v7: besides the poster sample QR, only svg.ico (Lucide) and svg.illus (drawings)
   check_glyphs:(lp.textContent.match(/[\u2713\u2714\u2705\u2611\u2610]/g)||[]).length,
   ink_bands:lp.querySelectorAll('.band-ink').length,left_rule:[],inset_rule:[],boxed:[],shadow:[],round:[],pseudo:[],blue:[],gradient:[]};
  // blue = the accent family or anything close to it (clearly blue hue, bright enough to read as blue rather than navy ink)
@@ -58,11 +64,41 @@ FORBID=r"""(()=>{const lp=document.getElementById('lp');const px=v=>parseFloat(v
   const r=Math.max(...['TopLeft','TopRight','BottomLeft','BottomRight'].map(k=>px(cs['border'+k+'Radius'])));
   if(r>8&&!phone&&!ctrl)out.round.push(name(e)+':'+r);
   const blue=[cs.color,cs.backgroundColor,...c.filter((_,i)=>w[i]>0)].some(isBlue);
-  if(blue&&!ctrl&&!e.closest('a,button'))out.blue.push(name(e));
+  if(blue&&!ctrl&&!e.closest('a,button')&&!e.closest('svg.ico,svg.illus'))out.blue.push(name(e));  // v7: icon and drawing lines may be 青
   if(!phone)for(const p of ['::before','::after']){const pc=getComputedStyle(e,p);if(pc.content==='none'||pc.content==='normal')continue;
    const pw=['Top','Right','Bottom','Left'].some(k=>pc['border'+k+'Style']!=='none'&&px(pc['border'+k+'Width'])>0);
    if(pw||pc.backgroundColor!=='rgba(0, 0, 0, 0)'||pc.backgroundImage!=='none'||pc.transform!=='none'||pc.boxShadow!=='none'||isBlue(pc.color)||/[\u2713\u2714\u2705\u2611\u2610]/.test(pc.content))out.pseudo.push(name(e)+p);}}
  return out;})()"""
+# v7 icons: beside text only. The icon has no box of its own and no ancestor up to the slide draws a frame, a filled round shape
+# or a card-like surface different from the slide around it; colour is 紺/青 (light 青 only on the 紺 slide); size 20-28px.
+ICON_COLORS={'ai':'rgb(27, 58, 107)','accent':'rgb(37, 99, 217)','accent_on_ink':'rgb(156, 192, 255)'}
+ICONS=r"""(()=>{const px=v=>parseFloat(v)||0;const out=[];const sprite=document.querySelector('svg.icon-sprite');
+ for(const s of document.querySelectorAll('#lp svg.ico')){const cs=getComputedStyle(s);if(cs.display==='none')continue;const r=s.getBoundingClientRect();
+  const use=s.querySelector('use');const ref=use?use.getAttribute('href'):'';const slide=s.closest('.slide')||s.closest('.lp-aside');
+  const bad=[];const slideBg=getComputedStyle(slide).backgroundColor;
+  for(let e=s;e&&e!==slide;e=e.parentElement){const c=getComputedStyle(e);
+   const bw=['Top','Right','Bottom','Left'].filter(k=>c['border'+k+'Style']!=='none'&&px(c['border'+k+'Width'])>0).length;
+   const rad=Math.max(...['TopLeft','TopRight','BottomLeft','BottomRight'].map(k=>px(c['border'+k+'Radius'])));
+   const bg=c.backgroundColor!=='rgba(0, 0, 0, 0)'&&c.backgroundColor!==slideBg;
+   if(bw===4)bad.push('frame:'+e.tagName);if(bg)bad.push('surface:'+e.tagName+':'+c.backgroundColor);if(rad>0&&(bg||bw))bad.push('round:'+e.tagName);
+   if(c.boxShadow!=='none')bad.push('shadow:'+e.tagName);if(c.backgroundImage!=='none')bad.push('bgimage:'+e.tagName);}
+  const text=(s.parentElement.textContent||'').trim().length;
+  out.push({ref,w:Math.round(r.width),h:Math.round(r.height),color:cs.color,stroke:cs.stroke,ink:!!s.closest('.band-ink'),symbol:!!(ref&&sprite&&sprite.querySelector(ref)),
+   inLp:!!(sprite&&!sprite.closest('#lp')),bad,text,where:slide.id});}
+ return out;})()"""
+def check_icons(pg,res,key):
+ ic=pg.evaluate(ICONS);res[key]=len(ic)
+ assert len(ic)>=20,('icons missing',len(ic))
+ for i in ic:
+  assert i['symbol'] and i['ref'].startswith('#i-') and i['inLp'],('icon must use the inline sprite outside #lp',i)
+  assert 20<=i['w']<=28 and 20<=i['h']<=28,('icon size',i)
+  allowed={ICON_COLORS['ai'],ICON_COLORS['accent']}|({ICON_COLORS['accent_on_ink']} if i['ink'] else set())
+  assert i['color'] in allowed and i['stroke'] in allowed,('icon colour',i)
+  assert i['bad']==[],('icon inside a frame/background/card',i)
+  assert i['text']>0,('icon without text beside it',i)
+ # every icon placement the owner listed is covered
+ where={i['where'] for i in ic}
+ for need in ('top','promise','price','scope','faq'):assert need in where,('no icon on',need,where)
 def check_forbidden(pg,res,key):
  f=pg.evaluate(FORBID);res[key]={k:(len(v) if isinstance(v,list) else v) for k,v in f.items()}
  assert f['kicker']==0 and f['mark']==0 and f['icons']==0 and f['check_glyphs']==0,f
@@ -94,6 +130,49 @@ def settle(pg):
  h=pg.evaluate('document.documentElement.scrollHeight');y=0
  while y<h:pg.evaluate("y=>scrollTo({top:y,behavior:'instant'})",y);pg.wait_for_timeout(120);y+=400
  pg.evaluate("scrollTo({top:0,behavior:'instant'})");pg.wait_for_timeout(900)
+# v7 videos: same-origin, two sources, silent loops that stay unloaded until needed and play only on screen
+VIDEOS="[...document.querySelectorAll('#lp video')].map(v=>({id:v.id,cls:v.className,poster:v.getAttribute('poster'),srcs:[...v.querySelectorAll('source')].map(s=>[s.getAttribute('src'),s.type]),muted:v.muted,loop:v.loop,inline:v.hasAttribute('playsinline'),preload:v.getAttribute('preload'),paused:v.paused,controls:v.controls,label:v.getAttribute('aria-label')||''}))"
+def video_state(pg,i):return pg.evaluate("i=>{const v=document.querySelectorAll('#lp video')[i];return {paused:v.paused,t:v.currentTime,src:v.currentSrc.split('/').pop()}}",i)
+def check_videos(pg,res,key,reduced=False):
+ vs=pg.evaluate(VIDEOS);res[key]={'count':len(vs)}
+ assert len(vs)>=5,('videos missing',vs)
+ for v in vs:
+  assert 'lp-video' in v['cls'].split(),v
+  assert v['muted'] and v['loop'] and v['inline'] and v['preload']=='none' and v['label'],v
+  assert v['poster'] and v['poster'].startswith('video/') and v['poster'].endswith('.webp') and (PUB/v['poster']).is_file(),v
+  assert len(v['srcs'])==2 and v['srcs'][0][1]=='video/mp4' and v['srcs'][1][1]=='video/webm',v
+  for src,_ in v['srcs']:assert src.startswith('video/') and '//' not in src and (PUB/src).is_file(),v
+  assert (PUB/v['srcs'][0][0]).stat().st_size<=420_000 or v['id']=='demo-video',('loop too heavy',v['srcs'][0][0])
+ played=[]
+ for i in range(len(vs)):
+  pg.evaluate("i=>document.querySelectorAll('#lp video')[i].scrollIntoView({block:'center',behavior:'instant'})",i);ok=False
+  for _ in range(30):
+   st=video_state(pg,i)
+   if reduced:pg.wait_for_timeout(50)
+   elif not st['paused'] and st['t']>0.2:ok=True;break
+   else:pg.wait_for_timeout(150)
+  if reduced:pg.wait_for_timeout(600);st=video_state(pg,i);assert st['paused'] and st['t']==0,('played under reduced motion',i,st)
+  else:
+   assert ok,('video did not play on screen',vs[i]['poster'],st);played.append(st['src'])
+   pg.evaluate("scrollTo({top:0,behavior:'instant'})");pg.wait_for_timeout(400)
+   assert video_state(pg,i)['paused'],('video kept playing off screen',i)
+ if reduced:assert all(pg.evaluate("[...document.querySelectorAll('#lp video')].map(v=>v.controls)")),'reduced motion: loops need controls to be played by hand'
+ res[key]['played']=played
+# v7: running text (not headings, captions, notes, labels or the price figure) is at most two lines on the short slides at 1280x800
+LONG_SLIDES={'example','scenes','scope','faq'}  # 04/06/08/09 hold lists, the poster kit and the FAQ; exempt (reported)
+TEXT_LINES=r"""(long)=>{const out=[];
+ for(const sl of document.querySelectorAll('#lp > .slide')){if(long.includes(sl.id))continue;
+  for(const e of sl.querySelectorAll('.slide-in p, .slide-in li')){
+   if(e.closest('figcaption,figure .ai-badge')||e.matches('.slide-no,.fiction-note,.hero-for,.price-num,.price-name,.step-who,.small')||e.querySelector('p,li'))continue;
+   const cs=getComputedStyle(e);if(cs.display==='none')continue;const t=e.querySelector(':scope > span')||e;
+   const lh=parseFloat(getComputedStyle(t).lineHeight);const h=t.getBoundingClientRect().height;
+   out.push({slide:sl.id,text:e.textContent.trim().slice(0,24),lines:Math.round(h/lh)});}}
+ return out;}"""
+def check_text_lines(pg,res,key):
+ tl=pg.evaluate(TEXT_LINES,sorted(LONG_SLIDES));over=[t for t in tl if t['lines']>2]
+ res[key]={'checked':len(tl),'max_lines':max(t['lines'] for t in tl),'exempt':sorted(LONG_SLIDES)}
+ assert len(tl)>=12,tl
+ assert over==[],('running text over two lines',over)
 V2_IMAGES='''[...document.querySelectorAll('#lp img')].map(i=>({src:i.getAttribute('src'),w:i.getAttribute('width'),h:i.getAttribute('height'),lazy:i.getAttribute('loading'),alt:i.alt,ok:i.complete&&i.naturalWidth>0,ai:!!i.closest('.scene-img')&&!!i.closest('.scene-img').querySelector('.ai-badge')&&i.closest('.scene-img').querySelector('.ai-badge').textContent==='イメージ（AI生成）',scene:!!i.closest('.scene-img'),hero:!!i.closest('.lp-hero')}))'''
 def check_images(pg,res,key):
  imgs=pg.evaluate(V2_IMAGES);res[key]=len(imgs)
@@ -158,7 +237,7 @@ def main():
   assert pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in not armed'
   settle(pg);check_images(pg,res,'lp_images_390')
   # v6 at phone width: slides, no fixed form, the form sits after the price slide, the bar's 試用 button reaches it
-  check_slides(pg,res,'slides_390');check_forbidden(pg,res,'forbid_390')
+  check_slides(pg,res,'slides_390');check_forbidden(pg,res,'forbid_390');check_icons(pg,res,'icons_390')
   assert pg.evaluate("getComputedStyle(document.getElementById('trial')).position")=='static'
   assert pg.evaluate("(()=>{const a=document.querySelector('.lp-aside');return a.previousElementSibling.id==='price'&&a.nextElementSibling.id==='scope'})()"),'form must follow the price slide'
   assert pg.locator('#sticky-cta a').evaluate_all("l=>l.map(a=>[a.getAttribute('href'),a.textContent])")==[['#create','無料でQRを作る'],['#trial','試用を申し込む']]
@@ -203,7 +282,9 @@ def main():
   hdr=pg.locator('.site-header').bounding_box();tb=pg.locator('#trial').bounding_box();assert tb['y']>=hdr['y']+hdr['height'],(hdr,tb)
   assert tb['x']>=1280-440 and 360<=tb['width']<=400,tb  # the right column, 360-400px
   nav=pg.locator('.owner-nav a').evaluate_all("l=>l.map(a=>[a.textContent,a.getAttribute('href')])");assert nav==[[f'{i:02d}','#'+sid] for i,sid in enumerate(SLIDES,1)],nav
-  settle(pg);check_slides(pg,res,'slides_1280');check_forbidden(pg,res,'forbid_1280')
+  assert pg.evaluate("performance.getEntriesByType('resource').filter(r=>/[.](mp4|webm)$/.test(r.name)).length")==0,'a video was fetched on first view (preload=none)'
+  check_text_lines(pg,res,'text_lines_1280')
+  settle(pg);check_slides(pg,res,'slides_1280');check_forbidden(pg,res,'forbid_1280');check_icons(pg,res,'icons_1280')
   if args.shots:slide_shots(pg,args.shots,'slide_')
   for sid in SLIDES:
    to_slide(pg,sid)
@@ -254,6 +335,7 @@ def main():
    pg.wait_for_timeout(200)
   assert playing,'demo video did not start on screen'
   res['demo_video_src']=pg.evaluate("document.getElementById('demo-video').currentSrc.split('/').pop()")
+  check_videos(pg,res,'videos_1280')
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_1280_full.jpg'),full_page=True,type='jpeg',quality=80)
   ctx.close()
   # prefers-reduced-motion: nothing is hidden or animated
@@ -263,6 +345,7 @@ def main():
   assert pg.evaluate("getComputedStyle(document.querySelector('.hero-phone')).animationName")=='none'
   pg.locator('#demo-video').scroll_into_view_if_needed();pg.wait_for_timeout(1500)
   assert pg.evaluate("document.getElementById('demo-video').paused"),'demo video autoplayed under reduced motion'
+  check_videos(pg,res,'videos_reduced_390',reduced=True)
   ctx.close()
   # customer view hides every owner element; a broken share link opens the create view with the message
   ctx,pg=make(390);pg.goto(BASE+'/?'+urlencode({'store':STORE,'review':GOOGLE}));pg.wait_for_load_state('networkidle')
@@ -275,5 +358,5 @@ def main():
   for w in NO_WORDS:assert w not in ptext,w
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
- print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
+ print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','icons_390','icons_1280','videos_1280','videos_reduced_390','text_lines_1280','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
 if __name__=='__main__':main()

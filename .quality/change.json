@@ -13,7 +13,8 @@
     "お客さま画面 v5（どこが？の細目）: 話題の評価を選ぶと「よかったのはどこ？／どこがふつう？／気になったのはどこ？」で業種×話題ごとの固定の中立な名詞の細目チップ（任意・複数・初期選択なし・同じ見た目）を選べる。細目は話題の評価を受け継ぎ、その話題の文だけに入る（例「料理・飲み物は、味と温かさがよかったです。」）。細目なしなら従来の文のまま。ja/en/zh/ko の訳と文型あり。tests/compose.test.mjs は細目なしの全網羅に加え、細目を層化（話題単独×評価×細目の全部分集合／2話題×評価×細目の境界4通り／全話題×全細目と先頭細目×全評価割当／固定シードの無作為40,000件）で同じ検査(a)〜(f)＋文型の骨格を行う",
     "LP v5 文言: DECISIONS.md の約束①②④・予定価格の文・申込情報の保管期間を一字一句そのまま掲載（③は /api/trial 申込完了の画面メッセージ）。予定価格は無料試用とは別の段、打ち消し線・「通常」「今なら」なし（lp_browser.py で検査）。FVのリードを選ぶ流れに書き換え（H1は不変）",
     "/api/trial の Slack 通知: D1 保存に成功し env.SLACK_WEBHOOK_URL があるときだけ ctx.waitUntil(fetch) で1回、本文は店名と受付番号(trial_applications.id)のみ。redirect:'manual'。失敗しても応答は200 ok、ログは状態コードかエラー種別だけ。隠し欄・不正入力・429・保存失敗では送らない。Webhook の本番設定は本人が wrangler secret put で行う（未設定）",
-    "LP v6（縦スライド＋右に申込フォーム）: #lp を1節=1枚のスライド9枚（FV/悩み/しくみ/実例/約束/置く場所とポスター/料金/できること・データ/FAQ・運営・締め）にし、各 min-height:100svh・scroll-snap-type:y proximity（動きを減らす設定ではなし）・左上に「NN / 09」。1024px以上は既存の試用フォーム(#trial, 4項目・/api/trial・③④の文言そのまま)を右の列に position:sticky で常に表示し、ヘッダーのナビはスライド番号へのリンク（表示中のスライドに aria-current）。1024px未満は固定せず料金の次に置き、下部固定バーに「試用を申し込む」を追加（フォームが画面にある間はバーを隠す）。線付き小見出し・蛍光マーカー・線画アイコン・色付きの縁/縦線・枠で囲んだカード・丸い番号バッジ・チェック印をやめ、角丸は操作部品とスマホ以外8px以下、影は写真とスマホだけ、青は主ボタンとリンクだけ、紺の面は約束の1枚だけ。lp_browser.py で FORBID（computed style による機械検査）・スライドの高さと番号・1280x800 で全スライドと最下部でフォームが画面内・390 でバーからフォームへ移動・390/1024/1280/1440 で横スクロールなしを検査。#create とお客さま画面は変更なし"
+    "LP v6（縦スライド＋右に申込フォーム）: #lp を1節=1枚のスライド9枚（FV/悩み/しくみ/実例/約束/置く場所とポスター/料金/できること・データ/FAQ・運営・締め）にし、各 min-height:100svh・scroll-snap-type:y proximity（動きを減らす設定ではなし）・左上に「NN / 09」。1024px以上は既存の試用フォーム(#trial, 4項目・/api/trial・③④の文言そのまま)を右の列に position:sticky で常に表示し、ヘッダーのナビはスライド番号へのリンク（表示中のスライドに aria-current）。1024px未満は固定せず料金の次に置き、下部固定バーに「試用を申し込む」を追加（フォームが画面にある間はバーを隠す）。線付き小見出し・蛍光マーカー・線画アイコン・色付きの縁/縦線・枠で囲んだカード・丸い番号バッジ・チェック印をやめ、角丸は操作部品とスマホ以外8px以下、影は写真とスマホだけ、青は主ボタンとリンクだけ、紺の面は約束の1枚だけ。lp_browser.py で FORBID（computed style による機械検査）・スライドの高さと番号・1280x800 で全スライドと最下部でフォームが画面内・390 でバーからフォームへ移動・390/1024/1280/1440 で横スクロールなしを検査。#create とお客さま画面は変更なし",
+    "LP v7（黒字を減らし、写真・動画・アイコン・図解を増やす）: 各スライドの地の文を1280x800で2行以内に（04/06/08/09の長い節は例外）。詳細はFAQへ移し分類（料金と試用/Googleのルールと3つの約束/使い方/お客さまのデータ）。決定文言（約束①〜④・予定価格・保管期間・FVリード・申込完了③）とGoogleポリシー/ステマ関連の注記は一字一句そのまま（場所の移動のみ）。AI生成写真4枚（Higgsfield z_image 4:3、悩み/約束の背景/料金/締め）に「イメージ（AI生成）」、写真内QRはOpenCV（QRCodeDetector＋WeChat）で復号不可を確認、WebP 60KB以下・width/height・lazy。実画面の短い無音ループ4本（tools/record_demo.py --clips: 03の3ステップ＋06ポスター、5〜10秒、mp4＋webm＋poster、preload=none、画面内でだけ再生・動きを減らす設定では再生せず controls を付ける。既存デモと同じ仕組みを video.lp-video で共通化）。Lucide（ISC）のアイコンを tools/build_icons.py でインラインの <symbol> スプライトにし（外部読み込み・CSP変更なし、public/licenses.txt）、文や見出しの横に22pxで置く（枠・背景・カードに入れない）。汎用イラストは使わず、実物（吹き出し・スマホ・卓上カード・Googleの星）の線画 svg.illus。lp_browser.py: FORBID は .ico/.illus だけ例外にして据え置き、check_icons・check_videos・check_text_lines を追加（それぞれ入れ替え試験で落ちることを確認）"
   ],
   "reuse": [
     {
@@ -85,6 +86,21 @@
       "path": "intake-beta/tests/poster_browser.py",
       "decision": "reuse",
       "reason": "印刷時に隠す要素の一覧の .closing-cta（v6で締め節はFAQのスライド内に移動）を #lp 直下の #price と .lp-aside に差し替えただけ"
+    },
+    {
+      "path": "intake-beta/tools/record_demo.py",
+      "decision": "extend",
+      "reason": "同じ隔離配信・CSP・字幕/タップの重ね表示・CDP screencast・ffmpeg 変換を --clips で短いループにも使う（既存デモの録画処理はそのまま）"
+    },
+    {
+      "path": "intake-beta/public/app.js",
+      "decision": "extend",
+      "reason": "デモ動画の画面内だけ再生（IntersectionObserver・動きを減らす設定で無効）を video.lp-video 全部に広げただけ"
+    },
+    {
+      "path": "intake-beta/tests/lp_browser.py",
+      "decision": "extend",
+      "reason": "FORBID・check_images・決定文言・二重価格の検査はそのまま。FORBID の例外に .ico/.illus を足し、check_icons/check_videos/check_text_lines を追加"
     }
   ],
   "changed_files": [
@@ -116,7 +132,25 @@
     "intake-beta/public/video/demo-customer.webm",
     "intake-beta/tools/record_demo.py",
     "intake-beta/public/compose.js",
-    "intake-beta/tests/compose.test.mjs"
+    "intake-beta/tests/compose.test.mjs",
+    "intake-beta/tools/build_icons.py",
+    "intake-beta/public/licenses.txt",
+    "intake-beta/public/img/worry-counter.webp",
+    "intake-beta/public/img/price-morning.webp",
+    "intake-beta/public/img/closing-cafe-card.webp",
+    "intake-beta/public/img/promise-interior.webp",
+    "intake-beta/public/video/step-store.mp4",
+    "intake-beta/public/video/step-store.webm",
+    "intake-beta/public/video/step-store-poster.webp",
+    "intake-beta/public/video/step-customer.mp4",
+    "intake-beta/public/video/step-customer.webm",
+    "intake-beta/public/video/step-customer-poster.webp",
+    "intake-beta/public/video/step-self.mp4",
+    "intake-beta/public/video/step-self.webm",
+    "intake-beta/public/video/step-self-poster.webp",
+    "intake-beta/public/video/poster-print.mp4",
+    "intake-beta/public/video/poster-print.webm",
+    "intake-beta/public/video/poster-print-poster.webp"
   ],
   "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
 }

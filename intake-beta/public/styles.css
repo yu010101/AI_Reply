@@ -146,7 +146,7 @@ button.text-link{background:none;border:0;padding:6px 0;text-align:left;font:inh
 body:not([data-view=customer]):not([data-view=create]) .site-footer{padding-bottom:96px}
 
 /* ---- LP v6: 1節=1枚の縦スライド＋右に試用の申込フォーム（1024px以上）----
-   飾りの縁・色の縦線・線付き小見出し・蛍光マーカー・線画アイコン・丸い番号バッジ・チェック印は使わない。
+   飾りの縁・色の縦線・線付き小見出し・蛍光マーカー・丸い番号バッジ・チェック印は使わない（v7: アイコンは文の横に置くだけ。下の v7 節）。
    区切りは余白と面の色、要るところだけ細い線1本。青（--accent）は主ボタンとリンクだけ。影は写真とスマホ画面だけ。 */
 html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60px}
 #lp{--slide-pad:20px}
@@ -196,7 +196,7 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 .phone{position:relative;width:var(--pw,220px);padding:8px;border-radius:34px;background:#15191c;box-shadow:inset 0 0 0 1px #3d464b,0 28px 48px -26px rgba(23,44,67,.6)}
 .phone::before{content:"";position:absolute;z-index:1;top:15px;left:50%;width:30%;height:15px;border-radius:10px;background:#15191c;transform:translateX(-50%)}
 .phone img{display:block;width:100%;height:auto;border-radius:26px;background:var(--paper)}
-.step-phone{--pw:150px;margin-top:16px}
+.step-phone{--pw:164px;margin-top:16px}
 .inline-cta{max-width:360px;margin-top:36px}
 
 /* 04 実例: 録画と「選んだこと → 候補」。箱で囲まず、文字の大きさで分ける */
@@ -265,10 +265,6 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 
 /* 08 できること・データの扱い */
 .scope-grid{display:grid;gap:12px}
-.scope-yes,.scope-no{margin:0;padding-left:1.4em;font-size:15px}
-.scope-yes{list-style-type:"・"}
-.scope-no{list-style-type:"— ";color:var(--sub)}
-.scope-yes li,.scope-no li{margin:6px 0}
 .scope-part{margin-top:56px}
 .part-h{font-size:clamp(20px,2.2vw,24px);margin-bottom:12px}
 .fit-line{font-family:var(--mincho);font-size:clamp(18px,2vw,22px);line-height:1.7}
@@ -366,6 +362,8 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
   body[data-view=lp] .header-inner{max-width:none;padding:0 20px 0 32px}
   .owner-nav{gap:2px}
   .owner-nav a{font-size:12px;padding:6px 7px;font-variant-numeric:tabular-nums;letter-spacing:.06em}
+  .lp-hero .hero-grid{grid-template-columns:1.3fr .7fr;gap:28px}
+  .lp-hero .lead{font-size:15px}
   .owner-nav a[aria-current=true]{color:var(--ink);font-weight:700;text-decoration:underline;text-underline-offset:6px}
 }
 @media(min-width:1024px) and (max-height:840px){
@@ -393,3 +391,64 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 .doc h1{margin-bottom:8px}
 .doc .card h2{margin-top:24px;scroll-margin-top:80px}
 .doc .card h2:first-child{margin-top:0}
+
+/* ---- LP v7: 写真・動画・アイコン・実物の図解を増やす（v6 の禁止はそのまま） ----
+   アイコン(.ico)は Lucide の線画を文や見出しの横に22pxで置くだけ。枠・背景の円・カードには入れない。線の色は紺(--ai)か青(--accent)、
+   紺の面（05）の上だけは同じ青の明るい版(--accent-on-ink)。図解(.illus)はポスター・スマホ・吹き出しなど実物を線で描いたもの。 */
+.ico{display:inline-block;flex:none;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;color:var(--accent);vertical-align:-5px;margin-right:8px}
+.icon-sprite{position:absolute;width:0;height:0;overflow:hidden}
+.band-ink .ico{color:var(--accent-on-ink)}
+.illus{fill:none;stroke:var(--ai);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.illus .dot{fill:var(--ai);stroke:none}
+.illus .arrow{stroke:var(--accent)}
+/* 01 */
+.hero-points{list-style:none;padding:0;margin:20px 0 0;display:flex;flex-wrap:wrap;gap:6px 22px;font-size:13.5px;color:var(--sub)}
+.hero-points li{display:flex;align-items:center}
+.hero-points .ico{margin-right:6px}
+/* 02 */
+.worry-grid{display:grid;gap:28px;align-items:center}
+.worry-list li{display:grid;grid-template-columns:76px 1fr;column-gap:16px;align-items:center;font-size:clamp(19px,1.9vw,25px);margin:0 0 .8em}
+.worry-list .illus{width:76px;height:48px}
+.worry-photo{margin:0}
+#lp .worry-grid .section-note{margin-top:20px}
+/* 03 */
+.flow{margin:-4px 0 22px;max-width:480px}
+.flow-svg{display:block;width:100%;height:auto}
+.flow figcaption{display:grid;grid-template-columns:repeat(3,1fr);font-size:12px;color:var(--sub);text-align:center;margin-top:6px}
+.phone video{display:block;width:100%;height:auto;border-radius:26px;background:var(--paper)}
+/* 04 */
+.example-note{font-size:15px;max-width:40em;margin:0 0 8px}
+.prompt-list dt{display:flex;align-items:center}
+/* 05: 静かな店内の写真を紺の面の下にうっすら（グラデーションは使わない） */
+#lp .band-ink{overflow:hidden}
+.promise-bg{position:absolute;inset:0;aspect-ratio:auto;border-radius:0;background:transparent;z-index:0}
+.promise-bg img{opacity:.2;mix-blend-mode:luminosity}
+.promise-bg .ai-badge{right:12px;bottom:12px}
+.band-ink .slide-in,.band-ink .slide-no{position:relative;z-index:1}
+.band-ink .slide-no{position:absolute}
+.promises h3 .ico{vertical-align:-4px}
+.policy-link a+a{margin-left:0}
+/* 06 */
+.sheet-row{display:flex;gap:20px;align-items:center;justify-content:center;flex-wrap:wrap}
+.sheet-row .sheet{width:min(230px,100%)}
+.sheet-row .sheet .sample-qr{width:116px;height:116px}
+.poster-phone{--pw:150px}
+/* 07 */
+.price-grid{display:grid;gap:28px;align-items:start}
+.icon-list{list-style:none;padding:0;margin:0;max-width:44em}
+.icon-list li{display:grid;grid-template-columns:22px 1fr;column-gap:10px;align-items:start;margin:8px 0;font-size:15px}
+.icon-list .ico{margin:3px 0 0}
+.price-photo{margin:0}
+/* 08 */
+.scope-no .ico{color:var(--ai)}
+.scope-no li{color:var(--sub)}
+/* 09 */
+.faq-cat{display:flex;align-items:center;font-size:18px;margin:36px 0 4px;scroll-margin-top:76px}
+.faq-cat:first-of-type{margin-top:8px}
+.closing{display:grid;gap:28px;align-items:center}
+.closing-photo{margin:0}
+@media(min-width:760px){
+  .worry-grid{grid-template-columns:1.5fr 1fr;gap:36px}
+  .price-grid{grid-template-columns:1fr minmax(220px,.62fr);gap:36px}
+  .closing{grid-template-columns:1fr minmax(220px,.7fr);gap:40px}
+}
