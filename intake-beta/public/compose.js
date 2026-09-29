@@ -3,6 +3,8 @@
 // the topics are fixed neutral nouns per store kind (shops cannot edit them), and every sentence is "topic + rating" only.
 // Nothing else is added: no unselected topic, no extra praise, no recommendation or revisit intent, no numbers.
 // A "concern" rating always stays in the text. The three styles differ only in wording, never in which topic got which rating.
+// Details ("どこが？"): after rating a topic the customer may also pick any of that topic's fixed neutral detail nouns
+// (optional, several). Details carry no rating of their own: they inherit the topic's rating and appear only in its sentence.
 // Loaded by index.html as a classic script (global HitokotoCompose) and by node --test via require/import (module.exports).
 (function(root){
 'use strict';
@@ -26,6 +28,43 @@ const LABELS={
   ko:{dish:'음식·음료',service:'접객',ambience:'분위기·좌석',wait:'대기 시간',price:'가격',result:'결과',counseling:'상담',selection:'상품 구성',checkout:'계산·대기 시간',clarity:'알기 쉬움',
     _kind:{beauty:{ambience:'분위기'},retail:{ambience:'매장 분위기'},general:{ambience:'분위기'}}}
 };
+// Detail ids per kind and topic, in display order. Neutral nouns only (no praise, adjectives or shop-specific facts).
+const DETAILS={
+  food:{dish:['taste','temp','portion','look','menu'],service:['explain','speed','manner'],ambience:['light','quiet','space','clean'],
+    wait:['seating','serving','paying'],price:['portionValue','costShown']},
+  beauty:{result:['cut','color','styling','lasting'],counseling:['hearing','proposal','explain'],service:['guide','speed','manner'],
+    ambience:['clean','quiet','light'],wait:['start','during','paying'],price:['advance','menuValue']},
+  retail:{selection:['variety','sizeColor','stock'],service:['explain','speed','manner'],ambience:['layout','aisle','light','clean'],
+    checkout:['register','payment','wrapping'],price:['qualityValue','tags']},
+  general:{service:['explain','speed','manner'],ambience:['light','quiet','clean'],wait:['reception','turn','paying'],
+    price:['advance','contentValue'],clarity:['signs','explain','procedure']}
+};
+const DETAIL_LABELS={
+  ja:{taste:'味',temp:'温かさ',portion:'量',look:'見た目',menu:'メニューの種類',explain:'説明',speed:'対応の早さ',manner:'言葉づかい',guide:'案内',
+    light:'明るさ',quiet:'静かさ',space:'席の広さ',clean:'清潔さ',seating:'席に着くまで',serving:'料理が出るまで',paying:'お会計',
+    portionValue:'量とのつりあい',costShown:'値段の表示',cut:'カット',color:'カラー',styling:'スタイリング',lasting:'持ち',hearing:'聞き取り',proposal:'提案',
+    start:'始まるまで',during:'施術中の待ち',advance:'事前の説明',menuValue:'メニューとのつりあい',variety:'種類',sizeColor:'サイズや色',stock:'在庫',
+    layout:'商品の並べ方',aisle:'通路の広さ',register:'レジの待ち',payment:'支払い方法',wrapping:'包装',qualityValue:'品質とのつりあい',tags:'値札',
+    reception:'受付まで',turn:'順番が来るまで',contentValue:'内容とのつりあい',signs:'案内表示',procedure:'手続き'},
+  en:{taste:'taste',temp:'temperature',portion:'portion size',look:'presentation',menu:'menu choices',explain:'explanations',speed:'speed of response',manner:'way of speaking',guide:'guidance',
+    light:'lighting',quiet:'noise level',space:'space at the table',clean:'cleanliness',seating:'wait to be seated',serving:'wait for the food',paying:'checkout',
+    portionValue:'value for the portion',costShown:'cost display',cut:'cut',color:'color',styling:'styling',lasting:'longevity',hearing:'understanding of my request',proposal:'suggestions',
+    start:'wait before it began',during:'waiting during the treatment',advance:'explanation beforehand',menuValue:'value for the menu',variety:'variety',sizeColor:'sizes and colors',stock:'stock',
+    layout:'product layout',aisle:'aisle space',register:'wait at the register',payment:'payment options',wrapping:'wrapping',qualityValue:'value for the quality',tags:'shelf labels',
+    reception:'wait at reception',turn:'wait for my turn',contentValue:'value for what I got',signs:'signage',procedure:'procedures'},
+  zh:{taste:'味道',temp:'温度',portion:'分量',look:'外观',menu:'菜单种类',explain:'说明',speed:'响应速度',manner:'说话方式',guide:'引导',
+    light:'亮度',quiet:'安静程度',space:'座位空间',clean:'清洁程度',seating:'入座前',serving:'上菜前',paying:'结账',
+    portionValue:'与分量的匹配',costShown:'标价',cut:'剪发',color:'染发',styling:'造型',lasting:'持久度',hearing:'需求了解',proposal:'建议',
+    start:'开始前',during:'服务中的等待',advance:'事先说明',menuValue:'与项目的匹配',variety:'种类',sizeColor:'尺码和颜色',stock:'库存',
+    layout:'陈列',aisle:'通道宽度',register:'收银排队',payment:'支付方式',wrapping:'包装',qualityValue:'与质量的匹配',tags:'标签',
+    reception:'受理前',turn:'轮到我之前',contentValue:'与内容的匹配',signs:'指示标识',procedure:'手续'},
+  ko:{taste:'맛',temp:'온도',portion:'양',look:'담음새',menu:'메뉴 종류',explain:'설명',speed:'응대 속도',manner:'말투',guide:'안내',
+    light:'밝기',quiet:'소음 정도',space:'좌석 공간',clean:'청결',seating:'자리에 앉기까지',serving:'음식이 나오기까지',paying:'계산',
+    portionValue:'양과의 균형',costShown:'금액 표시',cut:'커트',color:'컬러',styling:'스타일링',lasting:'유지력',hearing:'요청 파악',proposal:'제안',
+    start:'시작하기까지',during:'시술 중 대기',advance:'사전 설명',menuValue:'메뉴와의 균형',variety:'종류',sizeColor:'사이즈와 색상',stock:'재고',
+    layout:'진열',aisle:'통로 넓이',register:'계산대 대기',payment:'결제 방법',wrapping:'포장',qualityValue:'품질과의 균형',tags:'라벨 표시',
+    reception:'접수까지',turn:'차례가 오기까지',contentValue:'내용과의 균형',signs:'안내 표시',procedure:'절차'}
+};
 // One sentence per rating group: {L} is the list of topics that got that rating. Wording only; no added content.
 const PHRASES={
   ja:{short:{good:'{L}、よかった。',ok:'{L}、ふつう。',concern:'{L}、気になった。'},
@@ -41,12 +80,29 @@ const PHRASES={
       polite:{good:'{L} 부분이 좋았습니다.',ok:'{L} 부분은 보통이었습니다.',concern:'{L} 부분은 신경 쓰이는 점이 있었습니다.'},
       casual:{good:'{L} 부분이 좋았어요.',ok:'{L} 부분은 보통이었어요.',concern:'{L} 부분이 신경 쓰였어요.'}}
 };
+// A topic with details gets its own sentence: {T} = the topic, {D} = its picked details. Same rating wording as PHRASES.
+const DETAIL_PHRASES={
+  ja:{short:{good:'{T}（{D}）、よかった。',ok:'{T}（{D}）、ふつう。',concern:'{T}（{D}）、気になった。'},
+      polite:{good:'{T}は、{D}がよかったです。',ok:'{T}は、{D}がふつうでした。',concern:'{T}は、{D}が気になりました。'},
+      casual:{good:'{T}は、{D}がよかった。',ok:'{T}は、{D}がふつうだった。',concern:'{T}は、{D}が気になった。'}},
+  en:{short:{good:'Good: {T} ({D}).',ok:'Average: {T} ({D}).',concern:'Concern: {T} ({D}).'},
+      polite:{good:'For the {T}, I found the {D} good.',ok:'For the {T}, I found the {D} average.',concern:'For the {T}, I had a concern about the {D}.'},
+      casual:{good:'For the {T}, liked the {D}.',ok:'For the {T}, the {D} felt average.',concern:'For the {T}, had a concern about the {D}.'}},
+  zh:{short:{good:'{T}（{D}）：好。',ok:'{T}（{D}）：一般。',concern:'{T}（{D}）：有在意的地方。'},
+      polite:{good:'{T}方面，我觉得{D}不错。',ok:'{T}方面，我觉得{D}一般。',concern:'{T}方面，{D}有我在意的地方。'},
+      casual:{good:'{T}方面，{D}挺好的。',ok:'{T}方面，{D}感觉一般。',concern:'{T}方面，{D}让我有些在意。'}},
+  ko:{short:{good:'{T}({D}): 좋음.',ok:'{T}({D}): 보통.',concern:'{T}({D}): 신경 쓰임.'},
+      polite:{good:'{T}에서는 {D} 부분이 좋았습니다.',ok:'{T}에서는 {D} 부분은 보통이었습니다.',concern:'{T}에서는 {D} 부분은 신경 쓰이는 점이 있었습니다.'},
+      casual:{good:'{T}에서는 {D} 부분이 좋았어요.',ok:'{T}에서는 {D} 부분은 보통이었어요.',concern:'{T}에서는 {D} 부분이 신경 쓰였어요.'}}
+};
 const LANGS=Object.keys(PHRASES);
 const SEP={ja:'',zh:'',en:' ',ko:' '};
 const MAX_TOPICS=6;
 function kindOf(kind){return Object.hasOwn(TOPICS,kind)?kind:'general';}
 function topicsFor(kind){return TOPICS[kindOf(kind)].slice();}
 function label(lang,kind,id){const t=LABELS[lang]||LABELS.ja;const k=t._kind[kindOf(kind)];return (k&&Object.hasOwn(k,id))?k[id]:t[id];}
+function detailsFor(kind,topic){const d=DETAILS[kindOf(kind)];return Object.hasOwn(d,topic)?d[topic].slice():[];}
+function detailLabel(lang,id){const t=DETAIL_LABELS[lang]||DETAIL_LABELS.ja;return t[id];}
 function joinList(lang,items,style){
   if(items.length<2)return items[0]||'';
   if(lang==='en'&&style==='short')return items.join(', ');
@@ -64,20 +120,25 @@ function normalize(kind,picks){
   const seen=new Set();
   for(const p of picks){
     if(!p||!allowed.includes(p.topic)||!RATINGS.includes(p.rating)||seen.has(p.topic))throw new Error('picks');
+    // details are optional; when given, each must be one of this topic's fixed details, without repeats
+    if(p.details!==undefined){const ok=DETAILS[kindOf(kind)][p.topic];
+      if(!Array.isArray(p.details)||new Set(p.details).size!==p.details.length||p.details.some(d=>!ok.includes(d)))throw new Error('picks');}
     seen.add(p.topic);
   }
-  // fixed display order, so the same choices always give the same text
-  return allowed.filter(id=>seen.has(id)).map(id=>({topic:id,rating:picks.find(p=>p.topic===id).rating}));
+  // fixed display order (topics and details), so the same choices always give the same text
+  return allowed.filter(id=>seen.has(id)).map(id=>{const p=picks.find(x=>x.topic===id);const chosen=p.details||[];
+    return {topic:id,rating:p.rating,details:DETAILS[kindOf(kind)][id].filter(d=>chosen.includes(d))};});
 }
 function composeOne(lang,kind,picks,style){
   const L=Object.hasOwn(PHRASES,lang)?lang:'ja';const P=PHRASES[L][style];
+  const D=DETAIL_PHRASES[L][style];const cap=s=>L==='en'?s.charAt(0).toUpperCase()+s.slice(1):s;
   const parts=[];
   for(const r of RATINGS){
-    const ids=picks.filter(p=>p.rating===r).map(p=>label(L,kind,p.topic));
-    if(!ids.length)continue;
-    let s=P[r].replace('{L}',joinList(L,ids,style));
-    if(L==='en')s=s.charAt(0).toUpperCase()+s.slice(1);
-    parts.push(s);
+    // topics without details share one sentence per rating; each topic with details gets its own, with the same rating wording
+    const ids=picks.filter(p=>p.rating===r&&!p.details.length).map(p=>label(L,kind,p.topic));
+    if(ids.length)parts.push(cap(P[r].replace('{L}',joinList(L,ids,style))));
+    for(const p of picks.filter(x=>x.rating===r&&x.details.length))
+      parts.push(cap(D[r].replace('{T}',label(L,kind,p.topic)).replace('{D}',joinList(L,p.details.map(d=>detailLabel(L,d)),style))));
   }
   return parts.join(SEP[L]);
 }
@@ -88,6 +149,6 @@ function compose(lang,kind,picks,addition){
   const extra=typeof addition==='string'?addition.trim():'';
   return STYLES.map(style=>{const body=composeOne(L,kind,norm,style);return {style,text:extra?body+SEP[L]+extra:body};});
 }
-const api={RATINGS,STYLES,TOPICS,LANGS,MAX_TOPICS,topicsFor,label,compose};
+const api={RATINGS,STYLES,TOPICS,DETAILS,LANGS,MAX_TOPICS,topicsFor,label,detailsFor,detailLabel,compose};
 if(typeof module==='object'&&module&&module.exports)module.exports=api;else root.HitokotoCompose=Object.freeze(api);
 })(typeof globalThis!=='undefined'?globalThis:this);

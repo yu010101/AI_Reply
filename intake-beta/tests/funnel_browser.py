@@ -54,15 +54,32 @@ def main():
   LOOK="e=>{const c=getComputedStyle(e);return [c.backgroundColor,c.borderTopColor,c.borderTopWidth,c.fontWeight,c.fontSize,c.color,Math.round(e.getBoundingClientRect().width),Math.round(e.getBoundingClientRect().height)].join('|')}"
   looks=[pg.locator('#ratings fieldset').first.locator('span').nth(i).evaluate(LOOK) for i in range(3)];assert len(set(looks))==1,looks
   pg.locator('#compose-button').click();expect(pg.locator('#compose-status')).to_contain_text('どうだったか');assert res['draft_bodies']==[]
+  # details ("どこが？") appear only after a rating, are optional, inherit the rating and survive a rating change
+  expect(pg.locator('#ratings [data-topic=dish] .detail-part')).to_be_hidden();expect(pg.locator('#ratings [data-topic=wait] .detail-part')).to_be_hidden()
   pg.locator('[name=rate-dish][value=good]').check(force=True)
+  dish=pg.locator('#ratings [data-topic=dish]');expect(dish.locator('.detail-part')).to_be_visible();expect(pg.locator('#ratings [data-topic=wait] .detail-part')).to_be_hidden()
+  expect(dish.locator('.detail-q')).to_have_text('よかったのはどこ？ 選ばなくてもOK・いくつでも')
+  assert dish.locator('[data-detail]').all_text_contents()==['味','温かさ','量','見た目','メニューの種類'],dish.locator('[data-detail]').all_text_contents()
+  assert dish.locator('[data-detail][aria-pressed=true]').count()==0,'details start unselected'
+  DLOOK="e=>{const c=getComputedStyle(e);return [c.backgroundColor,c.borderTopColor,c.fontWeight,c.fontSize,c.color].join('|')}"
+  assert len({dish.locator('[data-detail]').nth(i).evaluate(DLOOK) for i in range(5)})==1,'details must look the same'
+  for d in ['taste','temp','portion']:dish.locator('[data-detail=%s]'%d).click()
+  dish.locator('[data-detail=portion]').click()  # tapping again removes it
+  assert dish.locator('[data-detail][aria-pressed=true]').all_text_contents()==['味','温かさ']
+  pg.locator('[name=rate-dish][value=concern]').check(force=True);expect(dish.locator('.detail-q')).to_contain_text('気になったのはどこ？')
+  assert dish.locator('[data-detail][aria-pressed=true]').all_text_contents()==['味','温かさ'],'details kept when the rating changes'
+  pg.locator('[name=rate-dish][value=ok]').check(force=True);expect(dish.locator('.detail-q')).to_contain_text('どこがふつう？')
+  pg.locator('[name=rate-dish][value=good]').check(force=True);expect(dish.locator('.detail-q')).to_contain_text('よかったのはどこ？')
   # keyboard: Space picks a rating, arrow keys move within the three
   pg.locator('[name=rate-wait][value=good]').focus();pg.keyboard.press('Space');pg.keyboard.press('ArrowRight');pg.keyboard.press('ArrowRight')
   assert pg.locator('[name=rate-wait]:checked').get_attribute('value')=='concern'
   on=[pg.locator('#ratings fieldset').nth(i).locator('input:checked + span').evaluate(LOOK) for i in range(2)];assert on[0]==on[1],on
+  wait=pg.locator('#ratings [data-topic=wait]');expect(wait.locator('.detail-q')).to_contain_text('気になったのはどこ？')
+  assert wait.locator('[data-detail]').all_text_contents()==['席に着くまで','料理が出るまで','お会計'];wait.locator('[data-detail=serving]').click()
   pg.locator('#addition').fill('コーヒーは少し熱かった');draft_status['tidy']=True;pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible()
   assert res['draft_bodies']==[{'text':'コーヒーは少し熱かった','storeName':STORE}],res['draft_bodies']  # only the added words go to the AI, never the picks
   cands=pg.locator('#cand-options .cand-text').all_text_contents()
-  assert cands==['料理・飲み物、よかった。待ち時間、気になった。コーヒーは少し熱かった。','料理・飲み物がよかったです。待ち時間は気になるところがありました。コーヒーは少し熱かった。','料理・飲み物がよかった。待ち時間は気になった。コーヒーは少し熱かった。'],cands
+  assert cands==['料理・飲み物（味と温かさ）、よかった。待ち時間（料理が出るまで）、気になった。コーヒーは少し熱かった。','料理・飲み物は、味と温かさがよかったです。待ち時間は、料理が出るまでが気になりました。コーヒーは少し熱かった。','料理・飲み物は、味と温かさがよかった。待ち時間は、料理が出るまでが気になった。コーヒーは少し熱かった。'],cands
   assert pg.locator('#cand-options .cand-style').all_text_contents()==['短く','ていねい','くだけた']
   assert pg.locator('input[name=cand]').count()==4 and pg.locator('input[name=cand]:checked').count()==0;expect(pg.locator('.cand-own')).to_contain_text('自分で書く')
   expect(pg.locator('#draft-result')).to_be_hidden()
@@ -96,11 +113,14 @@ def main():
   assert pg.locator('#topics button').all_text_contents()==['result','consultation','service','atmosphere','wait time','price']
   pg.locator('#topics button',has_text='result').click();pg.locator('#topics button',has_text='price').click()
   pg.locator('[name=rate-result][value=good]').check(force=True);pg.locator('[name=rate-price][value=concern]').check(force=True)
+  expect(pg.locator('#ratings [data-topic=result] .detail-q')).to_contain_text('Which part was good?');expect(pg.locator('#ratings [data-topic=price] .detail-q')).to_contain_text('Which part was a concern?')
+  pg.locator('#ratings [data-topic=result] [data-detail=cut]').click()
   pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible();assert len(res['draft_bodies'])==nd,'no AI call without added words'
-  assert pg.locator('#cand-options .cand-text').first.text_content()=='Good: result. Concern: price.'
+  assert pg.locator('#cand-options .cand-text').first.text_content()=='Good: result (cut). Concern: price.',pg.locator('#cand-options .cand-text').first.text_content()
   pg.locator('[data-lang="ko"]').click();assert pg.locator('html').get_attribute('lang')=='ko';expect(pg.locator('#compose-button')).to_contain_text('문장 후보 보기')
   assert pg.locator('#topics [aria-pressed=true]').all_text_contents()==['결과','가격'];assert pg.locator('[name=rate-price]:checked').get_attribute('value')=='concern'
-  assert pg.locator('#cand-options .cand-text').first.text_content()=='결과: 좋음. 가격: 신경 쓰임.',pg.locator('#cand-options .cand-text').first.text_content()
+  assert pg.locator('#cand-options .cand-text').first.text_content()=='결과(커트): 좋음. 가격: 신경 쓰임.',pg.locator('#cand-options .cand-text').first.text_content()
+  assert pg.locator('#ratings [data-topic=result] [data-detail][aria-pressed=true]').all_text_contents()==['커트'];expect(pg.locator('#ratings [data-topic=result] .detail-q')).to_contain_text('어디가 좋았나요?')
   pg.locator('#write-own-toggle').click();pg.locator('#experience').fill('The wait was long');pg.locator('[data-lang="zh"]').click();assert pg.locator('#experience').input_value()=='The wait was long'
   assert pg.locator('[data-lang="zh"]').get_attribute('aria-pressed')=='true'
   assert pg.evaluate('document.documentElement.scrollWidth<=innerWidth'),'mobile overflow'

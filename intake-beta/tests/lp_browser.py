@@ -4,6 +4,9 @@ in this script (status chosen per case); every other /api/ call and every extern
 Optional --shots DIR writes full-page JPEG screenshots (390px phone, 1280px desktop, and the create view) and the first view only
 (fv_390.jpg, fv_1280.jpg). v2 checks: every LP image is same-origin WebP with width/height and loading=lazy and actually decodes,
 every AI photo carries 「イメージ（AI生成）」, the scroll fade-in reveals everything, and prefers-reduced-motion turns it off.
+v5 checks: the owner's decided wording is on the page verbatim (FV lead, price, promises ①②③④, retention), the planned price
+is a separate row below the free trial, and nothing is struck through or says 「通常」「今なら」. --shots also writes the price, data
+and trial-done sections (price_*.jpg, data_*.jpg, trial_done_390.jpg).
 Prints a JSON summary; exit 0 on success.
 """
 from pathlib import Path
@@ -14,6 +17,22 @@ R=Path(__file__).resolve().parents[1];PUB=R/'public'
 BASE='https://hitokoto.example';GOOGLE='https://g.page/r/qa-fictional-store/review';STORE='QA用の架空店舗'
 CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 H1='QRを置くだけ。お客さまが、自分の言葉で書ける。'
+# the owner's decided wording (DECISIONS.md, 2026-09-29), used verbatim
+LEAD='何がどうだったかをタップで選ぶだけ。選んだことだけが文章になります。確認してGoogleに投稿するのは、お客さま本人です。'
+P1='試用中に料金がかかることはありません。正式版に移るときは事前にご案内し、お申し込みいただいたお店だけが有料になります。'
+P2='正式版の開始時期と料金は、決まりしだいこのページでお知らせします。試用店舗には、ご入力の連絡先にもご連絡します。'
+P3='お申し込みを受け付けました。内容を確認のうえ、ご入力の連絡先にご連絡します（先着10店に達していた場合も、その旨をお知らせします）。'
+P4='試用中は無料です。設定で分からないことは、このページのフォームからご相談ください。使ってみた感想を、簡単なアンケートでうかがうことがあります。'
+PRICE='正式版の予定価格：1店舗 月2,980円（税込）。変更する場合はこのページでお知らせします'
+KEEP='試用のお申し込み内容は、試用期間の終了から1年で削除します。正式版をお申し込みのお店は契約期間中保管します'
+# no double-price presentation (景表法): no struck-through price and none of these words anywhere on the page
+NO_WORDS=['通常','今なら']
+STRUCK="[...document.querySelectorAll('*')].filter(e=>['S','DEL','STRIKE'].includes(e.tagName)||getComputedStyle(e).textDecorationLine.includes('line-through')).map(e=>e.tagName+':'+e.textContent.slice(0,30))"
+def section_shot(pg,sel,path):
+ # the fixed header and phone bar would cover the section in an element shot; hide them for the shot only
+ pg.evaluate("for(const e of document.querySelectorAll('.site-header,.sticky-cta'))e.style.visibility='hidden'")
+ pg.locator(sel).scroll_into_view_if_needed();pg.wait_for_timeout(300);pg.locator(sel).screenshot(path=path,type='jpeg',quality=82)
+ pg.evaluate("for(const e of document.querySelectorAll('.site-header,.sticky-cta'))e.style.visibility=''")
 def settle(pg):
  # scroll the whole page once so lazy images load and every fade-in has fired, then return to the top
  h=pg.evaluate('document.documentElement.scrollHeight');y=0
@@ -67,11 +86,23 @@ def main():
   assert pg.locator('#poster-qr svg').count()==1,'sample QR not drawn'  # the hero shows a photo, the poster section keeps the QR sample
   body=pg.locator('#lp').inner_text()
   for must in ['架空の例です','星や感想で、振り分けません。','特典と引き換えにしません。','自動で投稿しません。','2,980','税込','先着10店','合同会社Radineer']:assert must in body,must
+  # decided wording, verbatim: FV lead, price, promises ①②④ and the retention period
+  assert pg.locator('.lp-hero .lead').inner_text().replace('\n','')==LEAD,pg.locator('.lp-hero .lead').inner_text()
+  for must,where in [(PRICE,'#price'),(P1,'#price'),(P2,'#price'),(P4,'#trial'),(KEEP,'#data')]:assert must in pg.locator(where).inner_text().replace('\n',''),(where,must)
+  assert '短い感想に、AIが句読点を整えます' not in body,'old FV lead left'
+  html=pg.content();text=pg.evaluate('document.documentElement.textContent')
+  for w in NO_WORDS:assert w not in html and w not in text,w
+  assert pg.evaluate(STRUCK)==[],pg.evaluate(STRUCK)
+  # the planned price is its own row below the free trial, not a column beside it
+  trial_box=pg.locator('#price .price-col').bounding_box();plan_box=pg.locator('#price .price-plan').bounding_box()
+  assert pg.locator('#price .price-col').count()==1 and plan_box['y']>=trial_box['y']+trial_box['height'],(trial_box,plan_box)
+  assert pg.locator('#trial-done').inner_text().strip()==P3,pg.locator('#trial-done').inner_text()
   ctas=pg.locator('a[href="#create"]:visible').count();res['visible_create_ctas_390']=ctas;assert ctas>=5,ctas
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_390.jpg'),type='jpeg',quality=80)
   assert pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in not armed'
   settle(pg);check_images(pg,res,'lp_images_390')
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_390_full.jpg'),full_page=True,type='jpeg',quality=80)
+  if args.shots:section_shot(pg,'#price',str(Path(args.shots)/'price_390.jpg'));section_shot(pg,'#data',str(Path(args.shots)/'data_390.jpg'))
   # header CTA -> create view; back link -> LP
   pg.locator('.header-cta').click();expect(pg.locator('#store-form')).to_be_visible();assert pg.evaluate('document.body.dataset.view')=='create'
   expect(pg.locator('#lp')).to_be_hidden();expect(pg.locator('#sticky-cta')).to_be_hidden();expect(pg.locator('.header-cta')).to_be_hidden()
@@ -89,7 +120,8 @@ def main():
    trial_status['code']=code;pg.locator('#trial-contact').fill('owner@example.com');pg.locator('#trial-submit').click()
    expect(pg.locator('#trial-status')).to_contain_text(text);assert pg.locator('#trial-store').input_value()=='架空の喫茶店';expect(pg.locator('#trial-submit')).to_be_enabled()
   trial_status['code']=200;pg.locator('#trial-message').fill('レジ横に置いてみたいです。');pg.locator('#trial-submit').click()
-  expect(pg.locator('#trial-done')).to_be_visible();expect(pg.locator('#trial-form')).to_be_hidden()
+  expect(pg.locator('#trial-done')).to_be_visible();expect(pg.locator('#trial-form')).to_be_hidden();expect(pg.locator('#trial-done')).to_have_text(P3)
+  if args.shots:section_shot(pg,'#trial',str(Path(args.shots)/'trial_done_390.jpg'))
   last=res['trial_bodies'][-1];assert last=={'storeName':'架空の喫茶店','name':'山田 花子','contact':'owner@example.com','message':'レジ横に置いてみたいです。','website':''},last
   assert len(res['trial_bodies'])==4,res['trial_bodies']
   assert res['other_api']==[],('LP and create view must not send events',res['other_api'])
@@ -99,6 +131,10 @@ def main():
   assert pg.evaluate(no_overflow),'LP desktop overflow'
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_1280.jpg'),type='jpeg',quality=80)
   settle(pg);check_images(pg,res,'lp_images_1280')
+  trial_box=pg.locator('#price .price-col').bounding_box();plan_box=pg.locator('#price .price-plan').bounding_box()
+  assert plan_box['y']>=trial_box['y']+trial_box['height'],('desktop: planned price must be its own row',trial_box,plan_box)
+  if args.shots:
+   section_shot(pg,'#price',str(Path(args.shots)/'price_1280.jpg'));section_shot(pg,'#data',str(Path(args.shots)/'data_1280.jpg'))
   # demo video: same-origin sources, plays muted once on screen
   srcs=pg.evaluate("[...document.querySelectorAll('#demo-video source')].map(s=>[s.getAttribute('src'),s.type])")
   assert srcs==[['video/demo-customer.mp4','video/mp4'],['video/demo-customer.webm','video/webm']],srcs
@@ -125,6 +161,9 @@ def main():
   assert res['other_api']==['/api/event'],res['other_api']
   pg.goto(BASE+'/?'+urlencode({'store':STORE,'review':'https://evil.example/review'}));pg.wait_for_load_state('networkidle')
   expect(pg.locator('#store-form')).to_be_visible();expect(pg.locator('#store-error')).to_contain_text('共有リンクを確認してください')
+  pg.goto(BASE+'/privacy.html');pg.wait_for_load_state('networkidle');ptext=pg.locator('body').inner_text().replace('\n','')
+  assert KEEP in ptext,'retention sentence missing on privacy.html';assert 'お名前・連絡先・ひとことは送りません' in ptext
+  for w in NO_WORDS:assert w not in ptext,w
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
  print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','demo_video_src','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))

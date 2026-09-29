@@ -144,9 +144,11 @@ input:focus,textarea:focus,select:focus-visible,button:focus-visible,a:focus-vis
 .link-howto{margin:0;padding-left:1.4em;font-size:15px}
 .link-howto li{margin:6px 0}
 
-.price-table{display:grid;gap:14px;max-width:680px;margin-bottom:24px}
+.price-table{display:grid;gap:14px;max-width:680px;margin-bottom:14px}
 .price-col{border:1px solid var(--line);border-radius:10px;padding:20px 22px;background:var(--paper)}
-.price-col+.price-col{border-color:var(--accent);box-shadow:inset 0 4px 0 var(--accent)}
+/* the planned price is its own row under the free trial (not a comparison column): no strike-through, no 通常/今なら */
+.price-plan{max-width:680px;margin:0 0 24px;border:1px solid var(--line);border-radius:10px;padding:18px 22px;background:var(--paper)}
+.price-plan-text{font-size:16px;font-weight:600;line-height:1.7;margin:0}
 .price-name{font-size:13px;font-weight:600;color:var(--sub);margin-bottom:4px}
 .price-num{font-family:var(--mincho);font-size:40px;font-weight:600;line-height:1.3;margin:0 0 4px}
 .price-num span{font-family:var(--gothic);font-size:14px;font-weight:400;margin-left:4px}
@@ -190,7 +192,7 @@ details.optional-settings[open] summary::after{top:18px}
 .trial-status{font-size:13px;margin:12px 0 0;min-height:1.5em}
 .trial-status.is-error{color:var(--error)!important}
 .trial-done{padding:14px 0 0}
-.trial-done-h{font-family:var(--mincho);font-size:19px;font-weight:600;color:var(--ink)!important}
+.trial-done-h{font-size:16px;font-weight:600;line-height:1.7;color:var(--ink)!important}
 
 .sticky-cta{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(245,248,252,.96);border-top:1px solid var(--line)}
 .sticky-cta .primary{margin:0}
@@ -241,6 +243,12 @@ button.text-link{background:none;border:0;padding:6px 0;text-align:left;font:inh
 .seg span{display:flex;align-items:center;justify-content:center;min-height:44px;padding:6px 4px;text-align:center;line-height:1.35;border:1px solid #c9d3e0;border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer}
 .seg input:checked+span{background:var(--ai-tint);border-color:var(--ai);box-shadow:inset 0 0 0 1px var(--ai)}
 .seg input:focus-visible+span,.cand input:focus-visible+.cand-body{outline:3px solid var(--focus);outline-offset:2px}
+/* details ("どこが？"): optional, several; they take the topic's rating, so they are plain toggles with one look */
+.detail-part{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.detail-q{font-size:14px;font-weight:600;margin:0 0 8px}
+.detail-q .optional{font-weight:400;display:inline-block;margin-left:0}
+.detail-chips{gap:7px}
+.detail-chips button{padding:8px 13px;font-size:13.5px;min-height:40px}
 .cand-list{border:0;margin:14px 0 0;padding:0;min-width:0;display:grid;gap:10px}
 #cand-options{display:grid;gap:10px}
 .cand{position:relative;margin:0;font-weight:400;cursor:pointer}
@@ -331,7 +339,6 @@ body:not([data-view=customer]):not([data-view=create]) .site-footer{padding-bott
   .before-after{grid-template-columns:1fr}
   .example-grid{grid-template-columns:auto 1fr;gap:56px}
   .poster-grid{grid-template-columns:1.1fr .9fr;gap:64px}
-  .price-table{grid-template-columns:1fr 1fr}
   .scope-grid{grid-template-columns:1fr 1fr;gap:48px}
   .closing-grid{grid-template-columns:1fr 1fr;gap:56px}
   .trial-box{padding:32px}

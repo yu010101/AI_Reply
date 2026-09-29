@@ -9,7 +9,10 @@
     "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない",
     "LP v2（もっとリッチに）: 実UIから撮ったスマホ画面(tools/capture_screens.py→public/img/screen-*.webp)をCSSの端末枠でFVと3ステップに表示。AI生成の店舗写真4枚(Higgsfield z_image)に各「イメージ（AI生成）」表記。悩み・しくみ・約束・向いているお店に自作のインラインSVG線画アイコン。朱のアクセント(#b4441c, WCAG AA)。IntersectionObserverのふわっと表示（prefers-reduced-motionでは無効）。画像は同一オリジンのWebP・1枚200KB以下・loading=lazy・width/height指定。CSP変更なし",
     "LP v3（配色・写真・動画）: 配色を紺(#1b3a6b)＋明るい青(#2563d9, 白文字5.43:1・地5.10:1)に変更し変数名を --accent に。FVに人物入りのAI生成写真(hero-cafe.webp,「イメージ（AI生成）」表記・写真内QRは復号不可)＋実画面のスマホを重ね、FVの画像だけ eager。実例の欄にお客さま画面の録画デモ(tools/record_demo.py: CDP screencastで2倍解像度・/api/draftは架空例を返す・字幕は録画用の重ね表示)を mp4/webm で置き、画面内に入ったときだけ無音で再生・動きを減らす設定では再生しない",
-    "お客さま画面 v4（選ぶだけで下書き）: 業種(kind=general/food/beauty/retail)ごとの固定の中立な名詞の話題を選び、話題ごとに よかった/ふつう/気になった（同じ見た目・初期選択なし）を選ぶと、public/compose.js（AIなしの決定論・純関数）がその選択だけから3文体（短く/ていねい/くだけた）の候補を組み立てる。選んでいない話題・ほめ言葉の上乗せ・推薦/再訪意向・数字は入れず、気になったは必ず残る。任意の「ひとこと足す」だけを /api/draft に通して末尾に付ける（fallbackでも動く）。候補を選ぶと既存の編集欄→確認→コピー/Googleへ。「自分で書く」から既存の整文の流れも使える。ja/en/zh/ko すべてで候補を出す。tests/compose.test.mjs で全kind×全話題部分集合×全評価×4言語×3文体を網羅検査。デモ動画・スクショ・LPの#exampleを新しい流れに更新"
+    "お客さま画面 v4（選ぶだけで下書き）: 業種(kind=general/food/beauty/retail)ごとの固定の中立な名詞の話題を選び、話題ごとに よかった/ふつう/気になった（同じ見た目・初期選択なし）を選ぶと、public/compose.js（AIなしの決定論・純関数）がその選択だけから3文体（短く/ていねい/くだけた）の候補を組み立てる。選んでいない話題・ほめ言葉の上乗せ・推薦/再訪意向・数字は入れず、気になったは必ず残る。任意の「ひとこと足す」だけを /api/draft に通して末尾に付ける（fallbackでも動く）。候補を選ぶと既存の編集欄→確認→コピー/Googleへ。「自分で書く」から既存の整文の流れも使える。ja/en/zh/ko すべてで候補を出す。tests/compose.test.mjs で全kind×全話題部分集合×全評価×4言語×3文体を網羅検査。デモ動画・スクショ・LPの#exampleを新しい流れに更新",
+    "お客さま画面 v5（どこが？の細目）: 話題の評価を選ぶと「よかったのはどこ？／どこがふつう？／気になったのはどこ？」で業種×話題ごとの固定の中立な名詞の細目チップ（任意・複数・初期選択なし・同じ見た目）を選べる。細目は話題の評価を受け継ぎ、その話題の文だけに入る（例「料理・飲み物は、味と温かさがよかったです。」）。細目なしなら従来の文のまま。ja/en/zh/ko の訳と文型あり。tests/compose.test.mjs は細目なしの全網羅に加え、細目を層化（話題単独×評価×細目の全部分集合／2話題×評価×細目の境界4通り／全話題×全細目と先頭細目×全評価割当／固定シードの無作為40,000件）で同じ検査(a)〜(f)＋文型の骨格を行う",
+    "LP v5 文言: DECISIONS.md の約束①②④・予定価格の文・申込情報の保管期間を一字一句そのまま掲載（③は /api/trial 申込完了の画面メッセージ）。予定価格は無料試用とは別の段、打ち消し線・「通常」「今なら」なし（lp_browser.py で検査）。FVのリードを選ぶ流れに書き換え（H1は不変）",
+    "/api/trial の Slack 通知: D1 保存に成功し env.SLACK_WEBHOOK_URL があるときだけ ctx.waitUntil(fetch) で1回、本文は店名と受付番号(trial_applications.id)のみ。redirect:'manual'。失敗しても応答は200 ok、ログは状態コードかエラー種別だけ。隠し欄・不正入力・429・保存失敗では送らない。Webhook の本番設定は本人が wrangler secret put で行う（未設定）"
   ],
   "reuse": [
     {
@@ -56,6 +59,21 @@
       "path": "intake-beta/tools/record_demo.py",
       "decision": "extend",
       "reason": "CDP screencast と字幕の重ね表示はそのまま、操作手順だけ新しい流れに差し替え"
+    },
+    {
+      "path": "intake-beta/public/compose.js",
+      "decision": "extend",
+      "reason": "話題×評価の組み立てはそのまま、細目は同じ評価語の別の文型(DETAIL_PHRASES)で話題ごとの1文にするだけ。normalize() で未知・重複の細目を拒否"
+    },
+    {
+      "path": "intake-beta/tests/compose.test.mjs",
+      "decision": "extend",
+      "reason": "decode()（文から話題と評価を読み戻す）を細目も読み戻すよう広げ、既存の(a)〜(f)と文型の骨格の検査を checkCase() に共通化して層化サンプルに適用"
+    },
+    {
+      "path": "intake-beta/worker.mjs",
+      "decision": "extend",
+      "reason": "/api/trial の保存を RETURNING id にして受付番号を得て、既存の ctx.waitUntil で通知。refuse()/validTrial()/quota はそのまま"
     }
   ],
   "changed_files": [

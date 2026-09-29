@@ -1,19 +1,19 @@
 """Record the LP demo video (public/video/demo-customer.mp4 + poster) of the real customer screen.
 Serves intake-beta/public from disk with the worker's CSP, like tools/capture_screens.py.
-Inputs are the LP's fictional example (喫茶 こもれび: 料理・飲み物=よかった, 待ち時間=気になった). The candidates come from
+Inputs are the LP's fictional example (喫茶 こもれび: 料理・飲み物=よかった→味・温かさ, 待ち時間=気になった→料理が出るまで). The candidates come from
 public/compose.js; nothing is added to the picks, so /api/draft must not be called (it is refused and recorded here);
 every other host is refused. Captions and the tap marker are overlays
 drawn only for the recording; they are not part of the product UI.
 Usage: python3 tools/record_demo.py --tmp DIR   (needs ffmpeg and cwebp)
 """
 from pathlib import Path
-import argparse,base64,json,mimetypes,subprocess
+import argparse,base64,json,mimetypes,subprocess,time
 from urllib.parse import urlencode
 from playwright.sync_api import sync_playwright,expect
 R=Path(__file__).resolve().parents[1];PUB=R/'public';OUT=PUB/'video'
 BASE='https://hitokoto.example';STORE='喫茶 こもれび';GOOGLE='https://g.page/r/fictional-komorebi/review'
 CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-POSTER_AT=13.5  # seconds: the candidate list
+POSTER_AFTER=1.2  # seconds after the candidate list appears: the poster frame
 W,H=390,780
 OVERLAY="""(t)=>{let c=document.getElementById('demo-cap');if(!c){c=document.createElement('div');c.id='demo-cap';
 c.style.cssText='position:fixed;left:12px;right:12px;bottom:14px;z-index:9999;background:rgba(27,38,51,.92);color:#fff;'+
@@ -59,9 +59,15 @@ def main():
   scroll_to('#ratings',150);cap('どうだったかを選びます。気になったことも同じように');pg.wait_for_timeout(1000)
   for topic,rating in [('dish','good'),('wait','concern')]:
    sel='[name=rate-%s][value=%s]+span'%(topic,rating);tap(sel);pg.locator(sel).click();pg.wait_for_timeout(700)
+  scroll_to('#ratings [data-topic=dish] .detail-part',150);cap('どこが？も選べます（選ばなくてもOK）');pg.wait_for_timeout(1300)
+  for topic,details in [('dish',['taste','temp']),('wait',['serving'])]:
+   if topic=='wait':scroll_to('#ratings [data-topic=wait] .detail-part',260)
+   for d in details:sel='#ratings [data-topic=%s] [data-detail=%s]'%(topic,d);tap(sel);pg.locator(sel).click();pg.wait_for_timeout(650)
+  pg.wait_for_timeout(600)
   scroll_to('#compose-button',520);tap('#compose-button');pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible();pg.wait_for_timeout(900)
-  cap('選んだことだけで、文章の候補ができます');pg.wait_for_timeout(2800)
+  cap('選んだことだけで、文章の候補ができます');cand_at=time.time();pg.wait_for_timeout(2800)
   cap('選んで、自由に直せます');sel='#cand-options .cand:nth-child(2) .cand-body';tap(sel);pg.locator(sel).click();pg.wait_for_timeout(600)
+  assert pg.locator('#draft-text').input_value()=='料理・飲み物は、味と温かさがよかったです。待ち時間は、料理が出るまでが気になりました。',pg.locator('#draft-text').input_value()
   scroll_to('#draft-result');tap('#draft-text');pg.locator('#draft-text').click();pg.wait_for_timeout(1800)
   cap('確かめて、Googleを開きます');tap('#confirm');pg.locator('#confirm').check();pg.wait_for_timeout(900)
   expect(pg.locator('#google-link')).to_have_attribute('aria-disabled','false')
@@ -79,8 +85,9 @@ def main():
   '-crf','30','-preset','slow','-movflags','+faststart','-an',str(mp4)],check=True)
  webm=OUT/'demo-customer.webm'
  subprocess.run(['ffmpeg','-y','-loglevel','error','-i',str(mp4),'-c:v','libvpx-vp9','-b:v','0','-crf','46','-row-mt','1','-an',str(webm)],check=True)
- png=tmp/'poster.png';subprocess.run(['ffmpeg','-y','-loglevel','error','-ss',str(POSTER_AT),'-i',str(mp4),'-frames:v','1',str(png)],check=True)
+ poster_at=max(0.0,cand_at-frames[0][1]+POSTER_AFTER)  # screencast timestamps are wall-clock seconds
+ png=tmp/'poster.png';subprocess.run(['ffmpeg','-y','-loglevel','error','-ss','%.2f'%poster_at,'-i',str(mp4),'-frames:v','1',str(png)],check=True)
  subprocess.run(['cwebp','-quiet','-q','80','-metadata','none',str(png),'-o',str(poster)],check=True)
  dur=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',str(mp4)],capture_output=True,text=True,check=True).stdout.strip()
- print(json.dumps({'frames':len(frames),'mp4':mp4.stat().st_size,'webm':webm.stat().st_size,'poster':poster.stat().st_size,'duration_s':dur,'blocked_external':blocked,'page_errors':errors},ensure_ascii=False))
+ print(json.dumps({'frames':len(frames),'mp4':mp4.stat().st_size,'webm':webm.stat().st_size,'poster':poster.stat().st_size,'duration_s':dur,'poster_at_s':round(poster_at,2),'blocked_external':blocked,'page_errors':errors},ensure_ascii=False))
 if __name__=='__main__':main()
