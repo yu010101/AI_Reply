@@ -19,8 +19,8 @@ document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',(
 function validGoogle(raw){try{const u=new URL(raw);const h=u.hostname.toLowerCase();if(u.protocol!=='https:'||u.username||u.password||u.port)return null;let ok=false;if(h==='maps.app.goo.gl')ok=/^\/[A-Za-z0-9_-]+\/?$/.test(u.pathname);else if(h==='g.page')ok=/^\/(?:r\/)?[A-Za-z0-9_-]+\/review\/?$/.test(u.pathname);else if(h==='search.google.com')ok=u.pathname==='/local/writereview'&&/^[A-Za-z0-9_-]+$/.test(u.searchParams.get('placeid')||'');else if(['www.google.com','google.com','www.google.co.jp','maps.google.com'].includes(h))ok=/^\/maps(?:\/|$)/.test(u.pathname);return ok?u.href:null;}catch{return null}}
 function announce(el,text){$(el).textContent=text;}
 async function copy(text,el,msg={copied:'コピーしました。',copyFail:'自動コピーできませんでした。入力欄の文章を選択してコピーしてください。'}){try{await navigator.clipboard.writeText(text);announce(el,msg.copied);}catch{announce(el,msg.copyFail)}}
-function showCustomer(name,url){storeName=name;reviewUrl=url;$('store-view').classList.add('hidden');$('customer-view').classList.remove('hidden');document.querySelectorAll('.direct-google').forEach(a=>a.href=url);$('google-link').href=url;applyLang(pickLang());track('view');}
-if(qs.has('store')&&qs.has('review')){const name=qs.get('store').trim().slice(0,80),url=validGoogle(qs.get('review'));if(name&&url)showCustomer(name,url);else announce('store-error','共有リンクを確認してください。お店から受け取ったリンクをもう一度開いてください。');}
+function showCustomer(name,url){storeName=name;reviewUrl=url;document.body.dataset.view='customer';$('store-view').classList.add('hidden');$('customer-view').classList.remove('hidden');document.querySelectorAll('.direct-google').forEach(a=>a.href=url);$('google-link').href=url;applyLang(pickLang());track('view');}
+if(qs.has('store')&&qs.has('review')){const name=qs.get('store').trim().slice(0,80),url=validGoogle(qs.get('review'));if(name&&url)showCustomer(name,url);else{history.replaceState(null,'',location.pathname+location.search+'#create');announce('store-error','共有リンクを確認してください。お店から受け取ったリンクをもう一度開いてください。');}}
 $('store-form').addEventListener('submit',e=>{e.preventDefault();const name=$('store-name').value.trim(),url=validGoogle($('review-url').value.trim());if(!name||!url){announce('store-error','お店の名前と、httpsから始まるGoogleの口コミリンクを入力してください。');return;}announce('store-error','');const u=new URL(location.origin+location.pathname);u.searchParams.set('store',name);u.searchParams.set('review',url);const kind=$('store-kind').value;if(Object.hasOwn(writingPrompts,kind)&&kind!=='general')u.searchParams.set('kind',kind);$('share-url').value=u.href;$('preview-link').href=u.href;$('share-result').classList.remove('hidden');if(typeof qrcode==='function'){try{const qr=qrcode(0,'M');qr.addData(u.href);qr.make();$('qr-area').innerHTML=qr.createSvgTag({cellSize:4,margin:4,scalable:true});$('qr-area').classList.remove('hidden');$('qr-area').querySelector('svg').setAttribute('aria-label','お客さま向け共有リンクのQRコード');preparePoster(name,u.href,kind);}catch{$('qr-area').textContent='QRにするにはリンクが長すぎます。共有リンクをお使いください。';$('qr-area').classList.remove('hidden');$('poster-actions').classList.add('hidden');$('print-store').textContent='';$('print-url').textContent='';$('print-message').textContent='';$('voice-script').textContent='';$('download-qr').removeAttribute('href');if(posterUrl){URL.revokeObjectURL(posterUrl);posterUrl='';}}}$('share-result').scrollIntoView({behavior:'smooth'});});
 $('copy-link').addEventListener('click',()=>copy($('share-url').value,'store-error'));
 let posterUrl='';function preparePoster(name,href,kind){const k=Object.hasOwn(posterMessages,kind)?kind:'general';$('print-store').textContent=name;$('print-message').textContent=posterMessages[k];$('voice-script').textContent=voiceScripts[k];$('print-url').textContent=href;const svg=$('qr-area').querySelector('svg').cloneNode(true);svg.setAttribute('width','512');svg.setAttribute('height','512');if(posterUrl)URL.revokeObjectURL(posterUrl);posterUrl=URL.createObjectURL(new Blob([svg.outerHTML],{type:'image/svg+xml'}));$('download-qr').href=posterUrl;$('poster-actions').classList.remove('hidden');}
@@ -30,3 +30,42 @@ $('draft-form').addEventListener('submit',async e=>{e.preventDefault();const ori
 function setConfirmed(){const ok=$('confirm').checked&&Boolean($('draft-text').value.trim());$('copy-draft').disabled=!ok;$('google-link').classList.toggle('disabled',!ok);$('google-link').setAttribute('aria-disabled',String(!ok));$('google-link').tabIndex=ok?0:-1;}
 $('confirm').addEventListener('change',setConfirmed);$('draft-text').addEventListener('input',()=>{$('confirm').checked=false;setConfirmed();});$('copy-draft').addEventListener('click',()=>{track('copy');copy($('draft-text').value,'copy-status',{copied:t('copied'),copyFail:t('copyFail')});});$('google-link').addEventListener('click',e=>{if($('google-link').getAttribute('aria-disabled')==='true'){e.preventDefault();return;}track('google');});
 document.querySelectorAll('.direct-google').forEach(a=>a.addEventListener('click',()=>track('direct')));
+
+// LP redesign: the page has three views on one URL. '#create' = QR作成画面, a customer share link = お客さま画面, anything else = LP.
+// No events are sent from the LP or the create view (the funnel counts only the customer screen).
+function route(fromHashChange){
+  if(document.body.dataset.view==='customer')return;
+  const h=location.hash;
+  if(h==='#create'){document.body.dataset.view='create';window.scrollTo(0,0);if(fromHashChange)$('create-title').focus({preventScroll:true});return;}
+  const wasCreate=document.body.dataset.view==='create';
+  document.body.dataset.view='lp';
+  const target=h.length>1&&document.getElementById(h.slice(1));
+  if(wasCreate&&target)target.scrollIntoView();
+}
+window.addEventListener('hashchange',()=>route(true));
+route(false);
+
+// Sample QR on the LP poster mock-ups: it encodes this page's own address only (no store, no review link).
+function sampleQr(id){const el=$(id);if(!el||typeof qrcode!=='function'||document.body.dataset.view==='customer')return;try{const q=qrcode(0,'M');q.addData(location.origin+'/');q.make();el.innerHTML=q.createSvgTag({cellSize:4,margin:0,scalable:true});el.querySelector('svg').setAttribute('aria-hidden','true');}catch{el.textContent='';}}
+sampleQr('hero-qr');sampleQr('poster-qr');
+
+// Phone bottom bar: hidden while the hero's own button is on screen, so the first view shows one primary action.
+(function(){const bar=$('sticky-cta'),hero=document.querySelector('.hero-actions');if(!bar||!hero||!('IntersectionObserver' in window))return;bar.classList.add('is-off');new IntersectionObserver(es=>{for(const e of es)bar.classList.toggle('is-off',e.isIntersecting||e.boundingClientRect.top>0);}).observe(hero);})();
+
+// 試用店舗募集フォーム → POST /api/trial (worker.mjs validTrial: 店名80・お名前40・連絡先120・ひとこと400字、改行は「ひとこと」だけ)
+const TRIAL_MESSAGES={empty:'店名・お名前・連絡先を入力してください。',contact:'連絡先は、メールアドレスか電話番号（10〜15桁）で入力してください。',sending:'送信しています…',invalid:'入力内容を確認してください。記号の「<」「>」は使えません。店名・お名前・連絡先は1行で入力してください。',limited:'同じ端末からの送信が続いたため、今日は受け付けを止めています。明日以降にもう一度お送りください。',failed:'いま受け付けられませんでした。時間をおいて、もう一度お送りください。'};
+function trialContactOk(v){const n=v.normalize('NFKC');return /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/u.test(n)||/^\+?\d{10,15}$/.test(n.replace(/[\s\-‐－ー()]/gu,''));}
+function trialSay(key){const el=$('trial-status');el.textContent=TRIAL_MESSAGES[key];el.classList.toggle('is-error',key!=='sending');}
+$('trial-form').addEventListener('submit',async e=>{e.preventDefault();
+  const body={storeName:$('trial-store').value.trim(),name:$('trial-name').value.trim(),contact:$('trial-contact').value.trim(),message:$('trial-message').value.trim(),website:$('trial-website').value};
+  if(!body.storeName||!body.name||!body.contact)return trialSay('empty');
+  if(!trialContactOk(body.contact))return trialSay('contact');
+  $('trial-submit').disabled=true;trialSay('sending');
+  try{
+    const res=await fetch('/api/trial',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+    if(res.ok){$('trial-form').reset();$('trial-form').classList.add('hidden');$('trial-done').classList.remove('hidden');$('trial-done').focus();return;}
+    trialSay(res.status===429?'limited':res.status===400||res.status===413?'invalid':'failed');
+  }catch{trialSay('failed');}
+  finally{$('trial-submit').disabled=false;}
+});
+

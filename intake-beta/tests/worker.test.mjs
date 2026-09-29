@@ -4,7 +4,7 @@ beforeEach(()=>{Date.now=()=>Date.parse('2026-09-25T00:00:00Z');});
 afterEach(()=>{Date.now=realNow;});
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP} from '../worker.mjs';
+import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP,AI_UNTIL,validTrial,TRIAL_LIMITS,TRIAL_CAPS} from '../worker.mjs';
 const logs=[];const realWarn=console.warn,realError=console.error;
 beforeEach(()=>{logs.length=0;console.warn=(...a)=>logs.push(['warn',...a]);console.error=(...a)=>logs.push(['error',...a]);});
 afterEach(()=>{console.warn=realWarn;console.error=realError;});
@@ -46,7 +46,8 @@ test('meaning reversal and invented recommendation must fall back',async()=>{for
 test('punctuation and whitespace only remain eligible',async()=>{const s=setup();s.env.AI.run=async()=>({response:'「不満です。改善してほしい。」'});assert.deepEqual((await invoke(request({text:'不満です 改善してほしい',storeName:'s'}),s.env)).body,{draft:'「不満です。改善してほしい。」',mode:'ai'});});
 test('unterminated body is bounded by a read deadline',async()=>{const old=globalThis.setTimeout;let timeout,cancelled=false;globalThis.setTimeout=(fn,ms)=>{timeout=ms;queueMicrotask(fn);return 0;};try{const body=new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('{'));},cancel(){cancelled=true;}});await assert.rejects(boundedJSON(new Request(origin,{method:'POST',body,duplex:'half'})));assert.equal(timeout,3000);assert.equal(cancelled,true);}finally{globalThis.setTimeout=old;}});
 
-test("expiry stops AI even with all bindings available",async()=>{Date.now=()=>Date.parse("2026-10-09T00:00:00Z");const s=setup();assert.equal((await invoke(request(),s.env)).body.mode,"fallback");assert.equal(s.calls.length,0);});
+test("expiry stops AI even with all bindings available",async()=>{Date.now=()=>AI_UNTIL;const s=setup();assert.equal((await invoke(request(),s.env)).body.mode,"fallback");assert.equal(s.calls.length,0);});
+test('AI stays on until the provisional end (2027-03-31 JST) and past the old 2026-10-09 stop',async()=>{assert.equal(AI_UNTIL,Date.parse('2027-03-31T15:00:00Z'));for(const at of ['2026-10-09T00:00:00Z','2027-03-31T14:59:59Z']){Date.now=()=>Date.parse(at);const s=setup();assert.equal((await invoke(request(),s.env)).body.mode,'ai',at);assert.equal(s.calls.length,1);}});
 
 test('refused reservation releases rows already held: total and ip do not drain when day is exhausted',async()=>{const s=staleRead(setup({['day:'+day]:100,total:500}));await Promise.all(Array.from({length:20},(_,i)=>invoke(request(undefined,{'cf-connecting-ip':'192.0.2.'+(i+50)}),s.env)));assert.equal(s.calls.length,0);assert.equal(s.db.rows.get('total'),500);assert.equal(s.db.rows.get('day:'+day),100);for(const [key,count] of s.db.rows)if(key.startsWith('ip:'))assert.equal(count,0,key);});
 test('refused total releases the ip row so the user keeps their attempts',async()=>{const s=staleRead(setup({total:1000}));assert.equal((await invoke(request(),s.env)).body.mode,'fallback');assert.equal(s.calls.length,0);for(const [key,count] of s.db.rows)if(key.startsWith('ip:'))assert.equal(count,0,key);assert.equal(s.db.rows.get('total'),1000);});
@@ -72,3 +73,50 @@ test('event: daily cap per step and missing D1 binding answer recorded:false wit
   const e=setup();e.env.QUOTA={prepare(){throw Error('D1_ERROR: offline 192.0.2.4');}};assert.deepEqual((await invoke(eventRequest(),e.env)).body,{recorded:false});const err=logs.filter(l=>l[0]==='error');assert.equal(err.length,1);assert.deepEqual(err[0].slice(1),['event_error','Error']);});
 test('event rows survive the 3-day draft cleanup on real SQLite',async(t)=>{const q=await sqliteQuota();if(!q)return t.skip('node:sqlite unavailable');const s=setup();s.env.QUOTA=q;q.db.exec("INSERT INTO quota VALUES ('ev:2026-09-01:view',12),('day:2026-09-01',3)");
   assert.deepEqual((await invoke(eventRequest({event:'google'}),s.env)).body,{recorded:true});assert.equal((await invoke(request(),s.env)).body.mode,'ai');const rows=q.rows();assert.equal(rows['ev:2026-09-01:view'],12);assert.equal(rows['ev:'+day+':google'],1);assert.equal(rows['day:2026-09-01'],undefined);assert.equal(rows.total,1);});
+
+// LP 試用店舗募集: POST /api/trial (4 fields -> D1 trial_applications, rate limited through quota rows)
+const trialOk={storeName:'架空の喫茶店',name:'山田 花子',contact:'owner@example.com',message:'レジ横に置いてみたいです。\n平日昼が中心です。'};
+function trialRequest(body=trialOk,extra={}) {return new Request(origin+'/api/trial',{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':'192.0.2.9',...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
+async function trialEnv(t){const q=await sqliteQuota();if(!q){t.skip('node:sqlite unavailable');return null;}return {q,env:{QUOTA:q,QUOTA_SALT:'test-only-salt'}};}
+const trialRows=q=>q.db.prepare('SELECT store_name,contact_name,contact,message,status,created_at FROM trial_applications ORDER BY id').all().map(r=>({...r}));
+test('trial: valid application is stored with the four fields only, and no IP anywhere in D1',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const r=await invoke(trialRequest(),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
+  const rows=trialRows(s.q);assert.equal(rows.length,1);assert.deepEqual({...rows[0],created_at:undefined},{store_name:trialOk.storeName,contact_name:trialOk.name,contact:trialOk.contact,message:trialOk.message,status:'new',created_at:undefined});assert.match(rows[0].created_at,/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  const dump=JSON.stringify(s.q.db.prepare('SELECT * FROM quota').all())+JSON.stringify(s.q.db.prepare('SELECT * FROM trial_applications').all());assert.ok(!dump.includes('192.0.2.9'));
+  assert.equal(s.q.rows()['trday:'+day],1);assert.equal(s.q.rows().trtotal,1);assert.equal(s.q.rows().total,undefined,'AI quota untouched');
+  const phone=await invoke(trialRequest({...trialOk,contact:'090-1234-5678',message:''},{'cf-connecting-ip':'192.0.2.10'}),s.env);assert.equal(phone.status,200);
+  const wide=await invoke(trialRequest({...trialOk,contact:'０９０ー１２３４ー５６７８'},{'cf-connecting-ip':'192.0.2.11'}),s.env);assert.equal(wide.status,200,'full-width phone number is accepted');});
+test('trial: invalid fields are refused with 400 and nothing is stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const bad=[{},[],null,'"x"',{...trialOk,extra:'x'},{storeName:'a',name:'b',contact:'c@example.com'},{...trialOk,storeName:''},{...trialOk,name:'   '},{...trialOk,storeName:'a'.repeat(TRIAL_LIMITS.storeName+1)},{...trialOk,name:'a'.repeat(TRIAL_LIMITS.name+1)},{...trialOk,contact:'a@b.'+'c'.repeat(TRIAL_LIMITS.contact)},{...trialOk,message:'a'.repeat(TRIAL_LIMITS.message+1)},
+    {...trialOk,contact:'電話してください'},{...trialOk,contact:'12345'},{...trialOk,name:'山田\n花子'},{...trialOk,storeName:'<b>店</b>'},{...trialOk,message:'hi\u202e'},{...trialOk,contact:7},{...trialOk,website:3}];
+  for(const body of bad){const r=await invoke(trialRequest(body),s.env);assert.equal(r.status,400,JSON.stringify(body));assert.deepEqual(r.body,{error:'invalid_input'});}
+  assert.equal(trialRows(s.q).length,0);assert.deepEqual(s.q.rows(),{});
+  assert.equal((await invoke(trialRequest(JSON.stringify({...trialOk,message:'a'.repeat(5000)})),s.env)).status,413);});
+test('trial: same sender is limited per day, other senders continue, daily and lifetime caps hold',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const codes=[];for(let i=0;i<TRIAL_CAPS.perSenderDay+2;i++)codes.push((await invoke(trialRequest(),s.env)).status);
+  assert.deepEqual(codes,[...Array(TRIAL_CAPS.perSenderDay).fill(200),429,429]);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);
+  assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.7'}),s.env)).status,200);
+  assert.equal(s.q.rows()['trday:'+day],TRIAL_CAPS.perSenderDay+1,'refused attempts released the day row');
+  s.q.db.exec("UPDATE quota SET count="+TRIAL_CAPS.day+" WHERE key='trday:"+day+"'");const r=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.8'}),s.env);assert.equal(r.status,429);assert.deepEqual(r.body,{error:'rate_limited'});
+  assert.equal(Object.entries(s.q.rows()).filter(([k,v])=>k.startsWith('trip:')&&v===0).length,1,'sender row released when the day cap refused');
+  s.q.db.exec("UPDATE quota SET count=0 WHERE key='trday:"+day+"'; UPDATE quota SET count="+TRIAL_CAPS.total+" WHERE key='trtotal'");assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.9'}),s.env)).status,429);
+  assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay+1);});
+test('trial: concurrent bursts from one sender store at most the per-sender cap',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const r=await Promise.all(Array.from({length:12},()=>invoke(trialRequest(),s.env)));assert.equal(r.filter(x=>x.status===200).length,TRIAL_CAPS.perSenderDay);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);});
+test('trial: same Origin, POST and JSON gates as the other APIs',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  assert.equal((await invoke(trialRequest(undefined,{origin:'https://evil.example'}),s.env)).status,403);assert.equal((await invoke(trialRequest(undefined,{'content-type':'text/plain'}),s.env)).status,415);assert.equal((await invoke(new Request(origin+'/api/trial'),s.env)).status,405);assert.equal(trialRows(s.q).length,0);});
+test('trial: filled hidden field answers ok but stores nothing and uses no quota',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const r=await invoke(trialRequest({...trialOk,website:'https://spam.example'}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});assert.equal(trialRows(s.q).length,0);assert.deepEqual(s.q.rows(),{});
+  assert.equal((await invoke(trialRequest({...trialOk,website:''}),s.env)).status,200);assert.equal(trialRows(s.q).length,1);});
+test('trial: missing binding, salt or IP answers 503; insert failure releases quota and logs a reason code only',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const env of [{QUOTA_SALT:'x'},{QUOTA:s.q}]){assert.equal((await invoke(trialRequest(),env)).status,503);}const req=trialRequest();req.headers.delete('cf-connecting-ip');assert.equal((await invoke(req,s.env)).status,503);
+  s.q.db.exec('DROP TABLE trial_applications');const r=await invoke(trialRequest(),s.env);assert.equal(r.status,503);assert.deepEqual(r.body,{error:'unavailable'});
+  for(const [k,v] of Object.entries(s.q.rows()))assert.equal(v,0,k+' released');
+  const err=logs.filter(l=>l[0]==='error');assert.equal(err.length,1);assert.equal(err[0][1],'trial_error');assert.ok(!JSON.stringify(err).includes('example.com')&&!JSON.stringify(err).includes('山田'));});
+test('trial: stale sender/day rows are purged after 3 days; AI and event rows are kept',async(t)=>{const s=await trialEnv(t);if(!s)return;s.q.db.exec("INSERT INTO quota VALUES ('trip:2026-09-20:old',3),('trday:2026-09-20',9),('ev:2026-09-20:view',4),('total',5)");
+  assert.equal((await invoke(trialRequest(),s.env)).status,200);const rows=s.q.rows();assert.equal(rows['trip:2026-09-20:old'],undefined);assert.equal(rows['trday:2026-09-20'],undefined);assert.equal(rows['ev:2026-09-20:view'],4);assert.equal(rows.total,5);});
+test('trial: migration file and schema.sql define the same trial_applications table',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
+  const cols=file=>{const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL(file,import.meta.url),'utf8'));return JSON.stringify(db.prepare("PRAGMA table_info(trial_applications)").all());};
+  assert.equal(cols('../migrations/0001_trial_applications.sql'),cols('../schema.sql'));assert.ok(cols('../schema.sql').includes('store_name'));
+  assert.ok(!/^\s*(DROP|DELETE|UPDATE|ALTER|INSERT)\b/im.test(readFileSync(new URL('../migrations/0001_trial_applications.sql',import.meta.url),'utf8').replace(/--.*$/gm,'')),'migration only adds');});
+test('trial: validTrial normalizes whitespace and keeps the message optional',()=>{assert.deepEqual(validTrial({storeName:' 店 ',name:' 名 ',contact:' a@example.jp ',message:''}),{storeName:'店',name:'名',contact:'a@example.jp',message:''});assert.equal(validTrial({...trialOk,website:'x'}),'honeypot');});

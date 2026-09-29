@@ -1,32 +1,33 @@
 {
-  "task_id": "instruction-025-intake-funnel-poster-i18n-20260928",
-  "owner": "backlog-20260928 instruction-025 (Claude調査) → メインが適用",
+  "task_id": "intake-lp-redesign-20260929",
+  "owner": "reviews-lp (Claude実装・ローカルcommitのみ) → メインが本人確認のうえ push/PR",
   "acceptance": [
-    "A: POST /api/event は view/draft/copy/google/direct の段名だけを受け、D1 quota に ev:<UTC日付>:<段名> として1件ずつ数える。店名・本文・IP・ハッシュは受けず保存しない。1段1日5000件で頭打ち。/api/draft と同じ Origin/POST/JSON 門。AI の quota 行(total/day:/ip:)には触れない。3日削除の対象外",
-    "B: ポスターの印刷文言と画面だけの声かけ例をお店の種類ごとに出す。割引・特典・高評価のお願いにあたる語を含まないことを tests/poster_kit.test.mjs で検査する",
-    "C: お客さま画面を日本語・英語・簡体中文・韓国語で表示できる(?lang= またはブラウザ言語、画面上で切替)。画面の案内だけを訳し、お客さまの入力は訳さない",
-    "既存の worker.test.mjs 23件・poster_browser.py を維持。配備・wrangler 書込は行わない"
+    "トップを店舗オーナー向けLPに作り直す（RESEARCH.md 6章の構成、見出し案C、実績の数字なし、入力例は架空と明記、3つの約束）。QR作成は #create の別画面に分け、既存のQR作成・印刷・SVG保存・/api/event・多言語は維持",
+    "POST /api/trial: 店名80・お名前40・連絡先120(メールか電話10〜15桁)・ひとこと400字(任意)を検証し D1 trial_applications に保存。IPは保存しない。同一送信元1日3件・全体1日30件・累計500件で429。/api/draft と同じ Origin/POST/JSON 門。隠し欄が埋まっていれば保存せず ok",
+    "AI 期限を定数 AI_UNTIL にし 2027-04-01T00:00+09:00（2027-03-31 JST いっぱい）を仮置き",
+    "D1 マイグレーションは intake-beta/migrations/0001_trial_applications.sql をファイルで用意するだけ（本番未適用）",
+    "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない"
   ],
   "reuse": [
     {
       "path": "intake-beta/worker.mjs",
       "decision": "extend",
-      "reason": "既存の reserve() と quota 表をそのまま使って ev: 行を数える。Origin/POST/JSON 門は /api/draft から refuse() に切り出して両方で使う(判定は同一)"
+      "reason": "refuse()/boundedJSON()/reserve()/release()/UNSAFE_CHARS と quota 表を /api/trial でそのまま使う"
     },
     {
       "path": "intake-beta/public/app.js",
       "decision": "extend",
-      "reason": "既存の preparePoster/writingPrompts/copy を拡張。新しい依存は入れない"
+      "reason": "既存の QR 作成・印刷・お客さま画面の処理は変えず、画面切替・見本QR・試用フォームを追記"
     },
     {
       "path": "intake-beta/tests/worker.test.mjs",
       "decision": "extend",
-      "reason": "既存の Quota モックと node:sqlite 実行で /api/event を5件試験"
+      "reason": "既存の sqliteQuota(実SQLite) で /api/trial を試験"
     },
     {
       "path": "intake-beta/tests/poster_browser.py",
       "decision": "reuse",
-      "reason": "印刷1ページ・印刷の隔離はこの既存試験で確認(変更なし)"
+      "reason": "開始URLを /#create にしただけで、印刷1ページ・印刷の隔離の検査は同じ"
     }
   ],
   "changed_files": [
@@ -39,7 +40,11 @@
     "intake-beta/tests/poster_kit.test.mjs",
     "intake-beta/tests/funnel_browser.py",
     "package.json",
-    ".quality/change.json"
+    ".quality/change.json",
+    "intake-beta/schema.sql",
+    "intake-beta/migrations/0001_trial_applications.sql",
+    "intake-beta/tests/lp_browser.py",
+    "intake-beta/tests/poster_browser.py"
   ],
-  "adoption_scope_note": "origin/main b3d26061 を基点にした隔離worktree。配備なし。材料は /Users/yu01/tasks/backlog-20260928/items/instruction-025/。"
+  "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
 }

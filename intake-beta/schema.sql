@@ -1,1 +1,3 @@
 CREATE TABLE IF NOT EXISTS quota (key TEXT PRIMARY KEY, count INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS trial_applications (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, store_name TEXT NOT NULL CHECK (length(store_name) BETWEEN 1 AND 80), contact_name TEXT NOT NULL CHECK (length(contact_name) BETWEEN 1 AND 40), contact TEXT NOT NULL CHECK (length(contact) BETWEEN 1 AND 120), message TEXT NOT NULL DEFAULT '' CHECK (length(message) <= 400), status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','contacted','accepted','declined','deleted')));
+CREATE INDEX IF NOT EXISTS trial_applications_created_at ON trial_applications (created_at);

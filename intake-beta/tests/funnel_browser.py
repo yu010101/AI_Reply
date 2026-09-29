@@ -28,7 +28,7 @@ def main():
     r.fulfill(status=200,body=f.read_bytes(),content_type=mimetypes.guess_type(f.name)[0] or 'application/octet-stream',headers={'content-security-policy':CSP})
    ctx.route('**/*',route);pg=ctx.new_page();pg.on('pageerror',lambda e:res['page_errors'].append(str(e)));return ctx,pg
   # A: store page sends no events; customer funnel sends only {event}
-  ctx,pg=make('ja-JP');pg.goto(BASE+'/');pg.wait_for_load_state('networkidle');assert res['event_bodies']==[],'store page must not count'
+  ctx,pg=make('ja-JP');pg.goto(BASE+'/#create');pg.wait_for_load_state('networkidle');assert res['event_bodies']==[],'store page must not count'
   # B: poster caption/voice script follow the store kind
   pg.locator('#store-name').fill(STORE);pg.locator('summary').first.click();pg.locator('#store-kind').select_option('food');pg.locator('#review-url').fill(GOOGLE);pg.locator('#store-form button').click()
   expect(pg.locator('#poster-actions')).to_be_visible();msg=pg.locator('#print-message').text_content();voice=pg.locator('#voice-script').text_content()

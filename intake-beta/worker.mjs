@@ -39,6 +39,35 @@ function refuse(request,env,url) {
 export const FUNNEL_EVENTS=['view','draft','copy','google','direct'];
 export const EVENT_DAILY_CAP=5000;
 export const validEvent=data=>Boolean(data)&&typeof data==='object'&&!Array.isArray(data)&&Object.keys(data).length===1&&FUNNEL_EVENTS.includes(data.event);
+// AI tidying stops at this instant (fallback to the customer's own text afterwards). Was 2026-10-09T00:00Z.
+// Provisional: the end date of the free trial is not decided yet; 2027-03-31 (JST, end of day) is a placeholder.
+export const AI_UNTIL=Date.parse('2027-04-01T00:00:00+09:00');
+// Trial applications (LP 試用店舗募集). Stored in the same D1 as quota, table trial_applications (migrations/0001_trial_applications.sql).
+// Only the four fields are kept, with the UTC time. No IP, hash or user agent is stored in trial_applications.
+// Rate limit rows live in quota: 'trip:<day>:<hash>' (per sender per day), 'trday:<day>' (all senders per day), 'trtotal' (lifetime).
+export const TRIAL_LIMITS={storeName:80,name:40,contact:120,message:400};
+export const TRIAL_CAPS={perSenderDay:3,day:30,total:500};
+const TRIAL_KEYS=['contact','message','name','storeName'];
+const EMAIL=/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/u;
+// Returns the normalized application, 'honeypot' when the hidden field was filled, or null when invalid.
+export function validTrial(data) {
+  if(!data||typeof data!=='object'||Array.isArray(data))return null;
+  const keys=Object.keys(data).filter(k=>k!=='website').sort();
+  if(keys.join()!==TRIAL_KEYS.join())return null;
+  if('website' in data&&typeof data.website!=='string')return null;
+  const out={};
+  for(const k of TRIAL_KEYS){
+    if(typeof data[k]!=='string')return null;
+    const v=data[k].trim();
+    if(v.length>TRIAL_LIMITS[k]||UNSAFE_CHARS.test(v))return null;
+    if(k!=='message'&&(!v||/[\t\n\r]/.test(v)))return null;
+    out[k]=v;
+  }
+  const c=out.contact.normalize('NFKC').replace(/[\s\-‐－ー()]/gu,'');
+  if(!EMAIL.test(out.contact.normalize('NFKC'))&&!/^\+?\d{10,15}$/.test(c))return null;
+  if(data.website)return 'honeypot';
+  return out;
+}
 export const unchangedMeaning = (a,b) => a.replace(/[\s。、，,.!?！？「」『』"“”]/gu,'')===b.replace(/[\s。、，,.!?！？「」『』"“”]/gu,'');
 export default {
   async fetch(request,env,ctx) {
@@ -51,7 +80,7 @@ export default {
       const text=data.text.trim();
       // Logs carry only a short reason code and the error class name: the message is never logged because it can embed customer text, store names or IPs.
       const fallback=(reason,error)=>{console[error?'error':'warn']('draft_fallback',reason,error?String((error&&error.name)||'Error').slice(0,40):'');return json({draft:text,mode:'fallback'});}
-      if(Date.now()>=Date.parse('2026-10-09T00:00:00Z'))return fallback('expired');
+      if(Date.now()>=AI_UNTIL)return fallback('expired');
       if(!env.AI || !env.QUOTA || !env.QUOTA_SALT)return fallback('bindings');
       try {
         const day=new Date().toISOString().slice(0,10),ip=request.headers.get('cf-connecting-ip');
@@ -91,6 +120,34 @@ export default {
       if(!env.QUOTA)return json({recorded:false});
       try{return json({recorded:await reserve(env.QUOTA,'ev:'+new Date().toISOString().slice(0,10)+':'+data.event,EVENT_DAILY_CAP)});}
       catch(e){console.error('event_error',String((e&&e.name)||'Error').slice(0,40));return json({recorded:false});}
+    }
+    if(url.pathname==='/api/trial'){
+      const refused=refuse(request,env,url);if(refused)return refused;
+      let data;try{data=await boundedJSON(request);}catch(e){return json({error:'invalid_input'},e.message==='large'?413:400);}
+      const app=validTrial(data);
+      if(!app)return json({error:'invalid_input'},400);
+      if(app==='honeypot')return json({ok:true});
+      const ip=request.headers.get('cf-connecting-ip');
+      if(!env.QUOTA||!env.QUOTA_SALT||!ip)return json({error:'unavailable'},503);
+      const held=[];
+      try{
+        const day=new Date().toISOString().slice(0,10);
+        const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(env.QUOTA_SALT+'trial'+day+ip));
+        const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
+        for(const [key,limit] of [['trip:'+day+':'+hash,TRIAL_CAPS.perSenderDay],['trday:'+day,TRIAL_CAPS.day],['trtotal',TRIAL_CAPS.total]]){
+          if(await reserve(env.QUOTA,key,limit)){held.push(key);continue;}
+          await release(env.QUOTA,held);return json({error:'rate_limited'},429);
+        }
+        await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) VALUES (?,?,?,?,?)').bind(new Date().toISOString(),app.storeName,app.name,app.contact,app.message).run();
+        const cutoff=new Date(Date.now()-3*86400000).toISOString().slice(0,10);
+        ctx.waitUntil(env.QUOTA.prepare("DELETE FROM quota WHERE (key LIKE 'trip:%' AND substr(key,6,10) < ?) OR (key LIKE 'trday:%' AND substr(key,7,10) < ?)").bind(cutoff,cutoff).run());
+        // No notification binding exists yet (wrangler.json has AI, D1 and ASSETS only): applications are saved and read from D1.
+        return json({ok:true});
+      }catch(e){
+        await release(env.QUOTA,held).catch(()=>{});
+        console.error('trial_error',String((e&&e.name)||'Error').slice(0,40));
+        return json({error:'unavailable'},503);
+      }
     }
     if(url.pathname.startsWith('/api/'))return json({error:'not_found'},404);
     if(!['GET','HEAD'].includes(request.method))return json({error:'method_not_allowed'},405);

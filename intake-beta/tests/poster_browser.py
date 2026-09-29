@@ -29,7 +29,7 @@ def main():
    r.fulfill(status=200,body=f.read_bytes(),content_type=mimetypes.guess_type(path)[0] or 'application/octet-stream',headers=SECURITY_HEADERS)
   ctx.route('**/*',route);page=ctx.new_page();page.on('pageerror',lambda e:result['errors'].append(str(e)))
   page.add_init_script('window.__printed=0;window.print=()=>{window.__printed++;};')
-  page.goto(BASE+'/');page.wait_for_load_state('networkidle')
+  page.goto(BASE+'/#create');page.wait_for_load_state('networkidle')
   expect(page.locator('#poster-actions')).to_be_hidden();assert page.locator('.print-only').first.evaluate('e=>getComputedStyle(e).display')=='none','print caption must be hidden on screen'
   page.locator('#store-name').fill(STORE);page.locator('#review-url').fill(GOOGLE);page.locator('#store-form button').click()
   expect(page.locator('#share-result')).to_be_visible();share=page.locator('#share-url').input_value();result['share_url']=share
