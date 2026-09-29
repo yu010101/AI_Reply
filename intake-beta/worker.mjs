@@ -68,6 +68,16 @@ export function validTrial(data) {
   if(data.website)return 'honeypot';
   return out;
 }
+// Slack notice for a saved trial application (only when the SLACK_WEBHOOK_URL secret is set).
+// The message carries the store name and the receipt number (trial_applications.id) only: never the name, contact or message.
+// '&' is escaped for Slack's mrkdwn; '<' and '>' never reach here (UNSAFE_CHARS). redirect:'manual' so the POST never follows a
+// redirect elsewhere ('error' throws a TypeError on Workers). Failures are logged with a status or error class only, never the body.
+export function trialNotice(storeName,id){return {text:'ひとことβ 試用の申し込み：店名「'+storeName.replace(/&/g,'&amp;')+'」 受付番号 '+id};}
+async function notifyTrial(url,storeName,id){
+  try{const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(trialNotice(storeName,id)),redirect:'manual'});
+    if(!r.ok)console.error('trial_notify_failed',String(r.status));}
+  catch(e){console.error('trial_notify_failed',String((e&&e.name)||'Error').slice(0,40));}
+}
 export const unchangedMeaning = (a,b) => a.replace(/[\s。、，,.!?！？「」『』"“”]/gu,'')===b.replace(/[\s。、，,.!?！？「」『』"“”]/gu,'');
 export default {
   async fetch(request,env,ctx) {
@@ -139,10 +149,11 @@ export default {
           // splice first: if this release throws halfway, the catch below must not release the same rows a second time.
           await release(env.QUOTA,held.splice(0));return json({error:'rate_limited'},429);
         }
-        await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) VALUES (?,?,?,?,?)').bind(new Date().toISOString(),app.storeName,app.name,app.contact,app.message).run();
+        const saved=await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) VALUES (?,?,?,?,?) RETURNING id').bind(new Date().toISOString(),app.storeName,app.name,app.contact,app.message).first();
         const cutoff=new Date(Date.now()-3*86400000).toISOString().slice(0,10);
         ctx.waitUntil(env.QUOTA.prepare("DELETE FROM quota WHERE (key LIKE 'trip:%' AND substr(key,6,10) < ?) OR (key LIKE 'trday:%' AND substr(key,7,10) < ?)").bind(cutoff,cutoff).run());
-        // No notification binding exists yet (wrangler.json has AI, D1 and ASSETS only): applications are saved and read from D1.
+        // Saved: from here on nothing may change the answer. The Slack notice runs after the response and its failure is only logged.
+        if(env.SLACK_WEBHOOK_URL)try{ctx.waitUntil(notifyTrial(env.SLACK_WEBHOOK_URL,app.storeName,saved&&saved.id));}catch{/* notice is best effort */}
         return json({ok:true});
       }catch(e){
         await release(env.QUOTA,held.splice(0)).catch(()=>{});

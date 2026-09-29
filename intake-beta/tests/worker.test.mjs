@@ -4,7 +4,7 @@ beforeEach(()=>{Date.now=()=>Date.parse('2026-09-25T00:00:00Z');});
 afterEach(()=>{Date.now=realNow;});
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP,AI_UNTIL,validTrial,TRIAL_LIMITS,TRIAL_CAPS} from '../worker.mjs';
+import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP,AI_UNTIL,validTrial,TRIAL_LIMITS,TRIAL_CAPS,trialNotice} from '../worker.mjs';
 const logs=[];const realWarn=console.warn,realError=console.error;
 beforeEach(()=>{logs.length=0;console.warn=(...a)=>logs.push(['warn',...a]);console.error=(...a)=>logs.push(['error',...a]);});
 afterEach(()=>{console.warn=realWarn;console.error=realError;});
@@ -125,3 +125,38 @@ test('trial: a release that fails halfway is never repeated, so the per-sender c
   s.q.prepare=sql=>{if(sql.startsWith('UPDATE quota SET count=MAX')){releases++;throw Error('D1_ERROR: flaky');}return prep(sql);};
   const r=await invoke(trialRequest(),s.env);assert.ok([429,503].includes(r.status));assert.equal(releases,1,'released once only');
   s.q.prepare=prep;const sender=Object.entries(s.q.rows()).find(([k])=>k.startsWith('trip:'));assert.equal(sender[1],1,'failed release leaves the row counted (safe side)');assert.equal(trialRows(s.q).length,0);});
+
+// Slack notice for a saved application (SLACK_WEBHOOK_URL secret). Never sent for real here: globalThis.fetch is replaced.
+const HOOK='https://hooks.slack.test/services/T000/B000/fictional';
+async function withFetch(impl,fn){const old=globalThis.fetch;const calls=[];globalThis.fetch=async(url,init)=>{calls.push({url:String(url),init});return impl(url,init);};try{await fn(calls);}finally{globalThis.fetch=old;}}
+test('trial notice: without SLACK_WEBHOOK_URL nothing is fetched',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  await withFetch(()=>new Response('ok'),async calls=>{const r=await invoke(trialRequest(),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
+    s.env.SLACK_WEBHOOK_URL='';assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'192.0.2.20'}),s.env)).status,200);assert.equal(calls.length,0);});});
+test('trial notice: sent once per saved application, with the store name and receipt number only',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  await withFetch(()=>new Response('ok'),async calls=>{
+    s.q.db.exec("INSERT INTO trial_applications (created_at,store_name,contact_name,contact) VALUES ('2026-09-01T00:00:00.000Z','既存','x','x@example.com')");
+    const app={...trialOk,storeName:'架空の喫茶 A&B',message:'レジ横に置きたい。電話は夜がいいです'};
+    const r=await invoke(trialRequest(app),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
+    assert.equal(calls.length,1);const [c]=calls;assert.equal(c.url,HOOK);assert.equal(c.init.method,'POST');assert.notEqual(c.init.redirect,'error');assert.equal(c.init.redirect,'manual');
+    const id=s.q.db.prepare('SELECT id FROM trial_applications WHERE store_name=?').get(app.storeName).id;assert.equal(id,2);
+    const body=JSON.parse(c.init.body);assert.deepEqual(Object.keys(body),['text']);assert.deepEqual(body,trialNotice(app.storeName,id));
+    assert.equal(body.text,'ひとことβ 試用の申し込み：店名「架空の喫茶 A&amp;B」 受付番号 2');
+    for(const secret of [app.name,'山田','花子',app.contact,'owner@','example.com',app.message,'レジ横','電話','192.0.2.9'])assert.ok(!c.init.body.includes(secret),'notice leaks '+secret);
+    // nothing is logged on success
+    assert.equal(logs.length,0,JSON.stringify(logs));});});
+test('trial notice: a failing or refusing webhook never changes the answer, and logs no content',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  let n=0;
+  for(const impl of [()=>{throw new TypeError('network down owner@example.com');},()=>Promise.reject(new Error('D1? no: 架空の喫茶店')),()=>new Response('no',{status:500}),()=>new Response('',{status:302,headers:{location:'https://elsewhere.example/'}})]){
+    await withFetch(impl,async calls=>{const r=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.'+(n++)}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});assert.equal(calls.length,1);});}
+  assert.equal(trialRows(s.q).length,4);
+  const errs=logs.filter(l=>l[0]==='error');assert.deepEqual(errs.map(l=>l[1]),Array(4).fill('trial_notify_failed'));assert.deepEqual(errs.map(l=>l[2]),['TypeError','Error','500','302']);
+  const flat=JSON.stringify(logs);for(const secret of ['架空の喫茶店','山田','owner@example.com','レジ横',HOOK,'network down'])assert.ok(!flat.includes(secret),'log leaks '+secret);});
+test('trial notice: not sent for the hidden-field trap, invalid input, rate limits or a failed save',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  await withFetch(()=>new Response('ok'),async calls=>{
+    assert.deepEqual((await invoke(trialRequest({...trialOk,website:'https://spam.example'}),s.env)).body,{ok:true});
+    assert.equal((await invoke(trialRequest({...trialOk,contact:'x'}),s.env)).status,400);
+    for(let i=0;i<TRIAL_CAPS.perSenderDay;i++)assert.equal((await invoke(trialRequest(),s.env)).status,200);
+    assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'one per saved application');
+    assert.equal((await invoke(trialRequest(),s.env)).status,429);
+    s.q.db.exec('DROP TABLE trial_applications');assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.77'}),s.env)).status,503);
+    assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'no notice without a saved row');});});
