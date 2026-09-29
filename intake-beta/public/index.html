@@ -9,6 +9,22 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+<!-- 線画アイコン（自作・24px格子・線幅は CSS の stroke-width）。.acc の線だけアクセント色 -->
+<symbol id="i-talk" viewBox="0 0 24 24"><path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9l-4.5 3.5V16.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/><path class="acc" d="M8 11h.01M12 11h.01M16 11h.01"/></symbol>
+<symbol id="i-pen-q" viewBox="0 0 24 24"><path d="M4 20l1-4.2L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.2 19 4 20z"/><path d="M13.8 7l3.2 3.2"/><path class="acc" d="M17.5 14.5a2 2 0 1 1 2.6 1.9c-.5.2-.6.5-.6 1v.4M19.5 20h.01"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path class="acc" d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-store" viewBox="0 0 24 24"><path d="M4 10v10h16V10"/><path d="M3 10l1.5-5h15L21 10c0 1.4-1.1 2.3-2.4 2.3S16.2 11.4 16.2 10c0 1.4-1.1 2.3-2.4 2.3S11.4 11.4 11.4 10c0 1.4-1.1 2.3-2.4 2.3S6.6 11.4 6.6 10c0 1.4-1.1 2.3-2.4 2.3"/><path class="acc" d="M10 20v-4.5h4V20"/></symbol>
+<symbol id="i-scan" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/><path class="acc" d="M9 7h2.5v2.5H9zM12.5 7H15v2.5h-2.5zM9 10.5h2.5V13H9zM13 11h2M13 13h1"/></symbol>
+<symbol id="i-send-check" viewBox="0 0 24 24"><path d="M14 3.5H6.5a1.5 1.5 0 0 0-1.5 1.5v14a1.5 1.5 0 0 0 1.5 1.5H13"/><path d="M8 8h6M8 11.5h4"/><path class="acc" d="M15 16.5l2 2 4-4.5"/><path d="M16 3.5h4.5V8M20.5 3.5L15 9"/></symbol>
+<symbol id="i-balance" viewBox="0 0 24 24"><path d="M12 4v16M8 20h8M5 7h14"/><path d="M5 7l-2.5 6a2.5 2.5 0 0 0 5 0L5 7zM19 7l-2.5 6a2.5 2.5 0 0 0 5 0L19 7z"/><path class="acc" d="M12 4.5h.01"/></symbol>
+<symbol id="i-gift-off" viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1"/><path d="M3 9h18M12 9v11M12 9c-1.5-3.5-5.5-4-5.5-1.5S10 9 12 9zm0 0c1.5-3.5 5.5-4 5.5-1.5S14 9 12 9z"/><path class="acc" d="M3.5 3.5l17 17"/></symbol>
+<symbol id="i-hand" viewBox="0 0 24 24"><path d="M9 11.5V5a1.5 1.5 0 0 1 3 0v5.5M12 10V4a1.5 1.5 0 0 1 3 0v6.5M15 10.5V6a1.5 1.5 0 0 1 3 0v8.5c0 3.6-2.7 6.5-6.2 6.5-2.3 0-3.7-1-5.1-2.9L4 14.8a1.5 1.5 0 0 1 2.3-1.9L9 15.5"/><path class="acc" d="M5 5.5l1.5 1M4 9h1.8"/></symbol>
+<symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"/><path d="M17 10.5h1.5a2.5 2.5 0 0 1 0 5H16.5M3 21.5h15"/><path class="acc" d="M8 3.5c-.8 1 .8 2 0 3M12 3.5c-.8 1 .8 2 0 3"/></symbol>
+<symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6.5" cy="17.5" r="2.8"/><circle cx="17.5" cy="17.5" r="2.8"/><path d="M8.5 15.5L18 4M15.5 15.5L6 4"/><path class="acc" d="M12 11.2h.01"/></symbol>
+<symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12.5H6L5 8z"/><path class="acc" d="M9 10V6.5a3 3 0 0 1 6 0V10"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6-6.5-11a6.5 6.5 0 0 1 13 0c0 5-6.5 11-6.5 11z"/><circle class="acc" cx="12" cy="10" r="2.3"/></symbol>
+</svg>
 <header class="site-header">
 <div class="wrap header-inner">
 <a class="logo" href="/">ひとこと<span class="logo-beta">β</span></a>
@@ -34,7 +50,7 @@
 <div class="wrap hero-grid">
 <div class="hero-copy">
 <p class="hero-for">飲食店・美容室・ショップのオーナーさまへ</p>
-<h1>QRを置くだけ。<br>お客さまが、自分の言葉で書ける。</h1>
+<h1>QRを置くだけ。<br>お客さまが、<span class="mark">自分の言葉で</span>書ける。</h1>
 <p class="lead">短い感想に、AIが句読点を整えます。言葉は足しません。<br>確認してGoogleに投稿するのは、お客さま本人です。</p>
 <div class="hero-actions">
 <a class="primary" href="#create">無料でお店のQRを作る</a>
@@ -46,25 +62,29 @@
 <li>自動で投稿しません</li>
 </ul>
 </div>
-<figure class="hero-visual" aria-label="レジ横に置く卓上ポスターの見本">
+<figure class="hero-visual" aria-label="卓上ポスターと、お客さまのスマホ画面の見本">
+<div class="hero-stage">
 <div class="tent-card">
 <p class="tent-store">喫茶 こもれび</p>
 <div class="sample-qr" id="hero-qr"></div>
 <p class="tent-msg">スマホのカメラでQRを読み取り、<br>感想をひとこと。<br>よかったことも、気になったことも。</p>
 </div>
+<div class="phone hero-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。整えた文章「窓際でゆっくりできた。コーヒーは少し熱かった。」を自由に直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
 <div class="counter" aria-hidden="true"></div>
-<figcaption>卓上に置いた見本（店名は架空です。QRはこのページにつながります）</figcaption>
+</div>
+<figcaption>卓上ポスターの見本と、お客さまの実際の画面（店名・感想は架空の例です。QRはこのページにつながります）</figcaption>
 </figure>
 </div>
 </section>
 
 <section class="band" id="worry">
 <div class="wrap">
-<h2>口コミ、お願いしたいけれど。</h2>
+<p class="kicker reveal">よくあるお悩み</p>
+<h2 class="reveal">口コミ、お願いしたいけれど。</h2>
 <ul class="worry-list">
-<li><q>面と向かって頼むのは、気が引ける。</q></li>
-<li><q>頼んでも「何を書けばいい？」で止まってしまう。</q></li>
-<li><q>QRやPOPを作る時間がない。</q></li>
+<li class="reveal"><svg class="icon" aria-hidden="true"><use href="#i-talk"/></svg><q>面と向かって頼むのは、気が引ける。</q></li>
+<li class="reveal"><svg class="icon" aria-hidden="true"><use href="#i-pen-q"/></svg><q>頼んでも「何を書けばいい？」で止まってしまう。</q></li>
+<li class="reveal"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><q>QRやPOPを作る時間がない。</q></li>
 </ul>
 <p class="section-note">ひとことβは、この3つを小さくするための道具です。お店はQRを置き、お客さまは短い感想から書き始められます。</p>
 </div>
@@ -72,41 +92,59 @@
 
 <section class="band band-light" id="how-it-works">
 <div class="wrap">
-<h2>お店がやるのは、QRを置くことだけ。</h2>
+<p class="kicker reveal">しくみ</p>
+<h2 class="reveal">お店がやるのは、QRを置くことだけ。</h2>
 <ol class="steps">
-<li>
-<p class="step-who">お店</p>
+<li class="reveal">
+<p class="step-who"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-store"/></svg>お店</p>
 <h3>店名とGoogleの口コミリンクを入れる</h3>
 <p>共有リンクとQR、掲示用ポスターができます。レジ横やテーブルに置いてください。</p>
-<div class="mini-screen" aria-hidden="true"><span class="ms-label">お店の名前</span><span class="ms-field">喫茶 こもれび</span><span class="ms-label">Googleの口コミリンク</span><span class="ms-field ms-dim">https://g.page/r/…/review</span></div>
+<div class="phone step-phone"><img src="img/screen-create.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お店の画面。お店の名前「喫茶 こもれび」とGoogleの口コミリンクを入れ、「共有リンクを作る」を押す"></div>
 </li>
-<li>
-<p class="step-who">お客さま</p>
+<li class="reveal">
+<p class="step-who"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-scan"/></svg>お客さま</p>
 <h3>QRを読んで、感想をひとこと</h3>
 <p>「よかった」「いつもどおり」「気になった」から選んでも、自由に書いても。書き出しのヒントも出ます。</p>
-<div class="mini-screen" aria-hidden="true"><span class="ms-chips"><span>よかった</span><span>いつもどおり</span><span>気になった</span></span><span class="ms-field">窓際でゆっくりできた</span></div>
+<div class="phone step-phone"><img src="img/screen-input.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。感想に近いものの選択肢、書き出しのヒント、感想の入力欄「窓際でゆっくりできた コーヒーは少し熱かった」、「文章を整えてみる」ボタン"></div>
 </li>
-<li>
-<p class="step-who">お客さま本人</p>
+<li class="reveal">
+<p class="step-who"><svg class="icon icon-sm" aria-hidden="true"><use href="#i-send-check"/></svg>お客さま本人</p>
 <h3>文章を確認して、自分でGoogleに投稿</h3>
 <p>自由に直してからコピーし、Googleで星と内容を確かめて投稿します。投稿せずに閉じてもかまいません。</p>
-<div class="mini-screen" aria-hidden="true"><span class="ms-check">自分の体験と合っていることを確認しました</span><span class="ms-btn">感想をコピー</span><span class="ms-btn ms-btn-line">Googleを開く</span></div>
+<div class="phone step-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="lazy" decoding="async" alt="お客さまの画面。整えた文章を直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
 </li>
 </ol>
+<p class="fiction-note">画面はひとことβの実際の画面です。店名・リンク・感想は架空の例です。</p>
 <a class="primary inline-cta" href="#create">無料でお店のQRを作る</a>
+</div>
+</section>
+
+<section class="band band-scenes" id="scenes">
+<div class="wrap">
+<p class="kicker reveal">置く場所</p>
+<h2 class="reveal">レジ横に、テーブルに、受付に。</h2>
+<p class="section-lead reveal">お会計のついでや、席で待つあいだに。お客さまの目に入る場所に、小さく置いておくだけです。</p>
+<ul class="scene-grid">
+<li class="reveal"><figure><div class="scene-img"><img src="img/scene-cafe-counter.webp" width="960" height="720" loading="lazy" decoding="async" alt="木のカウンターのレジ横に、QRを印刷した白い卓上カードが立っている喫茶店"><span class="ai-badge">イメージ（AI生成）</span></div><figcaption>カフェのレジ横に</figcaption></figure></li>
+<li class="reveal"><figure><div class="scene-img"><img src="img/scene-table.webp" width="960" height="720" loading="lazy" decoding="async" alt="窓際のテーブルに、カフェラテとQRの卓上カード。お客さまの手がスマホを持っている"><span class="ai-badge">イメージ（AI生成）</span></div><figcaption>席のテーブルに</figcaption></figure></li>
+<li class="reveal"><figure><div class="scene-img"><img src="img/scene-salon.webp" width="960" height="720" loading="lazy" decoding="async" alt="明るい美容室の受付カウンターに、QRのカードを立てたスタンド"><span class="ai-badge">イメージ（AI生成）</span></div><figcaption>美容室の受付に</figcaption></figure></li>
+<li class="reveal"><figure><div class="scene-img"><img src="img/scene-shop.webp" width="960" height="720" loading="lazy" decoding="async" alt="器や布小物が並ぶ雑貨店のお会計カウンターに、QRの卓上サインと紙袋"><span class="ai-badge">イメージ（AI生成）</span></div><figcaption>ショップのお会計に</figcaption></figure></li>
+</ul>
+<p class="fiction-note">写真はAIで生成したイメージです。実在のお店ではありません。写っているQRは読み取れない飾りです。</p>
 </div>
 </section>
 
 <section class="band" id="example">
 <div class="wrap">
-<h2>AIは、言葉を足しません。</h2>
+<p class="kicker reveal">実例</p>
+<h2 class="reveal">AIは、言葉を足しません。</h2>
 <p class="section-lead">整えるのは句読点と区切りだけ。ほめ言葉を足したり、気になった点を消したりはしません。</p>
 <div class="before-after">
-<div class="ba-box">
+<div class="ba-box reveal">
 <p class="ba-label">お客さまが入れた感想</p>
 <p class="ba-text">窓際でゆっくりできた コーヒーは少し熱かった</p>
 </div>
-<div class="ba-box ba-after">
+<div class="ba-box ba-after reveal">
 <p class="ba-label">整えた文章（このあと本人が自由に直せます）</p>
 <p class="ba-text">窓際でゆっくりできた。コーヒーは少し熱かった。</p>
 </div>
@@ -129,12 +167,13 @@
 
 <section class="band band-ink" id="promise">
 <div class="wrap">
-<h2>気持ちを誘導しない道具です。</h2>
-<p class="section-lead">ひとことβが守る、3つの約束。</p>
+<p class="kicker kicker-on-ink reveal">3つの約束</p>
+<h2 class="reveal">気持ちを誘導しない道具です。</h2>
+<p class="section-lead reveal">ひとことβが守る、3つの約束。</p>
 <ol class="promises">
-<li><h3>星や感想で、振り分けません。</h3><p>よかった感想も、気になった感想も、同じGoogleの入口へ。低い評価だけを別の窓口に回すしくみはありません。</p></li>
-<li><h3>特典と引き換えにしません。</h3><p>割引やプレゼントと引き換えに口コミを頼むことは、Googleのポリシーで禁止されています。お店の方にも、特典を付けないようお願いしています。</p></li>
-<li><h3>自動で投稿しません。内容も作りません。</h3><p>投稿するかどうか、何を書くかを決めるのはお客さまです。お店が文章を用意して書いてもらうこともできません。</p></li>
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-balance"/></svg><div><h3>星や感想で、振り分けません。</h3><p>よかった感想も、気になった感想も、同じGoogleの入口へ。低い評価だけを別の窓口に回すしくみはありません。</p></div></li>
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-gift-off"/></svg><div><h3>特典と引き換えにしません。</h3><p>割引やプレゼントと引き換えに口コミを頼むことは、Googleのポリシーで禁止されています。お店の方にも、特典を付けないようお願いしています。</p></div></li>
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-hand"/></svg><div><h3>自動で投稿しません。内容も作りません。</h3><p>投稿するかどうか、何を書くかを決めるのはお客さまです。お店が文章を用意して書いてもらうこともできません。</p></div></li>
 </ol>
 <p class="policy-link"><a href="https://support.google.com/contributionpolicy/answer/7400114?hl=ja" target="_blank" rel="noopener noreferrer">Googleの口コミのポリシー（禁止および制限されているコンテンツ）</a></p>
 </div>
@@ -143,7 +182,8 @@
 <section class="band band-light" id="poster">
 <div class="wrap poster-grid">
 <div>
-<h2>そのまま貼れる、掲示用ポスター付き。</h2>
+<p class="kicker reveal">ポスターキット</p>
+<h2 class="reveal">そのまま貼れる、掲示用ポスター付き。</h2>
 <p class="section-lead">印刷すると、店名・QR・共有リンクと、ひとことの案内が1枚に入ります。QR画像（SVG）だけを保存して、お店のPOPに使うこともできます。</p>
 <h3 class="sub-h">置き場所の例</h3>
 <ul class="place-list"><li>レジ横</li><li>テーブル</li><li>お会計のトレー</li></ul>
@@ -152,7 +192,7 @@
 <p class="small">よい評価だけをお願いする言い方や、特典と引き換えにする言い方はしないでください。</p>
 <a class="primary inline-cta" href="#create">無料でお店のQRを作る</a>
 </div>
-<figure class="sheet" aria-label="印刷されるポスターの見本">
+<figure class="sheet reveal" aria-label="印刷されるポスターの見本">
 <p class="sheet-store">喫茶 こもれび</p>
 <div class="sample-qr" id="poster-qr"></div>
 <p class="sheet-msg">スマホのカメラでQRを読み取り、感想をひとこと。<br>よかったことも、気になったことも。</p>
@@ -164,9 +204,13 @@
 
 <section class="band" id="fit">
 <div class="wrap">
-<h2>こんなお店で使えます。</h2>
-<ul class="fit-list">
-<li>飲食店・カフェ</li><li>美容室・サロン</li><li>ショップ</li><li>そのほか、Googleで口コミを受け付けているお店</li>
+<p class="kicker reveal">向いているお店</p>
+<h2 class="reveal">こんなお店で使えます。</h2>
+<ul class="fit-cards">
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-cup"/></svg><span>飲食店・カフェ</span></li>
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-scissors"/></svg><span>美容室・サロン</span></li>
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-bag"/></svg><span>ショップ</span></li>
+<li class="reveal"><svg class="icon icon-lg" aria-hidden="true"><use href="#i-pin"/></svg><span>そのほか、Googleで口コミを受け付けているお店</span></li>
 </ul>
 <p class="section-lead">条件は、Googleビジネスプロフィールがあり、口コミを書いてもらうリンクを出せることだけです。</p>
 <ol class="link-howto">
@@ -179,14 +223,15 @@
 
 <section class="band band-light" id="price">
 <div class="wrap">
-<h2>いまは無料でお試しいただけます。</h2>
+<p class="kicker reveal">料金</p>
+<h2 class="reveal">いまは無料でお試しいただけます。</h2>
 <div class="price-table">
-<div class="price-col">
+<div class="price-col reveal">
 <p class="price-name">体験中</p>
 <p class="price-num">0<span>円</span></p>
 <p class="small">登録・クレジットカード不要</p>
 </div>
-<div class="price-col">
+<div class="price-col reveal">
 <p class="price-name">正式版（予定価格）</p>
 <p class="price-num">2,980<span>円／月（税込）</span></p>
 <p class="small">1店舗あたり</p>
@@ -204,7 +249,7 @@
 
 <section class="band" id="scope">
 <div class="wrap">
-<h2>体験版でできること、まだできないこと。</h2>
+<h2 class="reveal">体験版でできること、まだできないこと。</h2>
 <div class="scope-grid">
 <div>
 <h3 class="sub-h">できること</h3>
@@ -220,7 +265,8 @@
 
 <section class="band band-light" id="data">
 <div class="wrap">
-<h2>お客さまの感想は、保存しません。</h2>
+<p class="kicker reveal">データの扱い</p>
+<h2 class="reveal">お客さまの感想は、保存しません。</h2>
 <ul class="plain-notes">
 <li>感想の本文は、ひとことβのデータベースに保存しません。文章を整えるときだけ、Cloudflare Workers AIへ送ります。</li>
 <li>共有リンクに入るのは、店名・Googleの口コミリンク・お店の種類だけです。</li>
@@ -232,7 +278,8 @@
 
 <section class="band" id="faq">
 <div class="wrap faq-wrap">
-<h2>使う前に、知っておきたいこと。</h2>
+<p class="kicker reveal">よくある質問</p>
+<h2 class="reveal">使う前に、知っておきたいこと。</h2>
 <details><summary>料金はかかりますか？</summary><p>体験中は無料です。正式版は1店舗・月額2,980円（税込）の予定です。開始時期は決まりしだいお知らせし、自動で有料に切り替わることはありません。</p></details>
 <details><summary>Googleに自動で投稿されますか？</summary><p>されません。お客さまがご自身でGoogleを開き、星を選んで文章を貼り付け、投稿します。</p></details>
 <details><summary>Googleのルールに反しませんか？</summary><p>Googleのポリシーでは、特典と引き換えに口コミを頼むことや、よい口コミだけを選んで頼むことが禁止されています。ひとことβは感想で振り分けず、特典も付けません。お店の頼み方もルールの対象なので、声かけの際はご注意ください。</p></details>

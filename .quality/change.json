@@ -6,7 +6,8 @@
     "POST /api/trial: 店名80・お名前40・連絡先120(メールか電話10〜15桁)・ひとこと400字(任意)を検証し D1 trial_applications に保存。IPは保存しない。同一送信元1日3件・全体1日30件・累計500件で429。/api/draft と同じ Origin/POST/JSON 門。隠し欄が埋まっていれば保存せず ok",
     "AI 期限を定数 AI_UNTIL にし 2027-04-01T00:00+09:00（2027-03-31 JST いっぱい）を仮置き",
     "D1 マイグレーションは intake-beta/migrations/0001_trial_applications.sql をファイルで用意するだけ（本番未適用）",
-    "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない"
+    "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない",
+    "LP v2（もっとリッチに）: 実UIから撮ったスマホ画面(tools/capture_screens.py→public/img/screen-*.webp)をCSSの端末枠でFVと3ステップに表示。AI生成の店舗写真4枚(Higgsfield z_image)に各「イメージ（AI生成）」表記。悩み・しくみ・約束・向いているお店に自作のインラインSVG線画アイコン。朱のアクセント(#b4441c, WCAG AA)。IntersectionObserverのふわっと表示（prefers-reduced-motionでは無効）。画像は同一オリジンのWebP・1枚200KB以下・loading=lazy・width/height指定。CSP変更なし"
   ],
   "reuse": [
     {
@@ -28,6 +29,11 @@
       "path": "intake-beta/tests/poster_browser.py",
       "decision": "reuse",
       "reason": "開始URLを /#create にしただけで、印刷1ページ・印刷の隔離の検査は同じ"
+    },
+    {
+      "path": "intake-beta/tests/lp_browser.py",
+      "decision": "extend",
+      "reason": "同じ隔離配信(CSP付き)で v2 の画像・AI表記・動き・動きを減らす設定の検査とFVのスクショを追加"
     }
   ],
   "changed_files": [
@@ -44,7 +50,15 @@
     "intake-beta/schema.sql",
     "intake-beta/migrations/0001_trial_applications.sql",
     "intake-beta/tests/lp_browser.py",
-    "intake-beta/tests/poster_browser.py"
+    "intake-beta/tests/poster_browser.py",
+    "intake-beta/tools/capture_screens.py",
+    "intake-beta/public/img/screen-create.webp",
+    "intake-beta/public/img/screen-input.webp",
+    "intake-beta/public/img/screen-result.webp",
+    "intake-beta/public/img/scene-cafe-counter.webp",
+    "intake-beta/public/img/scene-table.webp",
+    "intake-beta/public/img/scene-salon.webp",
+    "intake-beta/public/img/scene-shop.webp"
   ],
   "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
 }

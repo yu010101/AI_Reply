@@ -1,7 +1,9 @@
 """Isolated browser check for the LP redesign (LP / #create / customer views and the 試用店舗募集 form).
 Serves intake-beta/public from disk via Playwright routing with the worker's CSP. /api/trial is answered by a fake
 in this script (status chosen per case); every other /api/ call and every external host is recorded and refused.
-Optional --shots DIR writes full-page JPEG screenshots (390px phone, 1280px desktop, and the create view).
+Optional --shots DIR writes full-page JPEG screenshots (390px phone, 1280px desktop, and the create view) and the first view only
+(fv_390.jpg, fv_1280.jpg). v2 checks: every LP image is same-origin WebP with width/height and loading=lazy and actually decodes,
+every AI photo carries 「イメージ（AI生成）」, the scroll fade-in reveals everything, and prefers-reduced-motion turns it off.
 Prints a JSON summary; exit 0 on success.
 """
 from pathlib import Path
@@ -12,6 +14,24 @@ R=Path(__file__).resolve().parents[1];PUB=R/'public'
 BASE='https://hitokoto.example';GOOGLE='https://g.page/r/qa-fictional-store/review';STORE='QA用の架空店舗'
 CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 H1='QRを置くだけ。お客さまが、自分の言葉で書ける。'
+def settle(pg):
+ # scroll the whole page once so lazy images load and every fade-in has fired, then return to the top
+ h=pg.evaluate('document.documentElement.scrollHeight');y=0
+ while y<h:pg.evaluate("y=>scrollTo({top:y,behavior:'instant'})",y);pg.wait_for_timeout(120);y+=400
+ pg.evaluate("scrollTo({top:0,behavior:'instant'})");pg.wait_for_timeout(900)
+V2_IMAGES='''[...document.querySelectorAll('#lp img')].map(i=>({src:i.getAttribute('src'),w:i.getAttribute('width'),h:i.getAttribute('height'),lazy:i.getAttribute('loading'),alt:i.alt,ok:i.complete&&i.naturalWidth>0,ai:!!i.closest('.scene-img')&&!!i.closest('.scene-img').querySelector('.ai-badge')&&i.closest('.scene-img').querySelector('.ai-badge').textContent==='イメージ（AI生成）',scene:!!i.closest('.scene-img')}))'''
+def check_images(pg,res,key):
+ imgs=pg.evaluate(V2_IMAGES);res[key]=len(imgs)
+ assert len(imgs)>=8,imgs
+ for i in imgs:
+  assert i['src'].startswith('img/') and i['src'].endswith('.webp'),i
+  assert i['w'] and i['h'] and i['lazy']=='lazy' and i['alt'],i
+  assert i['ok'],('image did not load',i)
+  if i['scene']:assert i['ai'],('AI photo without label',i)
+ assert sum(i['scene'] for i in imgs)>=3,imgs
+ # the fade-in has revealed every element once the page was scrolled through
+ hidden=pg.evaluate("[...document.querySelectorAll('#lp .reveal')].filter(e=>getComputedStyle(e).opacity!=='1').length")
+ assert hidden==0,('reveal left hidden elements',hidden)
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--shots');args=ap.parse_args()
  assert CSP in (R/'worker.mjs').read_text(),'test CSP drifted from worker.mjs'
@@ -46,6 +66,9 @@ def main():
   body=pg.locator('#lp').inner_text()
   for must in ['架空の例です','星や感想で、振り分けません。','特典と引き換えにしません。','自動で投稿しません。','2,980','税込','先着10店','合同会社Radineer']:assert must in body,must
   ctas=pg.locator('a[href="#create"]:visible').count();res['visible_create_ctas_390']=ctas;assert ctas>=5,ctas
+  if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_390.jpg'),type='jpeg',quality=80)
+  assert pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in not armed'
+  settle(pg);check_images(pg,res,'lp_images_390')
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_390_full.jpg'),full_page=True,type='jpeg',quality=80)
   # header CTA -> create view; back link -> LP
   pg.locator('.header-cta').click();expect(pg.locator('#store-form')).to_be_visible();assert pg.evaluate('document.body.dataset.view')=='create'
@@ -72,7 +95,15 @@ def main():
   # desktop LP
   ctx,pg=make(1280,900);pg.goto(BASE+'/');pg.wait_for_load_state('networkidle');expect(pg.locator('#sticky-cta')).to_be_hidden();expect(pg.locator('.owner-nav')).to_be_visible()
   assert pg.evaluate(no_overflow),'LP desktop overflow'
+  if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_1280.jpg'),type='jpeg',quality=80)
+  settle(pg);check_images(pg,res,'lp_images_1280')
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_1280_full.jpg'),full_page=True,type='jpeg',quality=80)
+  ctx.close()
+  # prefers-reduced-motion: nothing is hidden or animated
+  ctx,pg=make(390);pg.emulate_media(reduced_motion='reduce');pg.goto(BASE+'/');pg.wait_for_load_state('networkidle')
+  assert not pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in armed under reduced motion'
+  assert pg.evaluate("[...document.querySelectorAll('#lp .reveal')].every(e=>getComputedStyle(e).opacity==='1')")
+  assert pg.evaluate("getComputedStyle(document.querySelector('.hero-phone')).animationName")=='none'
   ctx.close()
   # customer view hides every owner element; a broken share link opens the create view with the message
   ctx,pg=make(390);pg.goto(BASE+'/?'+urlencode({'store':STORE,'review':GOOGLE}));pg.wait_for_load_state('networkidle')
@@ -82,5 +113,5 @@ def main():
   expect(pg.locator('#store-form')).to_be_visible();expect(pg.locator('#store-error')).to_contain_text('共有リンクを確認してください')
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
- print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
+ print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','lp_images_390','lp_images_1280','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
 if __name__=='__main__':main()

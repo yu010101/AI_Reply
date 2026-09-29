@@ -52,6 +52,12 @@ sampleQr('hero-qr');sampleQr('poster-qr');
 // Phone bottom bar: hidden while the hero's own button is on screen, so the first view shows one primary action.
 (function(){const bar=$('sticky-cta'),hero=document.querySelector('.hero-actions');if(!bar||!hero||!('IntersectionObserver' in window))return;bar.classList.add('is-off');new IntersectionObserver(es=>{for(const e of es)bar.classList.toggle('is-off',e.isIntersecting||e.boundingClientRect.top>0);}).observe(hero);})();
 
+// LP v2: sections fade in once when scrolled into view. Hidden only after this runs (html.reveal-on), so without JS,
+// without IntersectionObserver, or with prefers-reduced-motion everything stays visible and still.
+(function(){const els=document.querySelectorAll('#lp .reveal');if(!els.length||document.body.dataset.view==='customer'||!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const io=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting){e.target.classList.add('is-in');io.unobserve(e.target);}},{rootMargin:'0px 0px -6% 0px'});
+  els.forEach(el=>io.observe(el));document.documentElement.classList.add('reveal-on');})();
+
 // 試用店舗募集フォーム → POST /api/trial (worker.mjs validTrial: 店名80・お名前40・連絡先120・ひとこと400字、改行は「ひとこと」だけ)
 const TRIAL_MESSAGES={empty:'店名・お名前・連絡先を入力してください。',contact:'連絡先は、メールアドレスか電話番号（10〜15桁）で入力してください。',sending:'送信しています…',invalid:'入力内容を確認してください。記号の「<」「>」は使えません。店名・お名前・連絡先は1行で入力してください。',limited:'同じ端末からの送信が続いたため、今日は受け付けを止めています。明日以降にもう一度お送りください。',failed:'いま受け付けられませんでした。時間をおいて、もう一度お送りください。'};
 function trialContactOk(v){const n=v.normalize('NFKC');return /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/u.test(n)||/^\+?\d{10,15}$/.test(n.replace(/[\s\-‐－ー()]/gu,''));}
