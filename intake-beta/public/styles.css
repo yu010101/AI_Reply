@@ -41,7 +41,6 @@ h3{font-size:19px;line-height:1.6}
 p{margin:0 0 12px}
 .lead{font-size:16px;color:var(--sub);line-height:2}
 .section-lead{font-size:15px;color:var(--sub);max-width:40em;margin-bottom:28px}
-.section-note{margin-top:28px;font-size:15px;max-width:40em}
 .small{font-size:13px;color:var(--sub);line-height:1.8}
 .sub-h{font-size:17px;margin:32px 0 12px}
 
@@ -185,7 +184,6 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 .worry-list li{font-family:var(--mincho);font-weight:600;font-size:clamp(24px,3.4vw,40px);line-height:1.55;margin:0 0 .7em;word-break:auto-phrase}
 .worry-list q{quotes:"「" "」"}
 .worry-list q::before,.worry-list q::after{color:var(--sub);font-weight:400}
-#lp .section-note{margin-top:32px;font-size:15px;max-width:40em;color:var(--sub)}
 
 /* 03 しくみ: 大きな数字の文字（明朝・色なし）＋実画面 */
 .phone{position:relative;width:var(--pw,220px);padding:8px;border-radius:34px;background:#15191c;box-shadow:inset 0 0 0 1px #3d464b,0 28px 48px -26px rgba(23,44,67,.6)}
@@ -397,7 +395,6 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 .worry-list li{display:grid;grid-template-columns:76px 1fr;column-gap:16px;align-items:center;font-size:clamp(19px,1.9vw,25px);margin:0 0 .8em}
 .worry-list .illus{width:76px;height:48px}
 .worry-photo{margin:0}
-#lp .worry-grid .section-note{margin-top:20px}
 /* 03 */
 .phone video{display:block;width:100%;height:auto;border-radius:26px;background:var(--paper)}
 /* 04 */
@@ -523,8 +520,6 @@ body[data-view=customer] .owner-fb{display:none}
 .price-sub{display:flex;align-items:center;font-size:14px;color:var(--sub);margin:0}
 .price-plan{max-width:680px;margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line)}
 .price-plan-text{margin:6px 0 0}
-.price-notes{list-style:none;padding:0;margin:8px 0 0;max-width:44em}
-.price-notes li{margin:0 0 4px}
 .price-trial{margin-top:18px;font-size:15px}
 /* 08 できること・報告の縮小見本・使えるお店・データの扱い */
 .scope-grid{display:grid;gap:28px;align-items:start}
@@ -537,23 +532,12 @@ body[data-view=customer] .owner-fb{display:none}
 .rm-table th,.rm-table td{border-bottom:1px solid var(--line);padding:5px 4px;text-align:right;white-space:nowrap;font-weight:400;line-height:1.6}
 .rm-table th[scope=row],.rm-table thead th:first-child{text-align:left;font-weight:600}
 .rm-table thead th{color:var(--sub);font-size:11.5px}
-.rm-table .rm-few{color:var(--sub);font-size:11px}
 .rm-sign{background:var(--surface);border-radius:4px;padding:12px 18px;text-align:center}
 .rm-sign-h{font-weight:700;font-size:15px;margin:0}
-.rm-sign-topic{font-size:12px;color:var(--sub);margin:0}
-.rm-sign-text{font-family:var(--mincho);font-size:16px;margin:0}
 .report-mini figcaption{font-size:12px;color:var(--sub)}
 .scope-part{margin-top:48px}
 .part-h{font-size:clamp(20px,2.2vw,24px);margin-bottom:14px}
-.fit-chain{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:10px 0;font-size:14px;font-weight:600}
-.fit-chain li{background:var(--ai-tint);color:var(--ai);padding:5px 12px;border-radius:6px;position:relative;line-height:1.6}
-.fit-chain li+li{margin-left:34px}
-.fit-chain li+li::before{content:"→";position:absolute;left:-24px;color:var(--sub);font-weight:400}
-.data-grid{display:grid;gap:22px;align-items:start}
 .data-h{display:flex;align-items:center;font-weight:700;font-size:15px;margin:0 0 6px}
-.data-no{list-style:none;padding:0;margin:0;font-size:15px}
-.data-no li{padding:7px 0;border-bottom:1px solid var(--line)}
-.data-no li::before{content:"×";margin-right:10px;color:var(--sub);font-weight:700}
 .data-table{border-collapse:collapse;width:100%;font-size:14px}
 .data-table th,.data-table td{text-align:left;padding:7px 10px 7px 0;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.6}
 .data-table th{font-weight:400;color:var(--sub)}
@@ -577,7 +561,19 @@ body[data-view=customer] .owner-fb{display:none}
   .pr-sym{width:120px;height:72px}
   .scenes-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:28px}
   .scope-grid{grid-template-columns:minmax(0,1fr) minmax(280px,.95fr);gap:36px}
-  .data-grid{grid-template-columns:minmax(0,.65fr) minmax(0,1.35fr);gap:32px}
 }
 #lp .band-ink .one{color:#d5dee8}
 @media(max-width:759px){#lp .one{font-size:15px}}
+
+/* v12: 08 の縮小見本は形だけ（件数・文を入れない）。保存期間とFAQは開いて読む */
+.rm-bar{display:inline-block;width:26px;height:6px;border-radius:3px;background:var(--line);vertical-align:middle}
+.rm-sign .rm-bar-wide{display:block;width:120px;height:8px;margin:8px auto 2px}
+.data-more summary,#lp .faq-group>summary.faq-cat{display:flex;align-items:center}
+#lp .faq-group{scroll-margin-top:76px}
+#lp .faq-group>summary.faq-cat{margin:0;padding:16px 32px 16px 0;font-size:18px}
+#lp .faq-group[open]>summary.faq-cat{margin-bottom:4px}
+#lp .faq-group>details{margin-left:30px}
+.data-more .data-table{margin:4px 0 12px}
+.trial-terms{margin-top:10px}
+.trial-terms summary{cursor:pointer;font-size:13px;color:var(--sub);padding:4px 0}
+.trial-terms .small{margin:8px 0 0}

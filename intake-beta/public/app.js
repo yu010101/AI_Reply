@@ -158,6 +158,8 @@ function route(fromHashChange){
   const wasCreate=document.body.dataset.view==='create';
   document.body.dataset.view='lp';
   const target=h.length>1&&document.getElementById(h.slice(1));
+  // v12: FAQ groups and answers are closed <details>; a link to one (#faq-rule, #data-all …) opens it and the groups around it
+  for(let d=target&&target.closest('#lp details');d;d=d.parentElement.closest('details'))d.open=true;
   if(wasCreate&&target)target.scrollIntoView();
 }
 window.addEventListener('hashchange',()=>route(true));

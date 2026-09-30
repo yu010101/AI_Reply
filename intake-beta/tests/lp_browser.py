@@ -22,6 +22,11 @@ v11 checks (03以降は図解と一言で): from slide 03 on, all visible text o
 long-slide exception, the heading and the one-liner (.one) are one line each, every slide 03-09 has a one-liner (07: the price
 figures), the visible characters of slides 03-09 stay within CHAR_BUDGET_FROM_03 (3,308 before v11), and at 390 no text there is
 under 11px (check_text_lines, check_chars, check_min_font).
+v12 checks (本人「もっと文字を減らして」): the budget for slides 03-09 is 1,000 characters (2,039 before v12), the fixed 試用 form
+shows at most TRIAL_CHAR_BUDGET characters (209 before v12; its conditions and data handling sit in a closed <details>), the heading
+and the one-liner of slides 02-09 are one line at 390 as well (check_one_line), and the report mock-up on 08 shows no counts.
+The decided wording that left the visible face is checked verbatim where it now lives (FAQ answers / the form's <details>), and the
+price slide still shows 「予定」 and 「変更する場合はこのページでお知らせします」 beside the figures.
 Prints a JSON summary; exit 0 on success.
 """
 from pathlib import Path
@@ -184,17 +189,30 @@ TEXT_LINES=r"""(strict)=>{const out=[];
 def check_text_lines(pg,res,key):
  tl=pg.evaluate(TEXT_LINES,STRICT_SLIDES);over=[t for t in tl if t['lines']>t['max']]
  res[key]={'checked':len(tl),'checked_from_03':sum(t['strict'] for t in tl),'max_lines':max(t['lines'] for t in tl),'exempt':'FAQ answers (details), poster mock-up, price figures'}
- assert sum(t['strict'] for t in tl)>=60,tl
+ assert sum(t['strict'] for t in tl)>=45,tl  # v12: 58 pieces after the cut (v11 had more than 60); the floor only proves the check still sees the slides
  for sid in STRICT_SLIDES:assert any(t['slide']==sid and t['tag']=='p.one' or t['slide']==sid and sid=='price' for t in tl),('no one-liner on',sid)
  assert over==[],('text over its line limit',over)
 # v11: the words a reader sees on slides 03-09 (non-whitespace innerText at 1280x800; closed FAQ answers are not rendered and so
 # not counted). Before v11: 3,308 characters. The budget keeps the slides from growing back into paragraphs.
 CHARS=r"""(ids)=>ids.map(id=>{const s=document.getElementById(id);const no=s.querySelector(':scope > .slide-no');
  return [id,s.innerText.replace(/\s/g,'').length-(no?no.innerText.replace(/\s/g,'').length:0)];})"""
-CHAR_BUDGET_FROM_03=2200
+CHAR_BUDGET_FROM_03=1000  # v12 (本人「もっと文字を減らして」): 2,039 at a60e780 -> at most 1,000
+TRIAL_CHAR_BUDGET=104  # v12: the fixed 試用 form showed 209 characters at a60e780; at most half
+TRIAL_CHARS="document.getElementById('trial').innerText.replace(/\\s/g,'').length"
 def check_chars(pg,res,key):
  c=dict(pg.evaluate(CHARS,STRICT_SLIDES));res[key]=c|{'total':sum(c.values()),'budget':CHAR_BUDGET_FROM_03}
  assert sum(c.values())<=CHAR_BUDGET_FROM_03,('slides 03-09 hold too many words again',c)
+ t=pg.evaluate(TRIAL_CHARS);res[key+'_trial']={'trial':t,'budget':TRIAL_CHAR_BUDGET}
+ assert t<=TRIAL_CHAR_BUDGET,('the 試用 form shows too many words again',t)
+# v12: the heading, the one-liner and the closing line stay on one line at phone width too (slides 02-09; the FV heading breaks on purpose)
+ONE_LINE=r"""(ids)=>{const out=[];for(const id of ids)for(const e of document.getElementById(id).querySelectorAll('h2, .one, .closing-h')){
+ if(e.closest('details'))continue;const cs=getComputedStyle(e);if(cs.display==='none')continue;
+ out.push({id,tag:e.tagName.toLowerCase()+(e.matches('.one')?'.one':''),text:e.textContent.trim(),lines:Math.round(e.getBoundingClientRect().height/parseFloat(cs.lineHeight))});}
+ return out;}"""
+def check_one_line(pg,res,key):
+ got=pg.evaluate(ONE_LINE,SLIDES[1:]);over=[g for g in got if g['lines']!=1];res[key]={'checked':len(got),'over':over}
+ assert len(got)>=15,got
+ assert over==[],('heading or one-liner wraps',over)
 MIN_FONT=r"""(ids)=>{const out=[];for(const id of ids)for(const e of document.getElementById(id).querySelectorAll('*')){
  if(e.closest('details:not([open])')||e.closest('.sheet')||e.closest('svg'))continue;const cs=getComputedStyle(e);if(cs.display==='none')continue;
  const own=[...e.childNodes].some(n=>n.nodeType===3&&n.textContent.trim());if(!own)continue;
@@ -253,7 +271,11 @@ def main():
   for must in ['架空の例です','星や感想で、振り分けません。','特典と引き換えにしません。','自動で投稿しません。','2,980','税込','先着10店','合同会社Radineer']:assert must in body,must
   # decided wording, verbatim: FV lead, price, promises ①②④ and the retention period
   assert pg.locator('.lp-hero .lead').inner_text().replace('\n','')==LEAD,pg.locator('.lp-hero .lead').inner_text()
-  for must,where in [(PRICE,'#price'),(P1,'#price'),(P2,'#price'),(P4,'#trial'),(KEEP,'#data')]:assert must in pg.locator(where).inner_text().replace('\n',''),(where,must)
+  # v12: moved into answers that open on demand (textContent, verbatim); the price slide keeps its short visible caveat
+  for must,where in [(PRICE,'#faq-price'),(P1,'#faq-price'),(P2,'#faq-price'),(P4,'#trial details'),(KEEP,'#data'),(KEEP,'#trial details')]:assert must in pg.locator(where).text_content(),(where,must)
+  vis_price=pg.locator('#price').inner_text().replace('\n','')
+  for must in ['正式版（予定）','予定価格','変更する場合はこのページでお知らせします','2,980']:assert must in vis_price,('price slide must show',must)
+  assert not any(c.isdigit() for c in pg.locator('#scope .report-mini').inner_text()),('report mock-up must not show counts',pg.locator('#scope .report-mini').inner_text())
   assert '短い感想に、AIが句読点を整えます' not in body,'old FV lead left'
   html=pg.content();text=pg.evaluate('document.documentElement.textContent')
   for w in NO_WORDS:assert w not in html and w not in text,w
@@ -265,7 +287,7 @@ def main():
   ctas=pg.locator('a[href="#create"]:visible').count();res['visible_create_ctas_390']=ctas;assert ctas>=5,ctas
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_390.jpg'),type='jpeg',quality=80)
   assert pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in not armed'
-  settle(pg);check_images(pg,res,'lp_images_390');check_min_font(pg,res,'small_text_390')
+  settle(pg);check_images(pg,res,'lp_images_390');check_min_font(pg,res,'small_text_390');check_one_line(pg,res,'one_line_390')
   # v6 at phone width: slides, no fixed form, the form sits after the price slide, the bar's 試用 button reaches it
   check_slides(pg,res,'slides_390');check_forbidden(pg,res,'forbid_390');check_icons(pg,res,'icons_390')
   assert pg.evaluate("getComputedStyle(document.getElementById('trial')).position")=='static'
@@ -313,7 +335,7 @@ def main():
   assert tb['x']>=1280-440 and 360<=tb['width']<=400,tb  # the right column, 360-400px
   nav=pg.locator('.owner-nav a').evaluate_all("l=>l.map(a=>[a.textContent,a.getAttribute('href')])");assert nav==[[f'{i:02d}','#'+sid] for i,sid in enumerate(SLIDES,1)],nav
   assert pg.evaluate("performance.getEntriesByType('resource').filter(r=>/[.](mp4|webm)$/.test(r.name)).length")==0,'a video was fetched on first view (preload=none)'
-  check_text_lines(pg,res,'text_lines_1280');check_chars(pg,res,'chars_1280')
+  check_text_lines(pg,res,'text_lines_1280');check_chars(pg,res,'chars_1280');check_one_line(pg,res,'one_line_1280')
   settle(pg);check_slides(pg,res,'slides_1280');check_forbidden(pg,res,'forbid_1280');check_icons(pg,res,'icons_1280')
   if args.shots:slide_shots(pg,args.shots,'slide_')
   for sid in SLIDES:
@@ -336,7 +358,7 @@ def main():
   assert pg.evaluate('document.activeElement.id')=='trial-store' and abs(pg.evaluate('scrollY')-y0)<2
   order=[]
   for _ in range(5):pg.keyboard.press('Tab');order.append(pg.evaluate("[document.activeElement.id,document.activeElement.getAttribute('href')]"))
-  assert order==[['trial-name',None],['trial-contact',None],['trial-message',None],['','privacy.html#trial'],['trial-submit',None]],order
+  assert order==[['trial-name',None],['trial-contact',None],['trial-message',None],['trial-submit',None],['trial-terms',None]],order  # v12: the conditions open below the button
   expect(pg.locator('#sticky-cta')).to_be_hidden()
   ctx.close()
   # no horizontal scroll at any of the checked widths
@@ -366,6 +388,11 @@ def main():
   assert playing,'demo video did not start on screen'
   res['demo_video_src']=pg.evaluate("document.getElementById('demo-video').currentSrc.split('/').pop()")
   check_videos(pg,res,'videos_1280')
+  # v12: the FAQ is grouped in closed <details>; in-page links to a group or an answer open it
+  pg.evaluate("scrollTo({top:0,behavior:'instant'})");pg.locator('#promise a[href="#faq-rule"]').click();pg.wait_for_timeout(300)
+  assert pg.evaluate("document.getElementById('faq-rule').open"),'link to the rules group left it closed'
+  pg.locator('#data summary').click();pg.locator('#data a[href="#data-all"]').click();pg.wait_for_timeout(300)
+  assert pg.evaluate("document.getElementById('data-all').open&&document.getElementById('faq-data').open"),'link to the data answer left it closed'
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'lp_1280_full.jpg'),full_page=True,type='jpeg',quality=80)
   ctx.close()
   # prefers-reduced-motion: nothing is hidden or animated
@@ -388,5 +415,5 @@ def main():
   for w in NO_WORDS:assert w not in ptext,w
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
- print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','chars_1280','small_text_390','icons_390','icons_1280','videos_1280','videos_reduced_390','text_lines_1280','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
+ print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','chars_1280','chars_1280_trial','one_line_390','one_line_1280','small_text_390','icons_390','icons_1280','videos_1280','videos_reduced_390','text_lines_1280','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
 if __name__=='__main__':main()
