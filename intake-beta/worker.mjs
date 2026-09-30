@@ -641,7 +641,7 @@ export default {
         // a repeat of an application saved moments ago is answered before any quota is reserved: a sender at the daily cap who resends
         // gets the same {ok:true}, and nothing is counted or released (the one-statement insert below still covers concurrent repeats)
         if(await env.QUOTA.prepare('SELECT 1 FROM trial_applications WHERE '+TRIAL_SAME+' LIMIT 1').bind(...fields,since).first())return json({ok:true});
-        const day=new Date(now).toISOString().slice(0,10);
+        const day=new Date().toISOString().slice(0,10);
         const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(env.QUOTA_SALT+'trial'+day+ip));
         const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
         for(const [key,limit] of [['trip:'+day+':'+hash,TRIAL_CAPS.perSenderDay],['trday:'+day,TRIAL_CAPS.day],['trtotal',TRIAL_CAPS.total]]){
