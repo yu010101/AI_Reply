@@ -99,11 +99,11 @@ test('trial: invalid fields are refused with 400 and nothing is stored',async(t)
 test('trial: same sender is limited per day, other senders continue, daily and lifetime caps hold',async(t)=>{const s=await trialEnv(t);if(!s)return;
   const codes=[];for(let i=0;i<TRIAL_CAPS.perSenderDay+2;i++)codes.push((await invoke(trialRequest(trialNo(i)),s.env)).status);
   assert.deepEqual(codes,[...Array(TRIAL_CAPS.perSenderDay).fill(200),429,429]);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);
-  assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.7'}),s.env)).status,200);
+  assert.equal((await invoke(trialRequest(trialNo(10),{'cf-connecting-ip':'198.51.100.7'}),s.env)).status,200);
   assert.equal(s.q.rows()['trday:'+day],TRIAL_CAPS.perSenderDay+1,'refused attempts released the day row');
-  s.q.db.exec("UPDATE quota SET count="+TRIAL_CAPS.day+" WHERE key='trday:"+day+"'");const r=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.8'}),s.env);assert.equal(r.status,429);assert.deepEqual(r.body,{error:'rate_limited'});
+  s.q.db.exec("UPDATE quota SET count="+TRIAL_CAPS.day+" WHERE key='trday:"+day+"'");const r=await invoke(trialRequest(trialNo(11),{'cf-connecting-ip':'198.51.100.8'}),s.env);assert.equal(r.status,429);assert.deepEqual(r.body,{error:'rate_limited'});
   assert.equal(Object.entries(s.q.rows()).filter(([k,v])=>k.startsWith('trip:')&&v===0).length,1,'sender row released when the day cap refused');
-  s.q.db.exec("UPDATE quota SET count=0 WHERE key='trday:"+day+"'; UPDATE quota SET count="+TRIAL_CAPS.total+" WHERE key='trtotal'");assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.9'}),s.env)).status,429);
+  s.q.db.exec("UPDATE quota SET count=0 WHERE key='trday:"+day+"'; UPDATE quota SET count="+TRIAL_CAPS.total+" WHERE key='trtotal'");assert.equal((await invoke(trialRequest(trialNo(12),{'cf-connecting-ip':'198.51.100.9'}),s.env)).status,429);
   assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay+1);});
 test('trial: concurrent bursts from one sender store at most the per-sender cap',async(t)=>{const s=await trialEnv(t);if(!s)return;
   const r=await Promise.all(Array.from({length:12},(_,i)=>invoke(trialRequest(trialNo(i)),s.env)));assert.equal(r.filter(x=>x.status===200).length,TRIAL_CAPS.perSenderDay);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);});
@@ -676,6 +676,12 @@ test('trial: the same application sent again within a short time is saved once, 
     assert.equal((await invoke(trialRequest({...trialOk,message:'別の内容'}),s.env)).status,200);assert.equal(trialRows(s.q).length,3);
     const mod=await import('../worker.mjs');const win=mod.TRIAL_DEDUP_MS??600000;const base=Date.now();Date.now=()=>base+win+1000;
     assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.60'}),s.env)).status,200);assert.equal(trialRows(s.q).length,4,'outside the window it is saved again');});});
+test('trial: a repeat is recognised before any quota is reserved: a sender at the daily cap who resends the last application gets 200, and nothing is counted',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(let i=0;i<TRIAL_CAPS.perSenderDay;i++)assert.equal((await invoke(trialRequest(trialNo(i)),s.env)).status,200);
+  const before=s.q.rows();const again=await invoke(trialRequest(trialNo(TRIAL_CAPS.perSenderDay-1)),s.env);
+  assert.equal(again.status,200,'crosscheck r1: the resend must not be refused as rate limited');assert.deepEqual(again.body,{ok:true});
+  assert.deepEqual(s.q.rows(),before,'no quota row moved');assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);
+  assert.equal((await invoke(trialRequest(trialNo(50)),s.env)).status,429,'a new application from the same sender is still limited');});
 test('trial: trtotal is reserved last, so a 429 never holds it: a failing release on the 429 path cannot leak the lifetime slot',async(t)=>{const s=await trialEnv(t);if(!s)return;
   s.q.db.exec("INSERT INTO quota VALUES ('trday:"+day+"',"+TRIAL_CAPS.day+"),('trtotal',7)");const prep=s.q.prepare.bind(s.q);
   s.q.prepare=sql=>{if(sql.startsWith('UPDATE quota SET count=MAX'))throw Error('D1_ERROR: flaky');return prep(sql);};

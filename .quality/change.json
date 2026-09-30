@@ -3,10 +3,10 @@
  "owner": "reviews-lp fix-nits (Claude実装・ローカルcommitのみ) → メインが本人確認のうえ push/PR",
  "acceptance": [
   "お客さま画面の選択件数（/api/pick-stat）の「1セッション1回」の sessionStorage キーに店ID(sid)を含める（hk-pick-stat:<sid>）。sid なしの旧QRは従来の hk-pick-stat 1つ。funnel_browser.py で A→A→B→旧QR→旧QR の送信が [A,B,なし] になることを確認",
-  "scripts/deploy_preflight.py の cron 検査: 'async scheduled(' の文字列一致をやめ、async の有無・空白/改行・メソッド定義/プロパティ+function/アロー関数・引用符つきの鍵を正規表現で検出。main が読めない（OSError）ときは config_main_unreadable で拒否（fail-closed）",
+  "scripts/deploy_preflight.py の cron 検査: 'async scheduled(' の文字列一致をやめ、語として scheduled が出れば（async の有無・空白/改行・コメント・メソッド定義・プロパティ+function/アロー関数/名前つき関数・短縮プロパティ・引用符つきの鍵のどれでも）PURGE_CRON と triggers.crons を求める（fail-closed。scheduledTime 等の別の語は数えない）。main が読めない（OSError）ときは config_main_unreadable で拒否",
   "報告トークン: SHA-256 で stores を引いたあと、取れた行の token_hash と計算したハッシュを tokenMatches（定数時間）で照合し、一致しなければ 404",
   "運営の GET（/api/loop-events・/api/pick-stats・/api/funnel-stats）に quota の 'opday:<日付>' 行で1日 OPERATOR_CAPS.day 回の共通上限（429）。認証失敗・不正な since は数えない。3日で削除（RATE_KEY_PREFIXES にも追加）",
-  "/api/trial: 同じ4項目の申込を TRIAL_DEDUP_MS(10分)以内に再送したら1件にする（INSERT ... SELECT ... WHERE NOT EXISTS を1文で実行・同時送信でも1件）。再送は {ok:true}・行なし・Slack なし・予約した quota を返す",
+  "/api/trial: 同じ4項目の申込を TRIAL_DEDUP_MS(10分)以内に再送したら1件にする。quota を予約する前に SELECT で確かめ、再送は {ok:true}・行なし・Slack なし・quota 不変（上限に達した送信元の再送も 200）。同時送信は INSERT ... SELECT ... WHERE NOT EXISTS の1文で1件にし、予約を返す",
   "Slack 通知の受付番号が正の整数でないときは「（不明）」と書き、null/false/undefined を出さない",
   "compose.js が読めないとき、お客さま画面は理由（4言語）を compose-status に出し、表を隠して「自分で書く」を開く（ボタンが無反応のまま残らない）",
   "trtotal: 予約順が trip→trday→trtotal で、429 のときは trtotal を保持していない（解放漏れは起きない）ことを試験で固定",

@@ -142,6 +142,10 @@ class ConfigDerivedInputs(unittest.TestCase):
             'export default {scheduled:(c)=>{}, fetch(){}}',
             'export default {scheduled: c=>{}, fetch(){}}',
             'export default {"scheduled": async (c)=>{}, fetch(){}}',
+            # crosscheck r1 (Codex): 名前つき関数を渡す形・コメントを挟む形・短縮プロパティも見落とさない
+            'async function purge(c,e,x){}\nexport default {scheduled: purge, fetch(){}}',
+            'export default {scheduled /* cron */ (c,e,x){}, fetch(){}}',
+            'async function scheduled(c,e,x){}\nasync function fetch(){}\nexport default {fetch, scheduled}',
         ]
         for body in spellings:
             d, root = self.make({'main': 'worker.mjs'}, {'intake-beta/worker.mjs': body + '\n'})

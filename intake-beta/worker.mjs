@@ -76,6 +76,7 @@ export const TRIAL_CAPS={perSenderDay:3,day:30,total:500};
 // {ok:true} like the first, saves no row, sends no Slack notice and gives back the quota it reserved. Checked and inserted in one statement,
 // so concurrent repeats cannot both be saved.
 export const TRIAL_DEDUP_MS=10*60*1000;
+const TRIAL_SAME='store_name = ? AND contact_name = ? AND contact = ? AND message = ? AND created_at >= ?';
 const TRIAL_KEYS=['contact','message','name','storeName'];
 const EMAIL=/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/u;
 // Returns the normalized application, 'honeypot' when the hidden field was filled, or null when invalid.
@@ -635,6 +636,10 @@ export default {
       if(!env.QUOTA||!env.QUOTA_SALT||!ip)return json({error:'unavailable'},503);
       const held=[];
       try{
+        const now=Date.now(),fields=[app.storeName,app.name,app.contact,app.message],since=new Date(now-TRIAL_DEDUP_MS).toISOString();
+        // a repeat of an application saved moments ago is answered before any quota is reserved: a sender at the daily cap who resends
+        // gets the same {ok:true}, and nothing is counted or released (the one-statement insert below still covers concurrent repeats)
+        if(await env.QUOTA.prepare('SELECT 1 FROM trial_applications WHERE '+TRIAL_SAME+' LIMIT 1').bind(...fields,since).first())return json({ok:true});
         const day=new Date().toISOString().slice(0,10);
         const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(env.QUOTA_SALT+'trial'+day+ip));
         const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
@@ -643,10 +648,10 @@ export default {
           // splice first: if this release throws halfway, the catch below must not release the same rows a second time.
           await release(env.QUOTA,held.splice(0));return json({error:'rate_limited'},429);
         }
-        const now=Date.now(),fields=[app.storeName,app.name,app.contact,app.message];
-        const saved=await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM trial_applications WHERE store_name = ? AND contact_name = ? AND contact = ? AND message = ? AND created_at >= ?) RETURNING id')
-          .bind(new Date(now).toISOString(),...fields,...fields,new Date(now-TRIAL_DEDUP_MS).toISOString()).first();
-        // a repeat of an application saved moments ago: same answer, no row, no notice, and the reservation goes back (best effort)
+        const saved=await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM trial_applications WHERE '+TRIAL_SAME+') RETURNING id')
+          .bind(new Date(now).toISOString(),...fields,...fields,since).first();
+        // a concurrent repeat that got past the check above: same answer, no row, no notice, and the reservation goes back (best effort;
+        // a failed release stays counted, the same safe side as every other release here)
         if(!saved){await release(env.QUOTA,held.splice(0)).catch(()=>{});return json({ok:true});}
         const cutoff=new Date(Date.now()-3*86400000).toISOString().slice(0,10);
         ctx.waitUntil(env.QUOTA.prepare("DELETE FROM quota WHERE (key LIKE 'trip:%' AND substr(key,6,10) < ?) OR (key LIKE 'trday:%' AND substr(key,7,10) < ?)").bind(cutoff,cutoff).run());

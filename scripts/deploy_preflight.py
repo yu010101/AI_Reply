@@ -106,10 +106,11 @@ def deploy_inputs(root, config=CONFIG):
 
 
 CRON_DECL = re.compile(r"export const PURGE_CRON\s*=\s*'([^']+)'")
-# scheduled ハンドラの書き方の違い（async の有無・空白・改行・メソッド定義/プロパティ+function/アロー関数・引用符つきの鍵）を拾う。
-# 見落とすと cron 検査を飛ばして通ってしまうので、迷う形は「ある」と見なす側に倒す（コメント中の scheduled() でも要求するだけ）。
-SCHEDULED_HANDLER = re.compile(
-    r"""(?<![\w$.])["']?scheduled["']?\s*(?:\(|:\s*(?:async\b\s*)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>))""")
+# scheduled ハンドラの書き方（async の有無・空白・改行・コメント・メソッド定義・プロパティ+function/アロー関数/名前つき関数・
+# 短縮プロパティ・引用符つきの鍵）は多すぎて形では拾いきれない。見落とすと cron 検査を飛ばして通ってしまうので、
+# 語として scheduled が1回でも出れば「ある」と見なす（fail-closed。コメント中の語でも PURGE_CRON と triggers.crons を求めるだけ）。
+# scheduledTime・unscheduled のような別の語は数えない。
+SCHEDULED_HANDLER = re.compile(r"(?<![\w$])scheduled(?![\w$])")
 
 
 def require_cron_for_scheduled(main_path, data):
