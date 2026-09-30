@@ -101,7 +101,28 @@ def deploy_inputs(root, config=CONFIG):
         if not p.exists():
             raise Refuse('config_input_missing:' + rel)
         rels.append(rel)
+    require_cron_for_scheduled(inputs[0], data)
     return rels, hashlib.sha256(cfg.read_bytes()).hexdigest()
+
+
+CRON_DECL = re.compile(r"export const PURGE_CRON\s*=\s*'([^']+)'")
+
+
+def require_cron_for_scheduled(main_path, data):
+    """Worker が scheduled() で保存期間の削除をするなら、wrangler 設定の triggers.crons に同じ時刻が無ければ配備しない。
+    設定を忘れると privacy の「毎日自動で削除」が静かに破られるため（PR #14 の Codex / Devin 指摘）。"""
+    try:
+        src = Path(main_path).read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return
+    if 'async scheduled(' not in src:
+        return
+    m = CRON_DECL.search(src)
+    if not m:
+        raise Refuse('scheduled_without_purge_cron_decl')
+    crons = ((data.get('triggers') or {}).get('crons')) or []
+    if not isinstance(crons, list) or m.group(1) not in crons:
+        raise Refuse('config_cron_missing:' + m.group(1))
 
 
 def bundle_sha(root, inputs):
