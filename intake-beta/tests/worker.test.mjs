@@ -80,6 +80,8 @@ test('event rows survive the 3-day draft cleanup on real SQLite',async(t)=>{cons
 const trialOk={storeName:'架空の喫茶店',name:'山田 花子',contact:'owner@example.com',message:'レジ横に置いてみたいです。\n平日昼が中心です。'};
 function trialRequest(body=trialOk,extra={}) {return new Request(origin+'/api/trial',{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':'192.0.2.9',...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
 async function trialEnv(t){const q=await sqliteQuota();if(!q){t.skip('node:sqlite unavailable');return null;}return {q,env:{QUOTA:q,QUOTA_SALT:'test-only-salt'}};}
+// distinct content per call: the same four fields within TRIAL_DEDUP_MS are one application (see the dedup test below)
+const trialNo=i=>({...trialOk,message:trialOk.message+' #'+i});
 const trialRows=q=>q.db.prepare('SELECT store_name,contact_name,contact,message,status,created_at FROM trial_applications ORDER BY id').all().map(r=>({...r}));
 test('trial: valid application is stored with the four fields only, and no IP anywhere in D1',async(t)=>{const s=await trialEnv(t);if(!s)return;
   const r=await invoke(trialRequest(),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});
@@ -95,7 +97,7 @@ test('trial: invalid fields are refused with 400 and nothing is stored',async(t)
   assert.equal(trialRows(s.q).length,0);assert.deepEqual(s.q.rows(),{});
   assert.equal((await invoke(trialRequest(JSON.stringify({...trialOk,message:'a'.repeat(5000)})),s.env)).status,413);});
 test('trial: same sender is limited per day, other senders continue, daily and lifetime caps hold',async(t)=>{const s=await trialEnv(t);if(!s)return;
-  const codes=[];for(let i=0;i<TRIAL_CAPS.perSenderDay+2;i++)codes.push((await invoke(trialRequest(),s.env)).status);
+  const codes=[];for(let i=0;i<TRIAL_CAPS.perSenderDay+2;i++)codes.push((await invoke(trialRequest(trialNo(i)),s.env)).status);
   assert.deepEqual(codes,[...Array(TRIAL_CAPS.perSenderDay).fill(200),429,429]);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);
   assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.7'}),s.env)).status,200);
   assert.equal(s.q.rows()['trday:'+day],TRIAL_CAPS.perSenderDay+1,'refused attempts released the day row');
@@ -104,7 +106,7 @@ test('trial: same sender is limited per day, other senders continue, daily and l
   s.q.db.exec("UPDATE quota SET count=0 WHERE key='trday:"+day+"'; UPDATE quota SET count="+TRIAL_CAPS.total+" WHERE key='trtotal'");assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.9'}),s.env)).status,429);
   assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay+1);});
 test('trial: concurrent bursts from one sender store at most the per-sender cap',async(t)=>{const s=await trialEnv(t);if(!s)return;
-  const r=await Promise.all(Array.from({length:12},()=>invoke(trialRequest(),s.env)));assert.equal(r.filter(x=>x.status===200).length,TRIAL_CAPS.perSenderDay);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);});
+  const r=await Promise.all(Array.from({length:12},(_,i)=>invoke(trialRequest(trialNo(i)),s.env)));assert.equal(r.filter(x=>x.status===200).length,TRIAL_CAPS.perSenderDay);assert.equal(trialRows(s.q).length,TRIAL_CAPS.perSenderDay);});
 test('trial: same Origin, POST and JSON gates as the other APIs',async(t)=>{const s=await trialEnv(t);if(!s)return;
   assert.equal((await invoke(trialRequest(undefined,{origin:'https://evil.example'}),s.env)).status,403);assert.equal((await invoke(trialRequest(undefined,{'content-type':'text/plain'}),s.env)).status,415);assert.equal((await invoke(new Request(origin+'/api/trial'),s.env)).status,405);assert.equal(trialRows(s.q).length,0);});
 test('trial: filled hidden field answers ok but stores nothing and uses no quota',async(t)=>{const s=await trialEnv(t);if(!s)return;
@@ -149,7 +151,7 @@ test('trial notice: sent once per saved application, with the store name and rec
 test('trial notice: a failing or refusing webhook never changes the answer, and logs no content',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
   let n=0;
   for(const impl of [()=>{throw new TypeError('network down owner@example.com');},()=>Promise.reject(new Error('D1? no: 架空の喫茶店')),()=>new Response('no',{status:500}),()=>new Response('',{status:302,headers:{location:'https://elsewhere.example/'}})]){
-    await withFetch(impl,async calls=>{const r=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.'+(n++)}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});assert.equal(calls.length,1);});}
+    await withFetch(impl,async calls=>{const r=await invoke(trialRequest(trialNo(n),{'cf-connecting-ip':'198.51.100.'+(n++)}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{ok:true});assert.equal(calls.length,1);});}
   assert.equal(trialRows(s.q).length,4);
   const errs=logs.filter(l=>l[0]==='error');assert.deepEqual(errs.map(l=>l[1]),Array(4).fill('trial_notify_failed'));assert.deepEqual(errs.map(l=>l[2]),['TypeError','Error','500','302']);
   const flat=JSON.stringify(logs);for(const secret of ['架空の喫茶店','山田','owner@example.com','レジ横',HOOK,'network down'])assert.ok(!flat.includes(secret),'log leaks '+secret);});
@@ -157,9 +159,9 @@ test('trial notice: not sent for the hidden-field trap, invalid input, rate limi
   await withFetch(()=>new Response('ok'),async calls=>{
     assert.deepEqual((await invoke(trialRequest({...trialOk,website:'https://spam.example'}),s.env)).body,{ok:true});
     assert.equal((await invoke(trialRequest({...trialOk,contact:'x'}),s.env)).status,400);
-    for(let i=0;i<TRIAL_CAPS.perSenderDay;i++)assert.equal((await invoke(trialRequest(),s.env)).status,200);
+    for(let i=0;i<TRIAL_CAPS.perSenderDay;i++)assert.equal((await invoke(trialRequest(trialNo(i)),s.env)).status,200);
     assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'one per saved application');
-    assert.equal((await invoke(trialRequest(),s.env)).status,429);
+    assert.equal((await invoke(trialRequest(trialNo(99)),s.env)).status,429);
     s.q.db.exec('DROP TABLE trial_applications');assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.77'}),s.env)).status,503);
     assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'no notice without a saved row');});});
 
@@ -254,7 +256,7 @@ test('loop-event: server-side failures are counted with reason codes only (draft
   s.q.db.exec('DROP TABLE loop_events; DELETE FROM quota');logs.length=0;s.env.AI={async run(){throw new Error('x');}};assert.equal((await invoke(request(undefined,{'cf-connecting-ip':'192.0.2.73'}),s.env)).body.mode,'fallback');
   assert.deepEqual(logs.map(l=>l.slice(0,3)),[['error','draft_fallback','error']]);});
 test('loop-event: a failing Slack notice is counted with its status or error class only',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
-  for(const [i,impl] of [()=>new Response('no',{status:500}),()=>{throw new TypeError('down owner@example.com');}].entries())await withFetch(impl,async()=>{assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.8'+i}),s.env)).status,200);});
+  for(const [i,impl] of [()=>new Response('no',{status:500}),()=>{throw new TypeError('down owner@example.com');}].entries())await withFetch(impl,async()=>{assert.equal((await invoke(trialRequest(trialNo(i),{'cf-connecting-ip':'198.51.100.8'+i}),s.env)).status,200);});
   assert.deepEqual(loopRows(s.q).map(r=>[r.screen,r.error_type]),[['api-trial','trial_notify_http_500'],['api-trial','trial_notify_failed.TypeError']]);});
 test('loop-events GET: 404 without a (32+ char) LOOP_EVENTS_TOKEN, 401 without the right Bearer, 405 for other methods',async(t)=>{const s=await trialEnv(t);if(!s)return;
   for(const tok of [undefined,'','short-token'])assert.equal((await invoke(loopGet(),{...s.env,LOOP_EVENTS_TOKEN:tok})).status,404,String(tok));
@@ -641,3 +643,47 @@ test('連打対策の行は API が使われない日が続いても毎日3日�
     assert.ok(!((p+':2026-10-07:x') < step[2]));
   }
 });
+
+// ---- PR #14 / #13 審査の軽い指摘（fix/hitokoto-review-nits） ----
+test('report token: the row found by SHA-256 is checked again against the computed hash (constant time); a lookup that returns another row is 404',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s);assert.equal((await report(s,a.token)).status,200);
+  // simulate a lookup that hands back a row whose hash is not the one asked for (index/collation fault): must not open the report
+  const prep=s.q.prepare.bind(s.q);s.q.prepare=sql=>{const st=prep(sql);if(/FROM stores WHERE token_hash = \?/.test(sql))return {bind(){return st.bind(sha(a.token));}};return st;};
+  const wrong=await report(s,'A'.repeat(43));assert.equal(wrong.status,404,JSON.stringify(wrong.body));assert.deepEqual(wrong.body,{error:'not_found'});
+  assert.equal((await report(s,a.token)).status,200,'the right token still opens it');
+  const src=readFileSync(new URL('../worker.mjs',import.meta.url),'utf8');const fn=src.slice(src.indexOf('async function storeFor'),src.indexOf('export async function storeReport'));
+  assert.match(fn,/tokenMatches\(/,'storeFor compares the stored hash with tokenMatches');});
+test('operator GETs (/api/loop-events, /api/pick-stats, /api/funnel-stats) share a daily call cap in quota; refused and unauthorised calls do not use it; old rows are purged',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const mod=await import('../worker.mjs');const cap=(mod.OPERATOR_CAPS||{}).day??500;s.env.LOOP_EVENTS_TOKEN=TOKEN;
+  const today=dayOf(Date.now());s.q.db.exec("INSERT INTO quota VALUES ('opday:"+today+"',"+(cap-1)+"),('opday:2026-09-01',7)");
+  const get=(path,auth='Bearer '+TOKEN)=>invoke(new Request(origin+path,{headers:auth?{authorization:auth}:{}}),s.env);
+  assert.equal((await get('/api/loop-events','Bearer x')).status,401);assert.equal(s.q.rows()['opday:'+today],cap-1,'401 does not count');
+  assert.equal((await get('/api/loop-events')).status,200);
+  for(const p of ['/api/pick-stats','/api/funnel-stats','/api/loop-events']){const r=await get(p);assert.equal(r.status,429,p);assert.deepEqual(r.body,{error:'rate_limited'});}
+  assert.equal(s.q.rows()['opday:'+today],cap);assert.equal(s.q.rows()['opday:2026-09-01'],undefined,'stale operator rows purged');
+  assert.ok(mod.RATE_KEY_PREFIXES.includes('opday'),'the daily purge knows the new prefix');});
+test('trial: the same application sent again within a short time is saved once, notified once, and the repeat uses no quota',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  await withFetch(()=>new Response('ok'),async calls=>{
+    assert.deepEqual((await invoke(trialRequest(),s.env)).body,{ok:true});
+    const again=await invoke(trialRequest(),s.env);assert.equal(again.status,200);assert.deepEqual(again.body,{ok:true});
+    assert.equal(trialRows(s.q).length,1,'double submit is one row');assert.equal(calls.length,1,'one Slack notice');
+    assert.equal(s.q.rows().trtotal,1,'repeat released its lifetime slot');assert.equal(s.q.rows()['trday:'+day],1);
+    // a burst of the same (new) content from several senders at once: still one row
+    const burst={...trialOk,message:'同時に押されたとき'};
+    const rs=await Promise.all([0,1,2,3].map(i=>invoke(trialRequest(burst,{'cf-connecting-ip':'198.51.100.'+(40+i)}),s.env)));
+    assert.ok(rs.every(r=>r.status===200));assert.equal(trialRows(s.q).filter(r=>r.message===burst.message).length,1);assert.equal(calls.length,2);assert.equal(s.q.rows().trtotal,2);
+    // different content is a new application; the same content after the window is a new one too
+    assert.equal((await invoke(trialRequest({...trialOk,message:'別の内容'}),s.env)).status,200);assert.equal(trialRows(s.q).length,3);
+    const mod=await import('../worker.mjs');const win=mod.TRIAL_DEDUP_MS??600000;const base=Date.now();Date.now=()=>base+win+1000;
+    assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.60'}),s.env)).status,200);assert.equal(trialRows(s.q).length,4,'outside the window it is saved again');});});
+test('trial: trtotal is reserved last, so a 429 never holds it: a failing release on the 429 path cannot leak the lifetime slot',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  s.q.db.exec("INSERT INTO quota VALUES ('trday:"+day+"',"+TRIAL_CAPS.day+"),('trtotal',7)");const prep=s.q.prepare.bind(s.q);
+  s.q.prepare=sql=>{if(sql.startsWith('UPDATE quota SET count=MAX'))throw Error('D1_ERROR: flaky');return prep(sql);};
+  const r=await invoke(trialRequest(),s.env);assert.ok([429,503].includes(r.status));s.q.prepare=prep;assert.equal(s.q.rows().trtotal,7,'trtotal untouched on the day-cap refusal');
+  s.q.db.exec("UPDATE quota SET count=0 WHERE key='trday:"+day+"'; UPDATE quota SET count="+TRIAL_CAPS.total+" WHERE key='trtotal'");
+  s.q.prepare=sql=>{if(sql.startsWith('UPDATE quota SET count=MAX'))throw Error('D1_ERROR: flaky');return prep(sql);};
+  const r2=await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.61'}),s.env);assert.ok([429,503].includes(r2.status));s.q.prepare=prep;assert.equal(s.q.rows().trtotal,TRIAL_CAPS.total,'refused trtotal is never incremented');
+  const src=readFileSync(new URL('../worker.mjs',import.meta.url),'utf8');assert.match(src,/\['trip:'\+day\+':'\+hash,TRIAL_CAPS\.perSenderDay\],\['trday:'\+day,TRIAL_CAPS\.day\],\['trtotal',TRIAL_CAPS\.total\]\]/,'trtotal stays last');});
+test('trial notice: a missing receipt number is written as such, never "null", "false" or "undefined"',()=>{
+  for(const id of [null,undefined,false,0,-1,1.5,'x'])assert.ok(!/null|false|undefined|NaN/.test(trialNotice('架空の喫茶店',id).text),String(id));
+  assert.match(trialNotice('架空の喫茶店',null).text,/受付番号 （不明）$/);assert.equal(trialNotice('架空の喫茶店',12).text,'ひとことβ 試用の申し込み：店名「架空の喫茶店」 受付番号 12');});

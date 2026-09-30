@@ -72,6 +72,10 @@ export const AI_UNTIL=Date.parse('2027-04-01T00:00:00+09:00');
 // Rate limit rows live in quota: 'trip:<day>:<hash>' (per sender per day), 'trday:<day>' (all senders per day), 'trtotal' (lifetime).
 export const TRIAL_LIMITS={storeName:80,name:40,contact:120,message:400};
 export const TRIAL_CAPS={perSenderDay:3,day:30,total:500};
+// The same four fields again within TRIAL_DEDUP_MS (a double tap, a retry, a reload and resend) are one application: the repeat answers
+// {ok:true} like the first, saves no row, sends no Slack notice and gives back the quota it reserved. Checked and inserted in one statement,
+// so concurrent repeats cannot both be saved.
+export const TRIAL_DEDUP_MS=10*60*1000;
 const TRIAL_KEYS=['contact','message','name','storeName'];
 const EMAIL=/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/u;
 // Returns the normalized application, 'honeypot' when the hidden field was filled, or null when invalid.
@@ -97,7 +101,8 @@ export function validTrial(data) {
 // The message carries the store name and the receipt number (trial_applications.id) only: never the name, contact or message.
 // '&' is escaped for Slack's mrkdwn; '<' and '>' never reach here (UNSAFE_CHARS). redirect:'manual' so the POST never follows a
 // redirect elsewhere ('error' throws a TypeError on Workers). Failures are logged with a status or error class only, never the body.
-export function trialNotice(storeName,id){return {text:'ひとことβ 試用の申し込み：店名「'+storeName.replace(/&/g,'&amp;')+'」 受付番号 '+id};}
+// A receipt number that is not a positive integer (no row id came back) is written as （不明）, never as null/false/undefined.
+export function trialNotice(storeName,id){return {text:'ひとことβ 試用の申し込み：店名「'+storeName.replace(/&/g,'&amp;')+'」 受付番号 '+(Number.isSafeInteger(id)&&id>0?String(id):'（不明）')};}
 async function notifyTrial(url,storeName,id,report){
   try{const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(trialNotice(storeName,id)),redirect:'manual'});
     if(!r.ok){console.error('trial_notify_failed',String(r.status));await report('trial_notify_http_'+String(r.status).slice(0,3));}}
@@ -189,10 +194,13 @@ export function loopEventOut(r){
   return {product:LOOP_PRODUCT,kind:r.kind,fingerprint:[r.screen,r.error_type||r.category,r.frame].filter(Boolean).join(':'),
     screen:r.screen,version:r.version,count:r.count,first_seen:r.day+'T00:00:00Z',last_seen:r.day+'T23:59:59Z',impact:r.kind==='error'?'failure':'request'};
 }
-// Shared gate for the operator GETs (/api/loop-events, /api/pick-stats): 404 without a 32+ char LOOP_EVENTS_TOKEN, GET only,
-// Bearer compared in constant time, D1 required, and ?since=YYYY-MM-DD (default 7 days, at most 399 days back).
+// Shared gate for the operator GETs (/api/loop-events, /api/pick-stats, /api/funnel-stats): 404 without a 32+ char LOOP_EVENTS_TOKEN,
+// GET only, Bearer compared in constant time, D1 required, and ?since=YYYY-MM-DD (default 7 days, at most 399 days back).
+// Then one call is counted in the quota row 'opday:<day>' shared by the three (OPERATOR_CAPS.day per UTC day; a runaway script or a
+// leaked token cannot read without end). Refused calls (404/401/405/400) are not counted. The row is removed after 3 days like the others.
 // Returns a Response to send as is, or {since, closed}: only days before `closed` (the UTC day 10 minutes ago) are read.
-async function operatorRead(request,env,url){
+export const OPERATOR_CAPS={day:500};
+async function operatorRead(request,env,url,ctx){
   const token=env.LOOP_EVENTS_TOKEN;
   if(typeof token!=='string'||token.length<32)return json({error:'not_found'},404);
   if(request.method!=='GET')return json({error:'method_not_allowed'},405);
@@ -203,10 +211,14 @@ async function operatorRead(request,env,url){
   let since=url.searchParams.get('since')||utcDay(now-7*86400000);
   if(!DAY_RX.test(since)||utcDay(Date.parse(since+'T00:00:00Z')||0)!==since)return json({error:'invalid_since'},400);
   if(since<oldest)since=oldest;
+  try{if(!await reserve(env.QUOTA,'opday:'+utcDay(now),OPERATOR_CAPS.day))return json({error:'rate_limited'},429);}
+  catch(e){console.error('operator_error',String((e&&e.name)||'Error').slice(0,40));return json({error:'unavailable'},503);}
+  const cutoff=utcDay(now-3*86400000);
+  try{const p=env.QUOTA.prepare("DELETE FROM quota WHERE key LIKE 'opday:%' AND substr(key,7,10) < ?").bind(cutoff).run();if(ctx&&ctx.waitUntil)ctx.waitUntil(p);else p.catch(()=>{});}catch{/* cleanup is best effort */}
   return {since,closed};
 }
-async function loopEvents(request,env,url){
-  const gate=await operatorRead(request,env,url);if(gate instanceof Response)return gate;const {since,closed}=gate;
+async function loopEvents(request,env,url,ctx){
+  const gate=await operatorRead(request,env,url,ctx);if(gate instanceof Response)return gate;const {since,closed}=gate;
   try{
     const rows=await env.QUOTA.prepare('SELECT day, kind, screen, version, error_type, frame, category, count FROM loop_events WHERE product = ? AND day >= ? AND day < ? ORDER BY day, id LIMIT 5000').bind(LOOP_PRODUCT,since,closed).all();
     return json(rows.results.map(loopEventOut));
@@ -244,8 +256,8 @@ async function saveStorePickStat(db,day,stat){
     db.prepare(STORE_STEP_SQL).bind(stat.sid,day,'picks',stat.sid,stat.kind,STORE_CAPS.row),
     db.prepare(STORE_TOUCH_SQL+' AND kind = ?').bind(day,stat.sid,day,stat.kind)]);
 }
-async function pickStats(request,env,url){
-  const gate=await operatorRead(request,env,url);if(gate instanceof Response)return gate;const {since,closed}=gate;
+async function pickStats(request,env,url,ctx){
+  const gate=await operatorRead(request,env,url,ctx);if(gate instanceof Response)return gate;const {since,closed}=gate;
   try{
     const rows=await env.QUOTA.prepare('SELECT day, kind, topic, rating, detail, count FROM pick_stats WHERE day >= ? AND day < ? ORDER BY day, kind, topic, rating, detail LIMIT ?').bind(since,closed,PICK_CAPS.readRows+1).all();
     const list=rows.results.slice(0,PICK_CAPS.readRows).map(r=>({day:r.day,kind:r.kind,topic:r.topic,rating:r.rating,detail:r.detail,count:r.count}));
@@ -267,8 +279,8 @@ export function medianFromBuckets(counts){
     before+=c;}
   return {median_sec_estimate:null,median_at_least_sec:null};
 }
-async function funnelStats(request,env,url){
-  const gate=await operatorRead(request,env,url);if(gate instanceof Response)return gate;const {since,closed}=gate;
+async function funnelStats(request,env,url,ctx){
+  const gate=await operatorRead(request,env,url,ctx);if(gate instanceof Response)return gate;const {since,closed}=gate;
   try{
     const [ev,times]=await Promise.all([
       env.QUOTA.prepare("SELECT key, count FROM quota WHERE key >= ? AND key < ?").bind('ev:'+since,'ev:'+closed).all(),
@@ -331,7 +343,12 @@ function purgeOwnerRows(env,ctx){
   const cutoff=utcDay(Date.now()-3*86400000);
   ctx.waitUntil(env.QUOTA.prepare("DELETE FROM quota WHERE ((key LIKE 'stip:%' OR key LIKE 'rpip:%' OR key LIKE 'seip:%') AND substr(key,6,10) < ?) OR (key LIKE 'stday:%' AND substr(key,7,10) < ?)").bind(cutoff,cutoff).run());
 }
-async function storeFor(db,token){return db.prepare('SELECT sid, kind FROM stores WHERE token_hash = ?').bind(await reportTokenHash(token)).first();}
+// Found by SHA-256(token) (an index lookup), then the stored hash is compared with the computed one in constant time (tokenMatches)
+// before the row is trusted: the report never opens on a lookup that handed back some other row.
+async function storeFor(db,token){
+  const hash=await reportTokenHash(token);const row=await db.prepare('SELECT sid, kind, token_hash FROM stores WHERE token_hash = ?').bind(hash).first();
+  return row&&await tokenMatches(String(row.token_hash),hash)?{sid:row.sid,kind:row.kind}:null;
+}
 export async function storeReport(db,sid,kind,now=Date.now()){
   const since=utcDay(now-(REPORT_DAYS-1)*86400000);
   const [picks,steps]=await Promise.all([
@@ -478,7 +495,7 @@ export function monthsBefore(day,n){
 }
 const IDLE_STORE="SELECT sid FROM stores WHERE COALESCE(last_used_day, created_day) < ?";
 // 連打対策の行の種類（quota の key の接頭辞）。新しい上限を足したらここにも足す（試験で worker.mjs 内の LIKE '<種類>:%' と一致を確認）
-export const RATE_KEY_PREFIXES=['ip','day','trip','trday','lfip','lpip','lpday','psip','psday','rpip','seip','stip','stday'];
+export const RATE_KEY_PREFIXES=['ip','day','trip','trday','lfip','lpip','lpday','psip','psday','rpip','seip','stip','stday','opday'];
 export const RATE_KEEP_DAYS=3;
 const byDay=(table,extra='')=>'DELETE FROM '+table+' WHERE rowid IN (SELECT rowid FROM '+table+' WHERE day < ?'+extra+' LIMIT ?)';
 // [ログの名前, SQL, 期限]。順番に意味がある: 店の子の行 → 店。
@@ -577,7 +594,7 @@ export default {
         return json({recorded:false},503);
       }
     }
-    if(url.pathname==='/api/loop-events')return loopEvents(request,env,url);
+    if(url.pathname==='/api/loop-events')return loopEvents(request,env,url,ctx);
     if(url.pathname==='/api/pick-stat'){
       const refused=refuse(request,env,url);if(refused)return refused;
       let data;try{data=await boundedJSON(request);}catch(e){return json({error:'invalid_input'},e.message==='large'?413:400);}
@@ -603,8 +620,8 @@ export default {
         return json({recorded:false},503);
       }
     }
-    if(url.pathname==='/api/pick-stats')return pickStats(request,env,url);
-    if(url.pathname==='/api/funnel-stats')return funnelStats(request,env,url);
+    if(url.pathname==='/api/pick-stats')return pickStats(request,env,url,ctx);
+    if(url.pathname==='/api/funnel-stats')return funnelStats(request,env,url,ctx);
     if(url.pathname==='/api/store')return ownerApi(request,env,ctx,url,'store');
     if(url.pathname==='/api/report')return ownerApi(request,env,ctx,url,'report');
     if(url.pathname==='/api/notice')return ownerApi(request,env,ctx,url,'notice');
@@ -626,7 +643,11 @@ export default {
           // splice first: if this release throws halfway, the catch below must not release the same rows a second time.
           await release(env.QUOTA,held.splice(0));return json({error:'rate_limited'},429);
         }
-        const saved=await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) VALUES (?,?,?,?,?) RETURNING id').bind(new Date().toISOString(),app.storeName,app.name,app.contact,app.message).first();
+        const now=Date.now(),fields=[app.storeName,app.name,app.contact,app.message];
+        const saved=await env.QUOTA.prepare('INSERT INTO trial_applications (created_at, store_name, contact_name, contact, message) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM trial_applications WHERE store_name = ? AND contact_name = ? AND contact = ? AND message = ? AND created_at >= ?) RETURNING id')
+          .bind(new Date(now).toISOString(),...fields,...fields,new Date(now-TRIAL_DEDUP_MS).toISOString()).first();
+        // a repeat of an application saved moments ago: same answer, no row, no notice, and the reservation goes back (best effort)
+        if(!saved){await release(env.QUOTA,held.splice(0)).catch(()=>{});return json({ok:true});}
         const cutoff=new Date(Date.now()-3*86400000).toISOString().slice(0,10);
         ctx.waitUntil(env.QUOTA.prepare("DELETE FROM quota WHERE (key LIKE 'trip:%' AND substr(key,6,10) < ?) OR (key LIKE 'trday:%' AND substr(key,7,10) < ?)").bind(cutoff,cutoff).run());
         // Saved: from here on nothing may change the answer. The Slack notice runs after the response and its failure is only logged.
