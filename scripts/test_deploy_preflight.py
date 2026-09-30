@@ -130,6 +130,15 @@ class ConfigDerivedInputs(unittest.TestCase):
         with d:
             self.assertEqual(m.deploy_inputs(root)[0], ['intake-beta/worker.mjs'])
 
+    def test_repo_wrangler_config_carries_purge_cron(self):
+        # リポジトリに入れた本番の wrangler 設定そのものが、Worker の PURGE_CRON と同じ定時実行を持つ（PR #14 Codex r3/r4 指摘）
+        root = Path(__file__).resolve().parents[1]
+        inputs, _ = m.deploy_inputs(root)
+        self.assertEqual(inputs, ['intake-beta/worker.mjs', 'intake-beta/public'])
+        cfg = json.loads((root / 'intake-beta/wrangler.json').read_text())
+        src = (root / 'intake-beta/worker.mjs').read_text()
+        self.assertIn(m.CRON_DECL.search(src).group(1), cfg['triggers']['crons'])
+
     def test_repo_slug(self):
         self.assertEqual(m.repo_slug('git@github.com:yu010101/AI_Reply.git'), 'yu010101/AI_Reply')
         with self.assertRaises(m.Refuse):

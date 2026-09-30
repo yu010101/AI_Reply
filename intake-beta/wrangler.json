@@ -1,0 +1,36 @@
+{
+  "name": "radineer-reviews-beta",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-09-25",
+  "account_id": "508c8ad4783b4860cb63d12d72a60fae",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "d1_databases": [
+    {
+      "binding": "QUOTA",
+      "database_name": "radineer-reviews-beta-quota",
+      "database_id": "40b4dca9-a9ae-44d3-a914-672309d96013"
+    }
+  ],
+  "observability": {
+    "enabled": false
+  },
+  "routes": [
+    {
+      "pattern": "reviews.radineer.asia",
+      "custom_domain": true
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "17 18 * * *"
+    ]
+  }
+}

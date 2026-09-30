@@ -22,7 +22,8 @@
     "保存期間（DECISIONS.md「保存期間・表示基準」2026-09-29 本人決定）: worker に scheduled()（Cron Trigger・毎日 UTC 18:17 = PURGE_CRON）を足し、purgeExpired() が暦の月で数えた期限（UTC 日付・月末は丸め・境界の日は残す）より前の行を消す。funnel_times・pick_stats・store_picks・store_steps・loop_events（text_masked なし）・quota の ev:<日付>:<操作> 行 = 13か月、loop_events の店主のご意見（text_masked あり）= 6か月で行ごと（本文から作った fp も残さない）、stores = COALESCE(last_used_day, created_day) から1年（子の store_picks/store_steps を先に消し、子が無くなった店だけ消す。D1 は外部キーを強制）。1文 PURGE_LIMIT=5000 行まで・残りは翌日、1文の失敗は表名とエラー種別だけ記録して続行、要約ログは表名と件数だけ。連打対策の quota 3日削除と累計の上限の行は変えない。stores.last_used_day は migrations/0005_store_last_used.sql（ALTER TABLE ADD COLUMN と、既にある店の last_used_day を適用日にする UPDATE だけ・本番未適用）で足し、店の作成・pick（同じ業種の sid）・段階の記録・報告の閲覧/札の確認で今日にする（同じ日は WHERE で外れて書き込みなし。報告側は待って書き、失敗は 503 と loop_events の記録で握り潰さない。別モデルの反証の指摘で修正）。wrangler.json はリポジトリに無いため、triggers.crons の追加は ~/tasks/reviews-lp/DEPLOY-NEXT.md に記載。privacy.html の TODO(本人決定) を決定の期間で埋め、記録ごとの「何を・何のために・いつ消すか」の節（#retention）と LP「データの扱い」の要約を追加（本人確認用の全文と差分は ~/tasks/reviews-lp/PRIVACY-FINAL-DRAFT.md）。試験: worker.test.mjs に9件（境界日の前後・店の最終利用・上限と翌日回し・失敗時の続行とログ・0005 の既存店の扱い・最終利用日の書き込み失敗・privacy/LP とコードの期間の一致）、境界をずらす変異で赤",
     "LP v11（本人「文字が多い。図解と一言で。特に03,04以降」）: スライド03〜09を「見出し1行＋一言(.one)1行＋図1つ」に。03=店主→お客さま→本人の3コマ（既存の録画ループ、ラベルは語1〜2個）、04=選んだ話題×評価×細目のチップ→矢印→候補の文（文は compose.js の出力と一字一句同じ・節ごとの span、気になったの行に「必ず残る」の矢印）＋既存デモ動画、05=3つの約束を大きな線画(svg.illus)＋一言、06=写真4枚とポスター見本、07=「試用中 0円」と「正式版（予定）月2,980円（税込）」を別の段で大きく・約束①②と予定価格の文は小さな注記で一字一句、08=できる/まだできないを記号＋語・報告画面と「直しました」の札の縮小見本（数字・文は架空と明記）・使えるお店の3段の図・保存しないもの／保存期間の表、09=FAQは質問だけ・運営1行。外した本文はFAQの答え(details)へ移し、決定文言（約束①〜④・予定価格・保管期間・FVリード・申込完了③・利益相反の注意・データの扱いの全文と保存期間の文）は一字一句残す。AI表記のバッジは10→11px。lp_browser.py: 03以降は例外なしでFAQの答え以外の見える文がすべて1280x800で2行以内、見出しと一言は1行、03〜09に一言、03〜09の見える文字数の上限 2,200（v11前 3,308）、390で11px未満の文字なし（段落の追加で落ちることを確認）。compose.test.mjs の実例の検査は span を除いた文字列の完全一致に",
     "LP v12（本人「もっと文字を減らして」）: 03〜09 の見える文字（非空白の innerText、閉じた details は数えない、1280x800）を 2,039（a60e780）→ 1,000 以下に、右に固定の申込フォーム #trial の見える文字を 209 → 半分以下（104）に。見出し(h2)・一言(.one)・締めの一行は 02〜09 で 1280 と 390 の両方で1行。決定文言（約束①②・予定価格の文・保管期間・約束④）は FAQ の答えとフォーム内の「試用の条件とデータの扱い」（details）に一字一句移し、料金の段には「正式版（予定）」と「予定価格です。変更する場合はこのページでお知らせします。」を数字のそばに見える形で残す（0円と予定価格は別の段、打ち消し線・「通常」「今なら」なし）。08 の報告画面と札の縮小見本は件数・文のない形だけの見本に。FAQ は4分類の details にまとめ、ページ内リンクで対象の details を開く（app.js route）。FV の決定済みリードは不変。FORBID・CSP・外部読み込みなし・reduced-motion は据え置き。lp_browser.py: 上限 1,000 とフォームの上限 104・390/1280 の1行検査・移動先での一字一句・料金の見える但し書き・縮小見本に数字なし・FAQ リンクで開くことを検査（フォームの上限と 390 の1行はそれぞれ変異で赤を確認）",
-    "配備の門: Worker に scheduled()（保存期間の自動削除）があるとき、wrangler 設定の triggers.crons に worker.mjs の PURGE_CRON と同じ時刻が無ければ deploy_preflight が config_cron_missing で拒否（privacy の『毎日自動で削除』が設定漏れで静かに破られないように。PR #14 Codex r2 / Devin r2 指摘）"
+    "配備の門: Worker に scheduled()（保存期間の自動削除）があるとき、wrangler 設定の triggers.crons に worker.mjs の PURGE_CRON と同じ時刻が無ければ deploy_preflight が config_cron_missing で拒否（privacy の『毎日自動で削除』が設定漏れで静かに破られないように。PR #14 Codex r2 / Devin r2 指摘）",
+    "本番の wrangler 設定（intake-beta/wrangler.json、定時実行 17 18 * * * を含む）をリポジトリで管理（本人決定 2026-09-30。account_id と D1 の id は秘密ではない識別子）。リポの設定そのものが配備の門の cron 検査を通ることを試験で固定"
   ],
   "reuse": [
     {
@@ -241,7 +242,8 @@
     "intake-beta/tests/report_browser.py",
     "intake-beta/migrations/0005_store_last_used.sql",
     "scripts/deploy_preflight.py",
-    "scripts/test_deploy_preflight.py"
+    "scripts/test_deploy_preflight.py",
+    "intake-beta/wrangler.json"
   ],
   "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
 }
