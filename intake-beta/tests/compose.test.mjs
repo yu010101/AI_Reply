@@ -227,5 +227,7 @@ test('examples read naturally (fixed snapshots)',()=>{
     '饮品方面，我觉得味道、种类不错。位置和交通方面，停车场有我在意的地方。','음료에서는 맛, 종류 부분이 좋았습니다. 위치·교통에서는 주차장 부분은 신경 쓰이는 점이 있었습니다.']);
   assert.equal(C.compose('ja','beauty',[{topic:'result',rating:'good'},{topic:'service',rating:'good'},{topic:'price',rating:'ok'}])[1].text,'技術・仕上がりと接客サービスがよかったです。メニュー・料金はふつうでした。');
   // the LP example (index.html #example) shows exactly what compose.js builds for its picks
-  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');assert.ok(html.includes('<p class="ba-text">'+C.compose('ja','food',d)[1].text+'</p>'),'LP example drifted from compose.js');
+  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');const ex=[...html.matchAll(/<p class="ba-text">(.*?)<\/p>/g)];
+  // v11: the sentence is split into one span per clause (drawn beside the chips it came from); the words must still be exactly compose.js's
+  assert.equal(ex.length,1,'one LP example');assert.equal(ex[0][1].replace(/<[^>]+>/g,''),C.compose('ja','food',d)[1].text,'LP example drifted from compose.js');
 });

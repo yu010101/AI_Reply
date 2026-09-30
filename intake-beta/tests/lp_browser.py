@@ -18,6 +18,10 @@ inline sprite, and sits beside text: no frame, background, round shape or card a
 muted/loop/playsinline/preload=none with a poster and exactly two same-origin sources (mp4, webm); none is fetched on first view;
 each plays once on screen and pauses when scrolled away; with reduced motion none plays and they get controls (check_videos).
 At 1280x800 the running text of every slide except the long ones (04/06/08/09) is at most two lines (check_text_lines).
+v11 checks (03以降は図解と一言で): from slide 03 on, all visible text outside the FAQ answers is at most two lines at 1280x800 with no
+long-slide exception, the heading and the one-liner (.one) are one line each, every slide 03-09 has a one-liner (07: the price
+figures), the visible characters of slides 03-09 stay within CHAR_BUDGET_FROM_03 (3,308 before v11), and at 390 no text there is
+under 11px (check_text_lines, check_chars, check_min_font).
 Prints a JSON summary; exit 0 on success.
 """
 from pathlib import Path
@@ -158,21 +162,47 @@ def check_videos(pg,res,key,reduced=False):
    assert video_state(pg,i)['paused'],('video kept playing off screen',i)
  if reduced:assert all(pg.evaluate("[...document.querySelectorAll('#lp video')].map(v=>v.controls)")),'reduced motion: loops need controls to be played by hand'
  res[key]['played']=played
-# v7: running text (not headings, captions, notes, labels or the price figure) is at most two lines on the short slides at 1280x800
-LONG_SLIDES={'example','scenes','scope','faq'}  # 04/06/08/09 hold lists, the poster kit and the FAQ; exempt (reported)
-TEXT_LINES=r"""(long)=>{const out=[];
- for(const sl of document.querySelectorAll('#lp > .slide')){if(long.includes(sl.id))continue;
-  for(const e of sl.querySelectorAll('.slide-in p, .slide-in li')){
-   if(e.closest('figcaption,figure .ai-badge')||e.matches('.slide-no,.fiction-note,.hero-for,.price-num,.price-name,.step-who,.small')||e.querySelector('p,li'))continue;
-   const cs=getComputedStyle(e);if(cs.display==='none')continue;const t=e.querySelector(':scope > span')||e;
+# v7: running text (not headings, captions, notes, labels or the price figure) is at most two lines on the short slides at 1280x800.
+# v11 (「03以降は図解と一言で」): from slide 03 on, every piece of visible text outside the FAQ answers (<details>, shown only when
+# opened) is at most two lines at 1280x800: paragraphs, list items, notes, captions, table cells and the example's sentence alike.
+# The only exceptions are the poster mock-up (a picture of the printed sheet) and the big price figures. The heading is one line
+# and the one-liner under it (.one) is one line. At 390 no text on those slides is smaller than 11px (the diagrams stay readable).
+STRICT_SLIDES=SLIDES[2:]
+TEXT_LINES=r"""(strict)=>{const out=[];
+ for(const sl of document.querySelectorAll('#lp > .slide')){const st=strict.includes(sl.id);
+  const sel=st?'p, li, dt, dd, figcaption, th, td, .ba-text > span, h2':'.slide-in p, .slide-in li';
+  for(const e of sl.querySelectorAll(sel)){
+   if(e.closest('details')||e.matches('.slide-no')||e.querySelector('p,li,h2,h3,h4,table,ul,ol,figure'))continue;
+   if(st&&(e.closest('.sheet')||e.matches('.price-num')))continue;
+   if(!st&&(e.closest('figcaption,figure .ai-badge')||e.matches('.fiction-note,.hero-for,.price-num,.price-name,.step-who,.small')))continue;
+   const cs=getComputedStyle(e);if(cs.display==='none'||cs.display==='contents'||!e.textContent.trim())continue;
+   const t=e.matches('.icon-list li')?(e.querySelector(':scope > span')||e):e;
    const lh=parseFloat(getComputedStyle(t).lineHeight);const h=t.getBoundingClientRect().height;
-   out.push({slide:sl.id,text:e.textContent.trim().slice(0,24),lines:Math.round(h/lh)});}}
+   const max=st&&(e.matches('h2')||e.matches('.one'))?1:2;
+   out.push({slide:sl.id,strict:st,tag:e.tagName.toLowerCase()+(e.className&&typeof e.className==='string'?'.'+e.className.split(' ')[0]:''),text:e.textContent.trim().slice(0,24),lines:Math.round(h/lh),max});}}
  return out;}"""
 def check_text_lines(pg,res,key):
- tl=pg.evaluate(TEXT_LINES,sorted(LONG_SLIDES));over=[t for t in tl if t['lines']>2]
- res[key]={'checked':len(tl),'max_lines':max(t['lines'] for t in tl),'exempt':sorted(LONG_SLIDES)}
- assert len(tl)>=12,tl
- assert over==[],('running text over two lines',over)
+ tl=pg.evaluate(TEXT_LINES,STRICT_SLIDES);over=[t for t in tl if t['lines']>t['max']]
+ res[key]={'checked':len(tl),'checked_from_03':sum(t['strict'] for t in tl),'max_lines':max(t['lines'] for t in tl),'exempt':'FAQ answers (details), poster mock-up, price figures'}
+ assert sum(t['strict'] for t in tl)>=60,tl
+ for sid in STRICT_SLIDES:assert any(t['slide']==sid and t['tag']=='p.one' or t['slide']==sid and sid=='price' for t in tl),('no one-liner on',sid)
+ assert over==[],('text over its line limit',over)
+# v11: the words a reader sees on slides 03-09 (non-whitespace innerText at 1280x800; closed FAQ answers are not rendered and so
+# not counted). Before v11: 3,308 characters. The budget keeps the slides from growing back into paragraphs.
+CHARS=r"""(ids)=>ids.map(id=>{const s=document.getElementById(id);const no=s.querySelector(':scope > .slide-no');
+ return [id,s.innerText.replace(/\s/g,'').length-(no?no.innerText.replace(/\s/g,'').length:0)];})"""
+CHAR_BUDGET_FROM_03=2200
+def check_chars(pg,res,key):
+ c=dict(pg.evaluate(CHARS,STRICT_SLIDES));res[key]=c|{'total':sum(c.values()),'budget':CHAR_BUDGET_FROM_03}
+ assert sum(c.values())<=CHAR_BUDGET_FROM_03,('slides 03-09 hold too many words again',c)
+MIN_FONT=r"""(ids)=>{const out=[];for(const id of ids)for(const e of document.getElementById(id).querySelectorAll('*')){
+ if(e.closest('details:not([open])')||e.closest('.sheet')||e.closest('svg'))continue;const cs=getComputedStyle(e);if(cs.display==='none')continue;
+ const own=[...e.childNodes].some(n=>n.nodeType===3&&n.textContent.trim());if(!own)continue;
+ const r=e.getBoundingClientRect();if(!r.width)continue;const f=parseFloat(cs.fontSize);if(f<11)out.push({id,tag:e.tagName,text:e.textContent.trim().slice(0,20),f});}
+ return out;}"""
+def check_min_font(pg,res,key):
+ small=pg.evaluate(MIN_FONT,STRICT_SLIDES);res[key]=len(small)
+ assert small==[],('text smaller than 11px at phone width',small)
 V2_IMAGES='''[...document.querySelectorAll('#lp img')].map(i=>({src:i.getAttribute('src'),w:i.getAttribute('width'),h:i.getAttribute('height'),lazy:i.getAttribute('loading'),alt:i.alt,ok:i.complete&&i.naturalWidth>0,ai:!!i.closest('.scene-img')&&!!i.closest('.scene-img').querySelector('.ai-badge')&&i.closest('.scene-img').querySelector('.ai-badge').textContent==='イメージ（AI生成）',scene:!!i.closest('.scene-img'),hero:!!i.closest('.lp-hero')}))'''
 def check_images(pg,res,key):
  imgs=pg.evaluate(V2_IMAGES);res[key]=len(imgs)
@@ -235,7 +265,7 @@ def main():
   ctas=pg.locator('a[href="#create"]:visible').count();res['visible_create_ctas_390']=ctas;assert ctas>=5,ctas
   if args.shots:pg.screenshot(path=str(Path(args.shots)/'fv_390.jpg'),type='jpeg',quality=80)
   assert pg.evaluate("document.documentElement.classList.contains('reveal-on')"),'fade-in not armed'
-  settle(pg);check_images(pg,res,'lp_images_390')
+  settle(pg);check_images(pg,res,'lp_images_390');check_min_font(pg,res,'small_text_390')
   # v6 at phone width: slides, no fixed form, the form sits after the price slide, the bar's 試用 button reaches it
   check_slides(pg,res,'slides_390');check_forbidden(pg,res,'forbid_390');check_icons(pg,res,'icons_390')
   assert pg.evaluate("getComputedStyle(document.getElementById('trial')).position")=='static'
@@ -283,7 +313,7 @@ def main():
   assert tb['x']>=1280-440 and 360<=tb['width']<=400,tb  # the right column, 360-400px
   nav=pg.locator('.owner-nav a').evaluate_all("l=>l.map(a=>[a.textContent,a.getAttribute('href')])");assert nav==[[f'{i:02d}','#'+sid] for i,sid in enumerate(SLIDES,1)],nav
   assert pg.evaluate("performance.getEntriesByType('resource').filter(r=>/[.](mp4|webm)$/.test(r.name)).length")==0,'a video was fetched on first view (preload=none)'
-  check_text_lines(pg,res,'text_lines_1280')
+  check_text_lines(pg,res,'text_lines_1280');check_chars(pg,res,'chars_1280')
   settle(pg);check_slides(pg,res,'slides_1280');check_forbidden(pg,res,'forbid_1280');check_icons(pg,res,'icons_1280')
   if args.shots:slide_shots(pg,args.shots,'slide_')
   for sid in SLIDES:
@@ -358,5 +388,5 @@ def main():
   for w in NO_WORDS:assert w not in ptext,w
   ctx.close();b.close()
  assert not res['page_errors'],res['page_errors'];assert not res['blocked_external'],res['blocked_external']
- print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','icons_390','icons_1280','videos_1280','videos_reduced_390','text_lines_1280','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
+ print(json.dumps({k:res[k] for k in ('visible_create_ctas_390','chars_1280','small_text_390','icons_390','icons_1280','videos_1280','videos_reduced_390','text_lines_1280','lp_images_390','lp_images_1280','demo_video_src','slides_1280','slides_390','forbid_1280','forbid_390','trial_box_1280','form_checked_positions_1280','no_overflow_widths','other_api','blocked_external','page_errors','console_errors')}|{'trial_requests':len(res['trial_bodies'])},ensure_ascii=False))
 if __name__=='__main__':main()
