@@ -74,7 +74,8 @@ export const TRIAL_LIMITS={storeName:80,name:40,contact:120,message:400};
 export const TRIAL_CAPS={perSenderDay:3,day:30,total:500};
 // The same four fields again within TRIAL_DEDUP_MS (a double tap, a retry, a reload and resend) are one application: the repeat answers
 // {ok:true} like the first, saves no row, sends no Slack notice and gives back the quota it reserved. Checked and inserted in one statement,
-// so concurrent repeats cannot both be saved.
+// so concurrent repeats cannot both be saved (a D1 database runs one query at a time: developers.cloudflare.com/d1/platform/limits/).
+// The sender is deliberately not part of the match: the same four fields within 10 minutes are the same application, whoever resends them.
 export const TRIAL_DEDUP_MS=10*60*1000;
 const TRIAL_SAME='store_name = ? AND contact_name = ? AND contact = ? AND message = ? AND created_at >= ?';
 const TRIAL_KEYS=['contact','message','name','storeName'];
@@ -640,7 +641,7 @@ export default {
         // a repeat of an application saved moments ago is answered before any quota is reserved: a sender at the daily cap who resends
         // gets the same {ok:true}, and nothing is counted or released (the one-statement insert below still covers concurrent repeats)
         if(await env.QUOTA.prepare('SELECT 1 FROM trial_applications WHERE '+TRIAL_SAME+' LIMIT 1').bind(...fields,since).first())return json({ok:true});
-        const day=new Date().toISOString().slice(0,10);
+        const day=new Date(now).toISOString().slice(0,10);
         const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(env.QUOTA_SALT+'trial'+day+ip));
         const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
         for(const [key,limit] of [['trip:'+day+':'+hash,TRIAL_CAPS.perSenderDay],['trday:'+day,TRIAL_CAPS.day],['trtotal',TRIAL_CAPS.total]]){
