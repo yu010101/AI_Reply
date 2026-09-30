@@ -1,6 +1,6 @@
 // public/compose.js: candidates are built only from the customer's picks (topic × rating × optional details). No browser, no network.
 // Without details: exhaustive over every kind, every non-empty topic subset and every rating assignment, in every language and style.
-// With details the full space is too large (food alone ≈ 3.9×10^7 per language), so it is covered in layers, every one checked the same way:
+// With details the full space is too large (food alone ≈ 10^11 per language), so it is covered in layers, every one checked the same way:
 //   (1) every topic alone × every rating × every detail subset (exhaustive per topic),
 //   (2) every pair of topics × every rating pair × details in {none, first, last, all} for each,
 //   (3) all topics with all details × every rating assignment, and all topics with only their first detail × every rating assignment,
@@ -14,7 +14,9 @@ const C=createRequire(import.meta.url)('../public/compose.js');
 const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
 
 // the fixed neutral nouns agreed for Japanese (kinds match app.js: general/food/beauty/retail)
-const JA={food:['料理・飲み物','接客','雰囲気・席','待ち時間','価格'],beauty:['仕上がり','カウンセリング','接客','雰囲気','待ち時間','価格'],
+// food: 料理 and 飲み物 are split and 立地・アクセス is added (食べログ / SemEval-2016); beauty uses the rating item names of
+// ホットペッパービューティー (checked on its own review list page, 2026-09-29) — DECISIONS.md「話題の外部根拠と選択の記録」
+const JA={food:['料理','飲み物','接客','雰囲気・席','待ち時間','価格','立地・アクセス'],beauty:['技術・仕上がり','カウンセリング','接客サービス','雰囲気','待ち時間','メニュー・料金'],
   retail:['品ぞろえ','接客','お店の雰囲気','お会計・待ち時間','価格'],general:['接客','雰囲気','待ち時間','価格','わかりやすさ']};
 // how each rating must read; a sentence carries exactly one of them
 const MARK={ja:{good:/よかった/,ok:/ふつう/,concern:/気にな/},en:{good:/\bgood\b|\bliked\b/i,ok:/\baverage\b/i,concern:/\bconcern\b/i},
@@ -23,10 +25,10 @@ const SPLIT={ja:/(?<=。)/,zh:/(?<=。)/,en:/(?<=\.) /,ko:/(?<=\.) /};
 const FORBIDDEN={ja:['おすすめ','オススメ','お勧め','また来','また行','またリピ','リピート','最高','絶対','星5','星５','★','満点','一番','感動','ぜひ','大満足','とても','すごく'],
   en:['recommend','again','best','amazing','must','star','perfect','very','love','great'],zh:['推荐','再来','最好','一定','五星','完美','非常','超级'],ko:['추천','다시','최고','꼭','별','완벽','정말','아주']};
 // the agreed Japanese detail nouns per kind and topic (topic label → details)
-const JA_DETAILS={food:{'料理・飲み物':['味','温かさ','量','見た目','メニューの種類'],'接客':['説明','対応の早さ','言葉づかい'],'雰囲気・席':['明るさ','静かさ','席の広さ','清潔さ'],
-    '待ち時間':['席に着くまで','料理が出るまで','お会計'],'価格':['量とのつりあい','値段の表示']},
-  beauty:{'仕上がり':['カット','カラー','スタイリング','持ち'],'カウンセリング':['聞き取り','提案','説明'],'接客':['案内','対応の早さ','言葉づかい'],'雰囲気':['清潔さ','静かさ','明るさ'],
-    '待ち時間':['始まるまで','施術中の待ち','お会計'],'価格':['事前の説明','メニューとのつりあい']},
+const JA_DETAILS={food:{'料理':['味','温かさ','量','見た目','メニューの種類'],'飲み物':['味','温度','量','種類'],'接客':['説明','対応の早さ','言葉づかい'],'雰囲気・席':['明るさ','静かさ','席の広さ','清潔さ'],
+    '待ち時間':['席に着くまで','注文から出てくるまで','お会計'],'価格':['量とのつりあい','値段の表示'],'立地・アクセス':['駅からの近さ','道の分かりやすさ','駐車場']},
+  beauty:{'技術・仕上がり':['カット','カラー','スタイリング','持ち'],'カウンセリング':['聞き取り','提案','説明'],'接客サービス':['案内','対応の早さ','言葉づかい'],'雰囲気':['清潔さ','静かさ','明るさ'],
+    '待ち時間':['始まるまで','施術中の待ち','お会計'],'メニュー・料金':['事前の説明','内容とのつりあい']},
   retail:{'品ぞろえ':['種類','サイズや色','在庫'],'接客':['説明','対応の早さ','言葉づかい'],'お店の雰囲気':['商品の並べ方','通路の広さ','明るさ','清潔さ'],
     'お会計・待ち時間':['レジの待ち','支払い方法','包装'],'価格':['品質とのつりあい','値札']},
   general:{'接客':['説明','対応の早さ','言葉づかい'],'雰囲気':['明るさ','静かさ','清潔さ'],'待ち時間':['受付まで','順番が来るまで','お会計'],'価格':['事前の説明','内容とのつりあい'],
@@ -126,7 +128,7 @@ test('store kinds and languages match app.js; Japanese nouns are the agreed fixe
 test('exhaustive without details: only the picked topics, each with its own rating, in all three styles; concerns never drop',()=>{
   const stats={cases:0,maxLen:0};
   for(const lang of C.LANGS)for(const kind of kinds)for(const picks of assignments(C.topicsFor(kind)))checkCase(lang,kind,picks,stats);
-  assert.equal(stats.cases,4*(3*(4**5-1)+(4**6-1)));  // 4 languages × (3 kinds with 5 topics + beauty with 6)
+  assert.equal(stats.cases,4*(2*(4**5-1)+(4**6-1)+(4**7-1)));  // 4 languages × (retail, general with 5 topics + beauty with 6 + food with 7)
   console.log('compose cases (no details)',stats.cases,'candidates',stats.cases*3,'longest',stats.maxLen);
 });
 
@@ -156,7 +158,7 @@ test('details layer 2: every pair of topics × every rating pair × details none
       const pick=t=>{const d=C.detailsFor(kind,t);return [[],[d[0]],[d[d.length-1]],d];};
       for(const ra of RATINGS)for(const rb of RATINGS)for(const da of pick(ts[i]))for(const db of pick(ts[j]))
         checkCase(lang,kind,[{topic:ts[j],rating:rb,details:[...db].reverse()},{topic:ts[i],rating:ra,details:da}],stats);}}
-  assert.equal(stats.cases,4*(3*10+15)*9*16);console.log('details layer 2 cases',stats.cases,'longest',stats.maxLen);
+  assert.equal(stats.cases,4*(2*10+15+21)*9*16);  // pairs: 5 topics → 10, 6 → 15, 7 → 21console.log('details layer 2 cases',stats.cases,'longest',stats.maxLen);
 });
 
 test('details layer 3: all topics with all details (and with only the first) × every rating assignment',()=>{
@@ -165,7 +167,7 @@ test('details layer 3: all topics with all details (and with only the first) × 
     for(let n=0;n<3**ts.length;n++){let x=n;const rs=ts.map(()=>{const r=RATINGS[x%3];x=Math.floor(x/3);return r;});
       checkCase(lang,kind,ts.map((topic,i)=>({topic,rating:rs[i],details:C.detailsFor(kind,topic)})),stats);
       checkCase(lang,kind,ts.map((topic,i)=>({topic,rating:rs[i],details:C.detailsFor(kind,topic).slice(0,1)})),stats);}}
-  assert.equal(stats.cases,4*2*(3*3**5+3**6));console.log('details layer 3 cases',stats.cases,'longest (all details)',stats.maxLen);
+  assert.equal(stats.cases,4*2*(2*3**5+3**6+3**7));console.log('details layer 3 cases',stats.cases,'longest (all details)',stats.maxLen);
 });
 
 test('details layer 4: seeded random sample of any subset, ratings and details',()=>{
@@ -178,18 +180,32 @@ test('details layer 4: seeded random sample of any subset, ratings and details',
   assert.equal(stats.cases,4*4*N);console.log('details layer 4 cases',stats.cases,'longest',stats.maxLen);
 });
 
+test('topic evidence: every topic says where it comes from; 待ち時間 and カウンセリング are marked internal-unverified; the mark never changes the text',()=>{
+  const want={food:{dish:'external',drink:'external',service:'external',ambience:'external',wait:'internal-unverified',price:'external',location:'external'},
+    beauty:{result:'external',counseling:'internal-unverified',service:'external',ambience:'external',wait:'internal-unverified',price:'external'},
+    retail:{selection:'internal-unverified',service:'internal-unverified',ambience:'internal-unverified',checkout:'internal-unverified',price:'internal-unverified'},
+    general:{service:'internal-unverified',ambience:'internal-unverified',wait:'internal-unverified',price:'internal-unverified',clarity:'internal-unverified'}};
+  for(const k of kinds){assert.deepEqual(Object.fromEntries(C.topicsFor(k).map(id=>[id,C.evidenceFor(k,id).evidence])),want[k],k);
+    for(const id of C.topicsFor(k)){const e=C.evidenceFor(k,id);assert.ok(Object.isFrozen(e));assert.equal(Boolean(e.source),e.evidence==='external',k+id);}}
+  assert.match(C.evidenceFor('food','drink').source,/食べログ/);assert.match(C.evidenceFor('food','location').source,/SemEval/);assert.match(C.evidenceFor('beauty','result').source,/技術・仕上がり/);
+  assert.equal(C.evidenceFor('food','nope'),null);assert.deepEqual(C.evidenceFor('unknown','clarity'),C.evidenceFor('general','clarity'));
+  // the screen does not show it: app.js never reads it
+  assert.ok(!/evidence/i.test(app),'app.js must not show the evidence mark');
+});
+
 test('same picks in any order give the same text; the addition is appended as written to every style',()=>{
   const a=[{topic:'wait',rating:'concern'},{topic:'dish',rating:'good'}];
   assert.deepEqual(C.compose('ja','food',a),C.compose('ja','food',[...a].reverse()));
   const out=C.compose('ja','food',a,'  コーヒーは少し熱かった。 ');
   for(const [i,c] of out.entries()){assert.ok(c.text.endsWith('コーヒーは少し熱かった。'));assert.equal(c.text,C.compose('ja','food',a)[i].text+'コーヒーは少し熱かった。');}
-  assert.equal(C.compose('en','food',a,'Coffee was hot.')[0].text,'Good: food and drinks. Concern: wait time. Coffee was hot.');
+  assert.equal(C.compose('en','food',a,'Coffee was hot.')[0].text,'Good: food. Concern: wait time. Coffee was hot.');
   assert.deepEqual(C.compose('ja','food',a,'').map(c=>c.text),C.compose('ja','food',a).map(c=>c.text));
 });
 
 test('bad picks are refused instead of silently dropped',()=>{
   for(const bad of [[],null,[{topic:'dish',rating:'great'}],[{topic:'result',rating:'good'}],[{topic:'dish',rating:'good'},{topic:'dish',rating:'concern'}],
-    [{topic:'dish'}],Array.from({length:7},()=>({topic:'dish',rating:'good'})),
+    [{topic:'dish'}],Array.from({length:7},()=>({topic:'dish',rating:'good'})),[...C.topicsFor('food').map(topic=>({topic,rating:'good'})),{topic:'clarity',rating:'good'}],
+    [{topic:'drink',rating:'good',details:['temp']}],[{topic:'location',rating:'good',details:['taste']}],
     [{topic:'dish',rating:'good',details:['cut']}],[{topic:'dish',rating:'good',details:['taste','taste']}],[{topic:'dish',rating:'good',details:'taste'}],
     [{topic:'dish',rating:'good',details:['serving']}],[{topic:'wait',rating:'concern',details:[null]}],[{topic:'dish',rating:'',details:['taste']}]])
     assert.throws(()=>C.compose('ja','food',bad),/picks/,JSON.stringify(bad));
@@ -197,13 +213,21 @@ test('bad picks are refused instead of silently dropped',()=>{
 
 test('examples read naturally (fixed snapshots)',()=>{
   const p=[{topic:'dish',rating:'good'},{topic:'wait',rating:'concern'}];
-  assert.deepEqual(C.compose('ja','food',p).map(c=>c.text),['料理・飲み物、よかった。待ち時間、気になった。','料理・飲み物がよかったです。待ち時間は気になるところがありました。','料理・飲み物がよかった。待ち時間は気になった。']);
+  assert.deepEqual(C.compose('ja','food',p).map(c=>c.text),['料理、よかった。待ち時間、気になった。','料理がよかったです。待ち時間は気になるところがありました。','料理がよかった。待ち時間は気になった。']);
   assert.deepEqual(C.compose('ja','food',p.map(x=>({...x,details:[]}))),C.compose('ja','food',p),'empty details = no details');
   const d=[{topic:'dish',rating:'good',details:['temp','taste']},{topic:'wait',rating:'concern',details:['serving']}];
-  assert.deepEqual(C.compose('ja','food',d).map(c=>c.text),['料理・飲み物（味と温かさ）、よかった。待ち時間（料理が出るまで）、気になった。','料理・飲み物は、味と温かさがよかったです。待ち時間は、料理が出るまでが気になりました。','料理・飲み物は、味と温かさがよかった。待ち時間は、料理が出るまでが気になった。']);
-  assert.equal(C.compose('en','food',d)[1].text,'For the food and drinks, I found the taste and the temperature good. For the wait time, I had a concern about the wait for the food.');
-  assert.equal(C.compose('zh','food',d)[1].text,'菜品和饮品方面，我觉得味道、温度不错。等待时间方面，上菜前有我在意的地方。');
-  assert.equal(C.compose('ko','food',d)[1].text,'음식·음료에서는 맛, 온도 부분이 좋았습니다. 대기 시간에서는 음식이 나오기까지 부분은 신경 쓰이는 점이 있었습니다.');
+  assert.deepEqual(C.compose('ja','food',d).map(c=>c.text),['料理（味と温かさ）、よかった。待ち時間（注文から出てくるまで）、気になった。','料理は、味と温かさがよかったです。待ち時間は、注文から出てくるまでが気になりました。','料理は、味と温かさがよかった。待ち時間は、注文から出てくるまでが気になった。']);
+  assert.equal(C.compose('en','food',d)[1].text,'For the food, I found the taste and the temperature good. For the wait time, I had a concern about the wait after ordering.');
+  assert.equal(C.compose('zh','food',d)[1].text,'菜品方面，我觉得味道、温度不错。等待时间方面，点单后到上桌有我在意的地方。');
+  assert.equal(C.compose('ko','food',d)[1].text,'음식에서는 맛, 온도 부분이 좋았습니다. 대기 시간에서는 주문 후 나오기까지 부분은 신경 쓰이는 점이 있었습니다.');
+  // the new food topics (drinks, location) in all four languages
+  const n=[{topic:'drink',rating:'good',details:['taste','variety']},{topic:'location',rating:'concern',details:['parking']}];
+  assert.deepEqual(C.LANGS.map(l=>C.compose(l,'food',n)[1].text),['飲み物は、味と種類がよかったです。立地・アクセスは、駐車場が気になりました。',
+    'For the drinks, I found the taste and the variety good. For the location and access, I had a concern about the parking.',
+    '饮品方面，我觉得味道、种类不错。位置和交通方面，停车场有我在意的地方。','음료에서는 맛, 종류 부분이 좋았습니다. 위치·교통에서는 주차장 부분은 신경 쓰이는 점이 있었습니다.']);
+  assert.equal(C.compose('ja','beauty',[{topic:'result',rating:'good'},{topic:'service',rating:'good'},{topic:'price',rating:'ok'}])[1].text,'技術・仕上がりと接客サービスがよかったです。メニュー・料金はふつうでした。');
   // the LP example (index.html #example) shows exactly what compose.js builds for its picks
-  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');assert.ok(html.includes('<p class="ba-text">'+C.compose('ja','food',d)[1].text+'</p>'),'LP example drifted from compose.js');
+  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');const ex=[...html.matchAll(/<p class="ba-text">(.*?)<\/p>/g)];
+  // v11: the sentence is split into one span per clause (drawn beside the chips it came from); the words must still be exactly compose.js's
+  assert.equal(ex.length,1,'one LP example');assert.equal(ex[0][1].replace(/<[^>]+>/g,''),C.compose('ja','food',d)[1].text,'LP example drifted from compose.js');
 });

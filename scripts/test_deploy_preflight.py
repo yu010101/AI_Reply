@@ -112,6 +112,33 @@ class ConfigDerivedInputs(unittest.TestCase):
             with self.assertRaises(m.Refuse):
                 m.deploy_inputs(root)
 
+    def test_scheduled_worker_requires_matching_cron(self):
+        worker = "export const PURGE_CRON='17 18 * * *';\nexport default {async scheduled(c,e,x){}, async fetch(){}}\n"
+        d, root = self.make({'main': 'worker.mjs'}, {'intake-beta/worker.mjs': worker})
+        with d:
+            with self.assertRaises(m.Refuse) as cm:
+                m.deploy_inputs(root)
+            self.assertEqual(str(cm.exception), 'config_cron_missing:17 18 * * *')
+        d, root = self.make({'main': 'worker.mjs', 'triggers': {'crons': ['0 0 * * *']}}, {'intake-beta/worker.mjs': worker})
+        with d:
+            with self.assertRaises(m.Refuse):
+                m.deploy_inputs(root)
+        d, root = self.make({'main': 'worker.mjs', 'triggers': {'crons': ['17 18 * * *']}}, {'intake-beta/worker.mjs': worker})
+        with d:
+            self.assertEqual(m.deploy_inputs(root)[0], ['intake-beta/worker.mjs'])
+        d, root = self.make({'main': 'worker.mjs'}, {'intake-beta/worker.mjs': 'export default {async fetch(){}}\n'})
+        with d:
+            self.assertEqual(m.deploy_inputs(root)[0], ['intake-beta/worker.mjs'])
+
+    def test_repo_wrangler_config_carries_purge_cron(self):
+        # リポジトリに入れた本番の wrangler 設定そのものが、Worker の PURGE_CRON と同じ定時実行を持つ（PR #14 Codex r3/r4 指摘）
+        root = Path(__file__).resolve().parents[1]
+        inputs, _ = m.deploy_inputs(root)
+        self.assertEqual(inputs, ['intake-beta/worker.mjs', 'intake-beta/public'])
+        cfg = json.loads((root / 'intake-beta/wrangler.json').read_text())
+        src = (root / 'intake-beta/worker.mjs').read_text()
+        self.assertIn(m.CRON_DECL.search(src).group(1), cfg['triggers']['crons'])
+
     def test_repo_slug(self):
         self.assertEqual(m.repo_slug('git@github.com:yu010101/AI_Reply.git'), 'yu010101/AI_Reply')
         with self.assertRaises(m.Refuse):

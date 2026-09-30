@@ -12,28 +12,44 @@ const RATINGS=['good','ok','concern'];
 const STYLES=['short','polite','casual'];
 // Topic ids per store kind, in display order. Kinds match app.js writingPrompts (general, food, beauty, retail).
 const TOPICS={
-  food:['dish','service','ambience','wait','price'],
+  food:['dish','drink','service','ambience','wait','price','location'],
   beauty:['result','counseling','service','ambience','wait','price'],
   retail:['selection','service','ambience','checkout','price'],
   general:['service','ambience','wait','price','clarity']
 };
+// Where each topic comes from (EXTERNAL-DATA.md, 2026-09-29). Kept in code only: the screen and the text do not change with it.
+// 'external' = the same aspect is a rating item of a large review site or of a published aspect taxonomy (source says which);
+// 'internal-unverified' = our own choice with no external basis found yet, kept until our own pick counts (/api/pick-stat) decide.
+// Weights (order, share) have no external source yet for any topic.
+const EXT=source=>Object.freeze({evidence:'external',source});
+const UNVERIFIED=Object.freeze({evidence:'internal-unverified',source:''});
+const TABELOG='食べログ口コミガイドライン(taste/service/atmosphere/cost-performance/drinks)';const SEMEVAL='SemEval-2016 Task5 REST';
+const HPB='ホットペッパービューティー口コミの項目';
+const EVIDENCE={
+  food:{dish:EXT(TABELOG+' taste; '+SEMEVAL+' food'),drink:EXT(TABELOG+' drinks; '+SEMEVAL+' drinks'),service:EXT(TABELOG+' service; '+SEMEVAL+' service'),
+    ambience:EXT(TABELOG+' atmosphere; '+SEMEVAL+' ambience'),wait:UNVERIFIED,price:EXT(TABELOG+' cost-performance; '+SEMEVAL+' prices'),location:EXT(SEMEVAL+' location')},
+  beauty:{result:EXT(HPB+'「技術・仕上がり」'),counseling:UNVERIFIED,service:EXT(HPB+'「接客サービス」'),ambience:EXT(HPB+'「雰囲気」'),wait:UNVERIFIED,price:EXT(HPB+'「メニュー・料金」')},
+  // retail and general: no external rating items checked yet (楽天ショップレビューの項目は未確認)
+  retail:{selection:UNVERIFIED,service:UNVERIFIED,ambience:UNVERIFIED,checkout:UNVERIFIED,price:UNVERIFIED},
+  general:{service:UNVERIFIED,ambience:UNVERIFIED,wait:UNVERIFIED,price:UNVERIFIED,clarity:UNVERIFIED}
+};
 // Neutral nouns only. Per-kind overrides where the same id reads differently (retail's ambience = お店の雰囲気).
 const LABELS={
-  ja:{dish:'料理・飲み物',service:'接客',ambience:'雰囲気・席',wait:'待ち時間',price:'価格',result:'仕上がり',counseling:'カウンセリング',selection:'品ぞろえ',checkout:'お会計・待ち時間',clarity:'わかりやすさ',
-    _kind:{beauty:{ambience:'雰囲気'},retail:{ambience:'お店の雰囲気'},general:{ambience:'雰囲気'}}},
-  en:{dish:'food and drinks',service:'service',ambience:'atmosphere and seating',wait:'wait time',price:'price',result:'result',counseling:'consultation',selection:'product range',checkout:'checkout and wait time',clarity:'clarity',
-    _kind:{beauty:{ambience:'atmosphere'},retail:{ambience:'store atmosphere'},general:{ambience:'atmosphere'}}},
-  zh:{dish:'菜品和饮品',service:'接待服务',ambience:'氛围和座位',wait:'等待时间',price:'价格',result:'效果',counseling:'咨询沟通',selection:'商品种类',checkout:'结账和等待',clarity:'易懂程度',
-    _kind:{beauty:{ambience:'氛围'},retail:{ambience:'店内氛围'},general:{ambience:'氛围'}}},
-  ko:{dish:'음식·음료',service:'접객',ambience:'분위기·좌석',wait:'대기 시간',price:'가격',result:'결과',counseling:'상담',selection:'상품 구성',checkout:'계산·대기 시간',clarity:'알기 쉬움',
-    _kind:{beauty:{ambience:'분위기'},retail:{ambience:'매장 분위기'},general:{ambience:'분위기'}}}
+  ja:{dish:'料理',drink:'飲み物',location:'立地・アクセス',service:'接客',ambience:'雰囲気・席',wait:'待ち時間',price:'価格',result:'仕上がり',counseling:'カウンセリング',selection:'品ぞろえ',checkout:'お会計・待ち時間',clarity:'わかりやすさ',
+    _kind:{beauty:{result:'技術・仕上がり',service:'接客サービス',ambience:'雰囲気',price:'メニュー・料金'},retail:{ambience:'お店の雰囲気'},general:{ambience:'雰囲気'}}},
+  en:{dish:'food',drink:'drinks',location:'location and access',service:'service',ambience:'atmosphere and seating',wait:'wait time',price:'price',result:'result',counseling:'consultation',selection:'product range',checkout:'checkout and wait time',clarity:'clarity',
+    _kind:{beauty:{result:'technique and result',service:'customer service',ambience:'atmosphere',price:'menu and price'},retail:{ambience:'store atmosphere'},general:{ambience:'atmosphere'}}},
+  zh:{dish:'菜品',drink:'饮品',location:'位置和交通',service:'接待服务',ambience:'氛围和座位',wait:'等待时间',price:'价格',result:'效果',counseling:'咨询沟通',selection:'商品种类',checkout:'结账和等待',clarity:'易懂程度',
+    _kind:{beauty:{result:'技术和效果',service:'接待服务',ambience:'氛围',price:'项目和价格'},retail:{ambience:'店内氛围'},general:{ambience:'氛围'}}},
+  ko:{dish:'음식',drink:'음료',location:'위치·교통',service:'접객',ambience:'분위기·좌석',wait:'대기 시간',price:'가격',result:'결과',counseling:'상담',selection:'상품 구성',checkout:'계산·대기 시간',clarity:'알기 쉬움',
+    _kind:{beauty:{result:'기술·완성도',service:'접객 서비스',ambience:'분위기',price:'메뉴·요금'},retail:{ambience:'매장 분위기'},general:{ambience:'분위기'}}}
 };
 // Detail ids per kind and topic, in display order. Neutral nouns only (no praise, adjectives or shop-specific facts).
 const DETAILS={
-  food:{dish:['taste','temp','portion','look','menu'],service:['explain','speed','manner'],ambience:['light','quiet','space','clean'],
-    wait:['seating','serving','paying'],price:['portionValue','costShown']},
+  food:{dish:['taste','temp','portion','look','menu'],drink:['taste','drinkTemp','amount','variety'],service:['explain','speed','manner'],ambience:['light','quiet','space','clean'],
+    wait:['seating','serving','paying'],price:['portionValue','costShown'],location:['station','route','parking']},
   beauty:{result:['cut','color','styling','lasting'],counseling:['hearing','proposal','explain'],service:['guide','speed','manner'],
-    ambience:['clean','quiet','light'],wait:['start','during','paying'],price:['advance','menuValue']},
+    ambience:['clean','quiet','light'],wait:['start','during','paying'],price:['advance','contentValue']},
   retail:{selection:['variety','sizeColor','stock'],service:['explain','speed','manner'],ambience:['layout','aisle','light','clean'],
     checkout:['register','payment','wrapping'],price:['qualityValue','tags']},
   general:{service:['explain','speed','manner'],ambience:['light','quiet','clean'],wait:['reception','turn','paying'],
@@ -41,25 +57,25 @@ const DETAILS={
 };
 const DETAIL_LABELS={
   ja:{taste:'味',temp:'温かさ',portion:'量',look:'見た目',menu:'メニューの種類',explain:'説明',speed:'対応の早さ',manner:'言葉づかい',guide:'案内',
-    light:'明るさ',quiet:'静かさ',space:'席の広さ',clean:'清潔さ',seating:'席に着くまで',serving:'料理が出るまで',paying:'お会計',
+    light:'明るさ',quiet:'静かさ',space:'席の広さ',clean:'清潔さ',seating:'席に着くまで',serving:'注文から出てくるまで',drinkTemp:'温度',amount:'量',station:'駅からの近さ',route:'道の分かりやすさ',parking:'駐車場',paying:'お会計',
     portionValue:'量とのつりあい',costShown:'値段の表示',cut:'カット',color:'カラー',styling:'スタイリング',lasting:'持ち',hearing:'聞き取り',proposal:'提案',
     start:'始まるまで',during:'施術中の待ち',advance:'事前の説明',menuValue:'メニューとのつりあい',variety:'種類',sizeColor:'サイズや色',stock:'在庫',
     layout:'商品の並べ方',aisle:'通路の広さ',register:'レジの待ち',payment:'支払い方法',wrapping:'包装',qualityValue:'品質とのつりあい',tags:'値札',
     reception:'受付まで',turn:'順番が来るまで',contentValue:'内容とのつりあい',signs:'案内表示',procedure:'手続き'},
   en:{taste:'taste',temp:'temperature',portion:'portion size',look:'presentation',menu:'menu choices',explain:'explanations',speed:'speed of response',manner:'way of speaking',guide:'guidance',
-    light:'lighting',quiet:'noise level',space:'space at the table',clean:'cleanliness',seating:'wait to be seated',serving:'wait for the food',paying:'checkout',
+    light:'lighting',quiet:'noise level',space:'space at the table',clean:'cleanliness',seating:'wait to be seated',serving:'wait after ordering',drinkTemp:'temperature',amount:'amount',station:'distance from the station',route:'finding the way',parking:'parking',paying:'checkout',
     portionValue:'value for the portion',costShown:'cost display',cut:'cut',color:'color',styling:'styling',lasting:'longevity',hearing:'understanding of my request',proposal:'suggestions',
     start:'wait before it began',during:'waiting during the treatment',advance:'explanation beforehand',menuValue:'value for the menu',variety:'variety',sizeColor:'sizes and colors',stock:'stock',
     layout:'product layout',aisle:'aisle space',register:'wait at the register',payment:'payment options',wrapping:'wrapping',qualityValue:'value for the quality',tags:'shelf labels',
     reception:'wait at reception',turn:'wait for my turn',contentValue:'value for what I got',signs:'signage',procedure:'procedures'},
   zh:{taste:'味道',temp:'温度',portion:'分量',look:'外观',menu:'菜单种类',explain:'说明',speed:'响应速度',manner:'说话方式',guide:'引导',
-    light:'亮度',quiet:'安静程度',space:'座位空间',clean:'清洁程度',seating:'入座前',serving:'上菜前',paying:'结账',
+    light:'亮度',quiet:'安静程度',space:'座位空间',clean:'清洁程度',seating:'入座前',serving:'点单后到上桌',drinkTemp:'温度',amount:'分量',station:'离车站的距离',route:'到店路线',parking:'停车场',paying:'结账',
     portionValue:'与分量的匹配',costShown:'标价',cut:'剪发',color:'染发',styling:'造型',lasting:'持久度',hearing:'需求了解',proposal:'建议',
     start:'开始前',during:'服务中的等待',advance:'事先说明',menuValue:'与项目的匹配',variety:'种类',sizeColor:'尺码和颜色',stock:'库存',
     layout:'陈列',aisle:'通道宽度',register:'收银排队',payment:'支付方式',wrapping:'包装',qualityValue:'与质量的匹配',tags:'标签',
     reception:'受理前',turn:'轮到我之前',contentValue:'与内容的匹配',signs:'指示标识',procedure:'手续'},
   ko:{taste:'맛',temp:'온도',portion:'양',look:'담음새',menu:'메뉴 종류',explain:'설명',speed:'응대 속도',manner:'말투',guide:'안내',
-    light:'밝기',quiet:'소음 정도',space:'좌석 공간',clean:'청결',seating:'자리에 앉기까지',serving:'음식이 나오기까지',paying:'계산',
+    light:'밝기',quiet:'소음 정도',space:'좌석 공간',clean:'청결',seating:'자리에 앉기까지',serving:'주문 후 나오기까지',drinkTemp:'온도',amount:'양',station:'역에서의 거리',route:'찾아가는 길',parking:'주차장',paying:'계산',
     portionValue:'양과의 균형',costShown:'금액 표시',cut:'커트',color:'컬러',styling:'스타일링',lasting:'유지력',hearing:'요청 파악',proposal:'제안',
     start:'시작하기까지',during:'시술 중 대기',advance:'사전 설명',menuValue:'메뉴와의 균형',variety:'종류',sizeColor:'사이즈와 색상',stock:'재고',
     layout:'진열',aisle:'통로 넓이',register:'계산대 대기',payment:'결제 방법',wrapping:'포장',qualityValue:'품질과의 균형',tags:'라벨 표시',
@@ -97,11 +113,12 @@ const DETAIL_PHRASES={
 };
 const LANGS=Object.keys(PHRASES);
 const SEP={ja:'',zh:'',en:' ',ko:' '};
-const MAX_TOPICS=6;
+const MAX_TOPICS=Math.max(...Object.values(TOPICS).map(t=>t.length));  // a customer may pick every topic of the largest kind
 function kindOf(kind){return Object.hasOwn(TOPICS,kind)?kind:'general';}
 function topicsFor(kind){return TOPICS[kindOf(kind)].slice();}
 function label(lang,kind,id){const t=LABELS[lang]||LABELS.ja;const k=t._kind[kindOf(kind)];return (k&&Object.hasOwn(k,id))?k[id]:t[id];}
 function detailsFor(kind,topic){const d=DETAILS[kindOf(kind)];return Object.hasOwn(d,topic)?d[topic].slice():[];}
+function evidenceFor(kind,topic){const e=EVIDENCE[kindOf(kind)];return Object.hasOwn(e,topic)?e[topic]:null;}
 function detailLabel(lang,id){const t=DETAIL_LABELS[lang]||DETAIL_LABELS.ja;return t[id];}
 function joinList(lang,items,style){
   if(items.length<2)return items[0]||'';
@@ -151,6 +168,6 @@ function compose(lang,kind,picks,addition){
   const extra=typeof addition==='string'?addition.trim():'';
   return STYLES.map(style=>{const body=composeOne(L,kind,norm,style);return {style,text:extra?body+SEP[L]+extra:body};});
 }
-const api={RATINGS,STYLES,TOPICS,DETAILS,LANGS,MAX_TOPICS,topicsFor,label,detailsFor,detailLabel,compose};
+const api={RATINGS,STYLES,TOPICS,DETAILS,LANGS,MAX_TOPICS,topicsFor,label,detailsFor,detailLabel,evidenceFor,normalize,compose};
 if(typeof module==='object'&&module&&module.exports)module.exports=api;else root.HitokotoCompose=Object.freeze(api);
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -4,7 +4,8 @@ beforeEach(()=>{Date.now=()=>Date.parse('2026-09-25T00:00:00Z');});
 afterEach(()=>{Date.now=realNow;});
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP,AI_UNTIL,validTrial,TRIAL_LIMITS,TRIAL_CAPS,trialNotice} from '../worker.mjs';
+import worker, {boundedJSON,validInput,validEvent,FUNNEL_EVENTS,EVENT_DAILY_CAP,AI_UNTIL,validTrial,TRIAL_LIMITS,TRIAL_CAPS,trialNotice,validLoopEvent,maskSecrets,tokenMatches,loopEventOut,LOOP_VERSION,LOOP_ERROR_TYPES,LOOP_CAPS,LOOP_TEXT_MAX,validPickStat,pickStatRows,PICK_CAPS,TIME_BUCKETS,REPORT_MIN,REPORT_DAYS,REPORT_STEPS,STORE_CAPS,NOTICE_MAX,validNotice,medianFromBuckets,classifyItems,validClassify,purgeExpired,purgePlan,monthsBefore,PURGE_LIMIT,PURGE_CRON,RETENTION_MONTHS} from '../worker.mjs';
+import {createHash} from 'node:crypto';
 const logs=[];const realWarn=console.warn,realError=console.error;
 beforeEach(()=>{logs.length=0;console.warn=(...a)=>logs.push(['warn',...a]);console.error=(...a)=>logs.push(['error',...a]);});
 afterEach(()=>{console.warn=realWarn;console.error=realError;});
@@ -24,7 +25,8 @@ async function sqliteQuota() {
   let mod;try{mod=await import('node:sqlite');}catch{return null;}finally{process.emitWarning=emit;}
   const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
   return {db,rows(){return Object.fromEntries(db.prepare('SELECT key,count FROM quota ORDER BY key').all().map(r=>[r.key,r.count]));},
-    prepare(sql){const st=db.prepare(sql);return {bind(...v){return {async first(){return st.get(...v)??null;},async all(){return {results:st.all(...v)};},async run(){st.run(...v);return {success:true};}};}};}};
+    async batch(list){const out=[];for(const st of list)out.push(await st.run());return out;},
+    prepare(sql){const st=db.prepare(sql);return {bind(...v){return {async first(){return st.get(...v)??null;},async all(){return {results:st.all(...v)};},async run(){const r=st.run(...v);return {success:true,meta:{changes:Number(r.changes)}};}};}};}};
 }
 function setup(initial={}) {const db=new Quota(initial),calls=[];return {db,calls,env:{QUOTA:db,QUOTA_SALT:'test-only-salt',AI:{async run(model,input){calls.push({model,input});return {response:JSON.parse(input.messages[1].content).text+'。'};}}}};}
 // Simulates the read-then-write window: the SELECT pre-check reports no ceiling while reserve() sees the real rows.
@@ -160,3 +162,482 @@ test('trial notice: not sent for the hidden-field trap, invalid input, rate limi
     assert.equal((await invoke(trialRequest(),s.env)).status,429);
     s.q.db.exec('DROP TABLE trial_applications');assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.77'}),s.env)).status,503);
     assert.equal(calls.length,TRIAL_CAPS.perSenderDay,'no notice without a saved row');});});
+
+// 改善ループの受け口: POST /api/loop-event → D1 loop_events（日ごと・指紋ごとの件数）、GET /api/loop-events → tools/loop events.py
+const LOOP_ERR={kind:'error',screen:'customer',version:LOOP_VERSION,error_type:'TypeError',frame:'app.js:renderPick',fp:'0a1b2c3d'};
+const LOOP_CFB={kind:'feedback',screen:'customer-edit',version:LOOP_VERSION,category:'confusing'};
+const LOOP_OFB={kind:'feedback',screen:'create',version:LOOP_VERSION,category:'bug',text:'印刷が2枚になる'};
+function loopRequest(body=LOOP_ERR,extra={}) {return new Request(origin+'/api/loop-event',{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':'192.0.2.30',...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
+const loopRows=q=>q.db.prepare('SELECT * FROM loop_events ORDER BY id').all().map(r=>({...r}));
+const TOKEN='t'.repeat(40);
+function loopGet(query='',auth='Bearer '+TOKEN,method='GET') {return new Request(origin+'/api/loop-events'+query,{method,headers:auth?{authorization:auth}:{}});}
+const dayOf=ms=>new Date(ms).toISOString().slice(0,10);
+test('loop-event: the three accepted shapes, and every extra or free-text field is refused (not dropped) with nothing stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  assert.deepEqual(validLoopEvent(LOOP_ERR),{kind:'error',screen:'customer',version:LOOP_VERSION,error_type:'TypeError',frame:'app.js:renderPick',category:null,text:null});
+  assert.equal(validLoopEvent({...LOOP_ERR,frame:undefined}),null,'frame, when present, must be a string');const {frame:_f,...noFrame}=LOOP_ERR;assert.equal(validLoopEvent(noFrame).frame,null);
+  assert.deepEqual(validLoopEvent(LOOP_CFB),{kind:'feedback',screen:'customer-edit',version:LOOP_VERSION,error_type:null,frame:null,category:'confusing',text:null});
+  assert.equal(validLoopEvent(LOOP_OFB).text,'印刷が2枚になる');const {text:_t,...noText}=LOOP_OFB;assert.equal(validLoopEvent(noText).text,null);assert.equal(validLoopEvent({...LOOP_OFB,text:'   '}).text,null);
+  const bad=[null,[],'x',{},{...LOOP_ERR,message:'Cannot read x of 架空の喫茶店'},{...LOOP_ERR,stack:'at f (https://hitokoto.example/app.js:1:1)'},{...LOOP_ERR,url:'https://hitokoto.example/?store=架空'},{...LOOP_ERR,storeName:'架空'},{...LOOP_ERR,date:'2026-09-25'},{...LOOP_ERR,text:'x'},
+    {...LOOP_ERR,screen:'admin'},{...LOOP_ERR,screen:'customer-edit'},{...LOOP_ERR,error_type:'Cannot read properties of null'},{...LOOP_ERR,error_type:'MyError'},{...LOOP_ERR,fp:'xyz'},{...LOOP_ERR,fp:'0a1b2c3d4'},{...LOOP_ERR,version:''},{...LOOP_ERR,version:'v 1'},{...LOOP_ERR,version:'a'.repeat(41)},
+    {...LOOP_ERR,frame:'evil.js:f'},{...LOOP_ERR,frame:'app.js:<anonymous>'},{...LOOP_ERR,frame:'app.js:https://x.example'},{...LOOP_ERR,frame:'app.js:'},{...LOOP_ERR,frame:'app.js:f g'},{...LOOP_ERR,frame:7},
+    {...LOOP_CFB,text:'使いにくい'},{...LOOP_CFB,category:'bug'},{...LOOP_CFB,screen:'customer'},{...LOOP_CFB,fp:'0a1b2c3d'},{...LOOP_CFB,storeName:'架空'},
+    {...LOOP_OFB,category:'good'},{...LOOP_OFB,text:'a'.repeat(LOOP_TEXT_MAX+1)},{...LOOP_OFB,text:'<b>x</b>'},{...LOOP_OFB,text:'x‮'},{...LOOP_OFB,text:3},{...LOOP_OFB,screen:'privacy'},{...LOOP_OFB,contact:'a@example.com'},{...LOOP_OFB,kind:'error'},{...LOOP_OFB,kind:'other'}];
+  for(const body of bad){const r=await invoke(loopRequest(body),s.env);assert.equal(r.status,400,JSON.stringify(body));assert.deepEqual(r.body,{error:'invalid_input'});}
+  assert.equal(loopRows(s.q).length,0);assert.deepEqual(s.q.rows(),{});
+  assert.equal(validLoopEvent({...LOOP_OFB,text:'あ'.repeat(LOOP_TEXT_MAX)}).text.length,LOOP_TEXT_MAX);});
+test('loop-event: same Origin, POST, JSON and size gates as the other APIs',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  assert.equal((await invoke(loopRequest(undefined,{origin:'https://evil.example'}),s.env)).status,403);assert.equal((await invoke(loopRequest(undefined,{'content-type':'text/plain'}),s.env)).status,415);
+  assert.equal((await invoke(new Request(origin+'/api/loop-event'),s.env)).status,405);assert.equal((await invoke(loopRequest(JSON.stringify({...LOOP_OFB,text:'a'.repeat(5000)})),s.env)).status,413);
+  assert.equal((await invoke(loopRequest('{'),s.env)).status,400);assert.equal(loopRows(s.q).length,0);});
+test('loop-event: stores kind/screen/version/type/frame/category and the server day only; no IP, store name, message or URL anywhere in D1',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const body of [LOOP_ERR,LOOP_CFB,LOOP_OFB]){const r=await invoke(loopRequest(body),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{recorded:true});}
+  const rows=loopRows(s.q);assert.equal(rows.length,3);const today=dayOf(Date.now());
+  assert.deepEqual(rows.map(r=>[r.day,r.product,r.kind,r.screen,r.version,r.error_type,r.frame,r.category,r.text_masked,r.count]),[
+    [today,'hitokoto-beta','error','customer',LOOP_VERSION,'TypeError','app.js:renderPick',null,null,1],
+    [today,'hitokoto-beta','feedback','customer-edit',LOOP_VERSION,null,null,'confusing',null,1],
+    [today,'hitokoto-beta','feedback','create',LOOP_VERSION,null,null,'bug','印刷が2枚になる',1]]);
+  for(const r of rows)assert.match(r.fp,/^[0-9a-f]{16}$/);assert.ok(!rows.some(r=>r.fp.startsWith('0a1b2c3d')),'fp is computed by the server, not taken from the client');
+  const dump=JSON.stringify(s.q.db.prepare('SELECT * FROM quota').all())+JSON.stringify(rows);assert.ok(!dump.includes('192.0.2.30'),'no IP');
+  assert.deepEqual(Object.keys(s.q.rows()).map(k=>k.split(':')[0]).sort(),['lfip','lpday','lpip']);
+  assert.equal(s.q.db.prepare('SELECT count(*) n FROM trial_applications').get().n,0);assert.equal(s.q.rows().total,undefined,'AI quota untouched');});
+test('loop-event: the same (day, kind, fingerprint) adds to one row; a different frame, screen, version or day is its own row',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(let i=0;i<3;i++)assert.equal((await invoke(loopRequest({...LOOP_ERR,fp:'0000000'+i},{'cf-connecting-ip':'198.51.100.'+i}),s.env)).status,200);
+  let rows=loopRows(s.q);assert.equal(rows.length,1);assert.equal(rows[0].count,3);
+  await invoke(loopRequest({...LOOP_ERR,frame:'compose.js:build'}),s.env);await invoke(loopRequest({...LOOP_ERR,screen:'create'}),s.env);await invoke(loopRequest({...LOOP_ERR,version:'2026.10.01-1'}),s.env);
+  const {frame:_f,...noFrame}=LOOP_ERR;await invoke(loopRequest(noFrame),s.env);
+  for(let i=0;i<2;i++)await invoke(loopRequest(LOOP_CFB),s.env);
+  Date.now=()=>Date.parse('2026-09-26T00:00:01Z');await invoke(loopRequest(LOOP_ERR),s.env);
+  rows=loopRows(s.q);assert.deepEqual(rows.map(r=>[r.day,r.screen,r.frame,r.version,r.count]),[
+    ['2026-09-25','customer','app.js:renderPick',LOOP_VERSION,3],['2026-09-25','customer','compose.js:build',LOOP_VERSION,1],['2026-09-25','create','app.js:renderPick',LOOP_VERSION,1],
+    ['2026-09-25','customer','app.js:renderPick','2026.10.01-1',1],['2026-09-25','customer',null,LOOP_VERSION,1],['2026-09-25','customer-edit',null,LOOP_VERSION,2],['2026-09-26','customer','app.js:renderPick',LOOP_VERSION,1]]);});
+test('loop-event: per sender per day (customer 20, owner 5), the daily total, and a row ceiling; refused attempts release what they held',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const codes=[];for(let i=0;i<LOOP_CAPS.perSenderDay+2;i++)codes.push((await invoke(loopRequest(LOOP_CFB),s.env)).status);
+  assert.deepEqual(codes,[...Array(LOOP_CAPS.perSenderDay).fill(200),429,429]);assert.equal(loopRows(s.q)[0].count,LOOP_CAPS.perSenderDay);
+  assert.equal(s.q.rows()['lpday:'+dayOf(Date.now())],LOOP_CAPS.perSenderDay,'refused attempts released the day row');
+  const own=[];for(let i=0;i<LOOP_CAPS.ownerPerSenderDay+1;i++)own.push((await invoke(loopRequest({...LOOP_OFB,text:'意見'+i}),s.env)).status);
+  assert.deepEqual(own,[...Array(LOOP_CAPS.ownerPerSenderDay).fill(200),429],'owner feedback has its own smaller per-sender cap');
+  assert.equal((await invoke(loopRequest(LOOP_CFB,{'cf-connecting-ip':'198.51.100.40'}),s.env)).status,200,'another sender continues');
+  s.q.db.exec("UPDATE quota SET count="+LOOP_CAPS.day+" WHERE key='lpday:"+dayOf(Date.now())+"'");const r=await invoke(loopRequest(LOOP_CFB,{'cf-connecting-ip':'198.51.100.41'}),s.env);assert.equal(r.status,429);assert.deepEqual(r.body,{error:'rate_limited'});
+  assert.equal(Object.entries(s.q.rows()).filter(([k,v])=>k.startsWith('lpip:')&&v===0).length,1,'sender row released when the day cap refused');
+  const conc=await Promise.all(Array.from({length:30},()=>invoke(loopRequest(LOOP_ERR,{'cf-connecting-ip':'198.51.100.50'}),{...s.env,QUOTA:s.q})));assert.equal(conc.filter(x=>x.status===200).length,0,'day cap holds under concurrency');
+  s.q.db.exec("UPDATE quota SET count=0 WHERE key='lpday:"+dayOf(Date.now())+"'");s.q.db.exec("UPDATE loop_events SET count="+LOOP_CAPS.row+" WHERE category='confusing'");
+  assert.equal((await invoke(loopRequest(LOOP_CFB,{'cf-connecting-ip':'198.51.100.42'}),s.env)).status,200);assert.equal(s.q.db.prepare("SELECT count FROM loop_events WHERE category='confusing'").get().count,LOOP_CAPS.row,'a row stops at the ceiling');});
+test('loop-event: without D1, salt or IP nothing is stored and the answer is recorded:false; stale sender rows are purged after 3 days',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const env of [{QUOTA_SALT:'x'},{QUOTA:s.q}]){const r=await invoke(loopRequest(),env);assert.equal(r.status,200);assert.deepEqual(r.body,{recorded:false});}
+  const req=loopRequest();req.headers.delete('cf-connecting-ip');assert.deepEqual((await invoke(req,s.env)).body,{recorded:false});assert.equal(loopRows(s.q).length,0);
+  s.q.db.exec("INSERT INTO quota VALUES ('lpip:2026-09-20:old',3),('lfip:2026-09-20:old',2),('lpday:2026-09-20',9),('trday:2026-09-20',1),('ev:2026-09-20:view',4)");
+  assert.equal((await invoke(loopRequest(),s.env)).status,200);const rows=s.q.rows();for(const k of ['lpip:2026-09-20:old','lfip:2026-09-20:old','lpday:2026-09-20'])assert.equal(rows[k],undefined,k);assert.equal(rows['ev:2026-09-20:view'],4);assert.equal(rows['trday:2026-09-20'],1,'other features keep their own cleanup');
+  s.q.db.exec('DROP TABLE loop_events');const r=await invoke(loopRequest(LOOP_CFB,{'cf-connecting-ip':'198.51.100.60'}),s.env);assert.equal(r.status,503);for(const [k,v] of Object.entries(s.q.rows()))if(k.includes('198'))assert.equal(v,0);
+  const err=logs.filter(l=>l[0]==='error');assert.deepEqual(err.map(l=>l.slice(1)),[['loop_error','Error']]);});
+test('loop-event: the owner\'s words are masked before they are saved (mail, phone, URL, keys), and the raw values are nowhere in D1',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const raw='連絡は owner@example.com か ０９０－１２３４－５６７８ へ。https://g.page/r/abc/review と kuchikomi.jp が変。sk-abcdefghijklmnop12 '+'AKIA'+'ABCDEFGHIJKLMNOP';
+  assert.equal((await invoke(loopRequest({...LOOP_OFB,text:raw}),s.env)).status,200);
+  const saved=loopRows(s.q)[0].text_masked;
+  assert.equal(saved,'連絡は [MASKED:EMAIL] か [MASKED:PHONE] へ。[MASKED:URL] と [MASKED:URL] が変。[MASKED:KEY] [MASKED:KEY]');
+  const dump=JSON.stringify(s.q.db.prepare('SELECT * FROM loop_events').all());for(const secret of ['owner@','example.com','1234','5678','g.page','kuchikomi','sk-abc','AK'+'IA'])assert.ok(!dump.includes(secret),secret);
+  assert.equal(maskSecrets('090 1234 5678'),'[MASKED:PHONE]');assert.equal(maskSecrets('(03)1234-5678'),'([MASKED:PHONE]');assert.equal(maskSecrets('www.example.org/x?y=1'),'[MASKED:URL]');
+  assert.equal(maskSecrets('ghp_'+'a'.repeat(20)),'[MASKED:KEY]');assert.equal(maskSecrets('xo'+'xb-123456789-abc'),'[MASKED:KEY]');assert.equal(maskSecrets('a'.repeat(40)),'[MASKED:LONG]');
+  assert.equal(maskSecrets('印刷が2枚になる。料金は2,980円？10月1日から'),'印刷が2枚になる。料金は2,980円?10月1日から','ordinary short numbers are kept (NFKC only)');
+  assert.ok(maskSecrets('a@b.co '.repeat(40)).length<=2*LOOP_TEXT_MAX);});
+test('loop-event: server-side failures are counted with reason codes only (draft, trial, event); expected fallbacks are not; recording never changes the answer',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  s.env.AI={async run(){throw new TypeError('model offline 架空デモ');}};assert.equal((await invoke(request(undefined,{'cf-connecting-ip':'192.0.2.70'}),s.env)).body.mode,'fallback');
+  s.env.AI={async run(){return {response:'https://bad.example'};}};assert.equal((await invoke(request(undefined,{'cf-connecting-ip':'192.0.2.71'}),s.env)).body.mode,'fallback');
+  s.q.db.exec("INSERT OR REPLACE INTO quota VALUES ('total',1000)");assert.equal((await invoke(request(undefined,{'cf-connecting-ip':'192.0.2.72'}),s.env)).body.mode,'fallback');
+  const noAI={QUOTA:s.q,QUOTA_SALT:'x'};assert.equal((await invoke(request(),noAI)).body.mode,'fallback');
+  s.q.db.exec('DROP TABLE trial_applications');assert.equal((await invoke(trialRequest(),s.env)).status,503);
+  const ev=setup();ev.env.QUOTA={prepare(sql){if(sql.startsWith('INSERT INTO quota'))throw new RangeError('D1_ERROR 192.0.2.4');return s.q.prepare(sql);}};assert.deepEqual((await invoke(eventRequest(),ev.env)).body,{recorded:false});
+  const rows=loopRows(s.q);assert.deepEqual(rows.map(r=>[r.kind,r.screen,r.error_type,r.frame,r.category,r.text_masked,r.version,r.count]).sort(),[
+    ['error','api-draft','draft_bindings',null,null,null,LOOP_VERSION,1],['error','api-draft','draft_ceiling',null,null,null,LOOP_VERSION,1],['error','api-draft','draft_error.TypeError',null,null,null,LOOP_VERSION,1],
+    ['error','api-event','event_error.RangeError',null,null,null,LOOP_VERSION,1],['error','api-trial','trial_error.Error',null,null,null,LOOP_VERSION,1]]);
+  const dump=JSON.stringify(rows);for(const secret of ['架空','192.0.2','bad.example','model offline','D1_ERROR'])assert.ok(!dump.includes(secret),secret);
+  // a broken loop table must not change any answer, nor add log lines
+  s.q.db.exec('DROP TABLE loop_events; DELETE FROM quota');logs.length=0;s.env.AI={async run(){throw new Error('x');}};assert.equal((await invoke(request(undefined,{'cf-connecting-ip':'192.0.2.73'}),s.env)).body.mode,'fallback');
+  assert.deepEqual(logs.map(l=>l.slice(0,3)),[['error','draft_fallback','error']]);});
+test('loop-event: a failing Slack notice is counted with its status or error class only',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.SLACK_WEBHOOK_URL=HOOK;
+  for(const [i,impl] of [()=>new Response('no',{status:500}),()=>{throw new TypeError('down owner@example.com');}].entries())await withFetch(impl,async()=>{assert.equal((await invoke(trialRequest(undefined,{'cf-connecting-ip':'198.51.100.8'+i}),s.env)).status,200);});
+  assert.deepEqual(loopRows(s.q).map(r=>[r.screen,r.error_type]),[['api-trial','trial_notify_http_500'],['api-trial','trial_notify_failed.TypeError']]);});
+test('loop-events GET: 404 without a (32+ char) LOOP_EVENTS_TOKEN, 401 without the right Bearer, 405 for other methods',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const tok of [undefined,'','short-token'])assert.equal((await invoke(loopGet(),{...s.env,LOOP_EVENTS_TOKEN:tok})).status,404,String(tok));
+  s.env.LOOP_EVENTS_TOKEN=TOKEN;
+  for(const auth of ['',TOKEN,'Bearer '+TOKEN.slice(1),'Bearer '+TOKEN+'x','bearer '+TOKEN,'Basic '+TOKEN,'Bearer  '+TOKEN,'Bearer t'])assert.equal((await invoke(loopGet('',auth),s.env)).status,401,auth);
+  assert.equal((await invoke(loopGet('','Bearer '+TOKEN,'POST'),s.env)).status,405);
+  const ok=await worker.fetch(loopGet(),s.env,{waitUntil(){}});assert.equal(ok.status,200);assert.equal(ok.headers.get('cache-control'),'no-store');assert.deepEqual(await ok.json(),[]);
+  assert.equal((await invoke(loopGet('?since=2026-02-30'),s.env)).status,400);assert.equal((await invoke(loopGet('?since=yesterday'),s.env)).status,400);});
+test('tokenMatches: right answer for equal, prefix, longer, shorter and empty; always hashes both sides (work does not depend on the input)',async()=>{
+  const real=crypto.subtle.digest.bind(crypto.subtle);let n=0;crypto.subtle.digest=(...a)=>{n++;return real(...a);};
+  try{const cases=[[TOKEN,true],[TOKEN.slice(0,39),false],[TOKEN+'t',false],['',false],['x'.repeat(40),false],['u'+TOKEN.slice(1),false]];
+    for(const [given,want] of cases){n=0;assert.equal(await tokenMatches(given,TOKEN),want,given);assert.equal(n,2,'two digests for '+JSON.stringify(given));}}
+  finally{crypto.subtle.digest=real;}
+  const src=readFileSync(new URL('../worker.mjs',import.meta.url),'utf8');assert.ok(!/LOOP_EVENTS_TOKEN\s*[!=]==?|[!=]==?\s*(?:env\.)?LOOP_EVENTS_TOKEN|===\s*token\b|token\s*===/.test(src.replace(/typeof token!=='string'/,'')),'the token is never compared with ===');});
+test('loop-events GET: closed days only, since filter, and each row carries exactly the fields events.py accepts (no text, IP or store name)',async(t)=>{const s=await trialEnv(t);if(!s)return;s.env.LOOP_EVENTS_TOKEN=TOKEN;
+  const at=iso=>{Date.now=()=>Date.parse(iso);};
+  at('2026-09-23T10:00:00Z');await invoke(loopRequest(LOOP_ERR),s.env);await invoke(loopRequest({...LOOP_OFB,text:'owner@example.com に返事して。架空の喫茶店'}),s.env);
+  at('2026-09-24T10:00:00Z');for(let i=0;i<3;i++)await invoke(loopRequest(LOOP_CFB,{'cf-connecting-ip':'198.51.100.9'+i}),s.env);
+  at('2026-09-25T00:05:00Z');await invoke(loopRequest(LOOP_ERR),s.env);
+  at('2026-09-25T00:05:00Z');let body=(await invoke(loopGet('?since=2026-09-01'),s.env)).body;assert.deepEqual(body.map(r=>r.first_seen.slice(0,10)),['2026-09-23','2026-09-23'],'within 10 minutes after midnight the day before is still open');
+  at('2026-09-25T12:00:00Z');body=(await invoke(loopGet('?since=2026-09-01'),s.env)).body;
+  assert.deepEqual(body,[
+    {product:'hitokoto-beta',kind:'error',fingerprint:'customer:TypeError:app.js:renderPick',screen:'customer',version:LOOP_VERSION,count:1,first_seen:'2026-09-23T00:00:00Z',last_seen:'2026-09-23T23:59:59Z',impact:'failure'},
+    {product:'hitokoto-beta',kind:'feedback',fingerprint:'create:bug',screen:'create',version:LOOP_VERSION,count:1,first_seen:'2026-09-23T00:00:00Z',last_seen:'2026-09-23T23:59:59Z',impact:'request'},
+    {product:'hitokoto-beta',kind:'feedback',fingerprint:'customer-edit:confusing',screen:'customer-edit',version:LOOP_VERSION,count:3,first_seen:'2026-09-24T00:00:00Z',last_seen:'2026-09-24T23:59:59Z',impact:'request'}]);
+  const flat=JSON.stringify(body);for(const secret of ['MASKED','owner','架空','198.51','192.0.2','text'])assert.ok(!flat.includes(secret),secret);
+  assert.deepEqual((await invoke(loopGet('?since=2026-09-24'),s.env)).body.map(r=>r.fingerprint),['customer-edit:confusing']);
+  assert.equal((await invoke(loopGet(),s.env)).body.length,3,'default window is the last 7 days');
+  assert.deepEqual((await invoke(loopGet('?since=2026-09-24'),s.env)).body,(await invoke(loopGet('?since=2026-09-24'),s.env)).body,'a closed day reads the same every time');
+  assert.deepEqual(loopEventOut({day:'2026-09-01',kind:'error',screen:'api-trial',version:'v1',error_type:'trial_error.Error',frame:null,category:null,count:2}).fingerprint,'api-trial:trial_error.Error');});
+test('loop: public/loop.js sends the same version and error types the worker accepts, is loaded before app.js, and the page keeps its CSP',()=>{
+  const js=readFileSync(new URL('../public/loop.js',import.meta.url),'utf8');const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+  assert.equal(/const VERSION='([^']+)'/.exec(js)[1],LOOP_VERSION);assert.deepEqual(JSON.parse(/const ERROR_TYPES=(\[[^\]]+\])/.exec(js)[1].replace(/'/g,'"')),LOOP_ERROR_TYPES);
+  const scripts=[...html.matchAll(/<script src="([^"]+)"/g)].map(m=>m[1]);assert.deepEqual(scripts,['loop.js','qrcode.min.js','compose.js','app.js']);
+  assert.ok(!/message|\.stack\b[^;]*post|location\.href|document\.URL/.test(js.replace(/\/\/.*$/gm,'').replace(/err\.stack:''\)/,'')),'loop.js never reads the message or the page URL into a request');
+  const fb=html.slice(html.indexOf('id="customer-fb"'),html.indexOf('</details>',html.indexOf('id="customer-fb"')));assert.ok(fb.length>100&&!/<textarea|<input(?![^>]*type="radio")/.test(fb),'customer feedback has no free-text field');});
+test('loop: migration 0002 and schema.sql define the same loop_events table; the migration only adds',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
+  const cols=file=>{const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL(file,import.meta.url),'utf8'));return JSON.stringify([db.prepare("PRAGMA table_info(loop_events)").all(),db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name='loop_events' AND sql IS NOT NULL ORDER BY name").all().map(r=>r.sql.replace(/\s+/g,' ').replace(/\( /g,'(').replace(/ \)/g,')'))]);};
+  assert.equal(cols('../migrations/0002_loop_events.sql'),cols('../schema.sql'));assert.ok(cols('../schema.sql').includes('text_masked'));
+  const sql=readFileSync(new URL('../migrations/0002_loop_events.sql',import.meta.url),'utf8').replace(/--.*$/gm,'');assert.ok(!/^\s*(DROP|DELETE|UPDATE|ALTER|INSERT)\b/im.test(sql),'migration only adds');assert.ok(!/quota|trial_applications/.test(sql),'other tables untouched');
+  const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
+  assert.throws(()=>db.exec("INSERT INTO loop_events (day,product,kind,screen,version,fp,text_masked) VALUES ('2026-09-25','hitokoto-beta','error','customer','v','0123456789abcdef','x')"),/CHECK/,'text only on owner feedback rows');});
+
+// 選択の件数: POST /api/pick-stat → D1 pick_stats（日付・業種・話題・評価・細目ごとの件数）、GET /api/pick-stats（同じ Bearer・締まった日だけ）
+const PICK={kind:'food',picks:[{topic:'wait',rating:'concern',details:['serving']},{topic:'dish',rating:'good',details:['temp','taste']},{topic:'drink',rating:'ok'}]};
+function pickRequest(body=PICK,extra={}) {return new Request(origin+'/api/pick-stat',{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':'192.0.2.40',...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
+const pickRows=q=>q.db.prepare('SELECT day,kind,topic,rating,detail,count FROM pick_stats ORDER BY day,kind,topic,rating,detail').all().map(r=>[r.day,r.kind,r.topic,r.rating,r.detail,r.count]);
+function pickGet(query='',auth='Bearer '+TOKEN,method='GET') {return new Request(origin+'/api/pick-stats'+query,{method,headers:auth?{authorization:auth}:{}});}
+test('pick-stat: only {kind, picks:[{topic, rating, details?}]} from the fixed table is accepted; any other key or value is refused (not dropped) and nothing is stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  assert.deepEqual(validPickStat(PICK),{kind:'food',picks:[{topic:'dish',rating:'good',details:['taste','temp']},{topic:'drink',rating:'ok',details:[]},{topic:'wait',rating:'concern',details:['serving']}]});
+  assert.deepEqual(pickStatRows(validPickStat(PICK)),[['food','dish','good',''],['food','dish','good','taste'],['food','dish','good','temp'],['food','drink','ok',''],['food','wait','concern',''],['food','wait','concern','serving']]);
+  const one=PICK.picks[0];
+  const bad=[null,[],'x',{},{kind:'food'},{picks:PICK.picks},{...PICK,storeName:'架空の喫茶店'},{...PICK,text:'料理がよかった'},{...PICK,addition:'コーヒーは熱かった'},{...PICK,review:'https://g.page/r/x/review'},{...PICK,url:'https://hitokoto.example/?store=架空'},{...PICK,day:'2026-09-01'},{...PICK,lang:'ja'},
+    {...PICK,kind:'bar'},{...PICK,kind:'FOOD'},{...PICK,kind:['food']},{...PICK,picks:[]},{...PICK,picks:'dish'},{...PICK,picks:[null]},{...PICK,picks:[[one]]},
+    {...PICK,picks:[{...one,text:'待った'}]},{...PICK,picks:[{...one,storeName:'架空'}]},{...PICK,picks:[{topic:'wait'}]},{...PICK,picks:[{rating:'good'}]},
+    {...PICK,picks:[{...one,topic:'result'}]},{...PICK,picks:[{...one,rating:'great'}]},{...PICK,picks:[{...one,details:['cut']}]},{...PICK,picks:[{...one,details:['serving','serving']}]},{...PICK,picks:[{...one,details:'serving'}]},
+    {...PICK,picks:[one,{...one,rating:'good'}]},{kind:'food',picks:[...Array.from({length:8},(_,i)=>({topic:['dish','drink','service','ambience','wait','price','location','clarity'][i],rating:'good'}))]}];
+  for(const body of bad){const r=await invoke(pickRequest(body),s.env);assert.equal(r.status,400,JSON.stringify(body));assert.deepEqual(r.body,{error:'invalid_input'});}
+  assert.deepEqual(pickRows(s.q),[]);assert.deepEqual(s.q.rows(),{});
+  for(const kind of ['general','food','beauty','retail'])assert.ok(validPickStat({kind,picks:[{topic:'price',rating:'ok',details:[]}]}),kind);});
+test('pick-stat: same Origin, POST, JSON and size gates as the other APIs',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  assert.equal((await invoke(pickRequest(undefined,{origin:'https://evil.example'}),s.env)).status,403);assert.equal((await invoke(pickRequest(undefined,{'content-type':'text/plain'}),s.env)).status,415);
+  assert.equal((await invoke(new Request(origin+'/api/pick-stat'),s.env)).status,405);assert.equal((await invoke(pickRequest(JSON.stringify({...PICK,pad:'a'.repeat(5000)})),s.env)).status,413);
+  assert.equal((await invoke(pickRequest('{'),s.env)).status,400);assert.deepEqual(pickRows(s.q),[]);});
+test('pick-stat: stores (server day, kind, topic, rating, detail) counts only; the same choices add up; no IP, store name or text anywhere in D1',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(let i=0;i<2;i++){const r=await invoke(pickRequest(PICK,{'cf-connecting-ip':'198.51.100.'+i}),s.env);assert.equal(r.status,200);assert.deepEqual(r.body,{recorded:true});}
+  assert.equal((await invoke(pickRequest({kind:'food',picks:[{topic:'dish',rating:'good',details:['taste']},{topic:'location',rating:'concern',details:['parking','station']}]}),s.env)).status,200);
+  assert.equal((await invoke(pickRequest({kind:'beauty',picks:[{topic:'counseling',rating:'good'}]}),s.env)).status,200);
+  Date.now=()=>Date.parse('2026-09-26T00:00:01Z');assert.equal((await invoke(pickRequest({kind:'food',picks:[{topic:'dish',rating:'good'}]}),s.env)).status,200);
+  assert.deepEqual(pickRows(s.q),[
+    ['2026-09-25','beauty','counseling','good','',1],
+    ['2026-09-25','food','dish','good','',3],['2026-09-25','food','dish','good','taste',3],['2026-09-25','food','dish','good','temp',2],
+    ['2026-09-25','food','drink','ok','',2],
+    ['2026-09-25','food','location','concern','',1],['2026-09-25','food','location','concern','parking',1],['2026-09-25','food','location','concern','station',1],
+    ['2026-09-25','food','wait','concern','',2],['2026-09-25','food','wait','concern','serving',2],
+    ['2026-09-26','food','dish','good','',1]]);
+  const dump=JSON.stringify(s.q.db.prepare('SELECT * FROM pick_stats').all())+JSON.stringify(s.q.db.prepare('SELECT * FROM quota').all());
+  for(const secret of ['192.0.2.40','198.51.100','架空','http'])assert.ok(!dump.includes(secret),secret);
+  assert.deepEqual([...new Set(Object.keys(s.q.rows()).map(k=>k.split(':')[0]))].sort(),['psday','psip']);
+  assert.equal(s.q.db.prepare('SELECT count(*) n FROM loop_events').get().n,0);assert.equal(s.q.db.prepare('SELECT count(*) n FROM trial_applications').get().n,0);assert.equal(s.q.rows().total,undefined,'AI quota untouched');});
+test('pick-stat: per sender per day, the daily total and a row ceiling; refused attempts release what they held; stale sender rows are purged after 3 days',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const one={kind:'general',picks:[{topic:'service',rating:'good'}]};
+  const codes=[];for(let i=0;i<PICK_CAPS.perSenderDay+2;i++)codes.push((await invoke(pickRequest(one),s.env)).status);
+  assert.deepEqual(codes,[...Array(PICK_CAPS.perSenderDay).fill(200),429,429]);assert.equal(pickRows(s.q)[0][5],PICK_CAPS.perSenderDay);
+  assert.equal(s.q.rows()['psday:'+dayOf(Date.now())],PICK_CAPS.perSenderDay,'refused attempts released the day row');
+  assert.equal((await invoke(pickRequest(one,{'cf-connecting-ip':'198.51.100.40'}),s.env)).status,200,'another sender continues');
+  s.q.db.exec("UPDATE quota SET count="+PICK_CAPS.day+" WHERE key='psday:"+dayOf(Date.now())+"'");const r=await invoke(pickRequest(one,{'cf-connecting-ip':'198.51.100.41'}),s.env);assert.equal(r.status,429);assert.deepEqual(r.body,{error:'rate_limited'});
+  assert.equal(Object.entries(s.q.rows()).filter(([k,v])=>k.startsWith('psip:')&&v===0).length,1,'sender row released when the day cap refused');
+  s.q.db.exec("UPDATE quota SET count=0 WHERE key='psday:"+dayOf(Date.now())+"'");s.q.db.exec('UPDATE pick_stats SET count='+PICK_CAPS.row);
+  assert.equal((await invoke(pickRequest(one,{'cf-connecting-ip':'198.51.100.42'}),s.env)).status,200);assert.equal(pickRows(s.q)[0][5],PICK_CAPS.row,'a row stops at the ceiling');
+  s.q.db.exec("INSERT INTO quota VALUES ('psip:2026-09-20:old',3),('psday:2026-09-20',9),('lpday:2026-09-20',1),('ev:2026-09-20:view',4)");
+  assert.equal((await invoke(pickRequest(one,{'cf-connecting-ip':'198.51.100.43'}),s.env)).status,200);const rows=s.q.rows();
+  for(const k of ['psip:2026-09-20:old','psday:2026-09-20'])assert.equal(rows[k],undefined,k);assert.equal(rows['lpday:2026-09-20'],1,'other features keep their own cleanup');assert.equal(rows['ev:2026-09-20:view'],4);});
+test('pick-stat: without D1, salt or IP nothing is stored (recorded:false); a failed save answers 503, releases the quota and is counted as api-pick with its error class only',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const env of [{QUOTA_SALT:'x'},{QUOTA:s.q}]){const r=await invoke(pickRequest(),env);assert.equal(r.status,200);assert.deepEqual(r.body,{recorded:false});}
+  const req=pickRequest();req.headers.delete('cf-connecting-ip');assert.deepEqual((await invoke(req,s.env)).body,{recorded:false});assert.deepEqual(pickRows(s.q),[]);
+  s.q.db.exec('DROP TABLE pick_stats');const r=await invoke(pickRequest(PICK,{'cf-connecting-ip':'198.51.100.60'}),s.env);assert.equal(r.status,503);assert.deepEqual(r.body,{recorded:false});
+  for(const [k,v] of Object.entries(s.q.rows()))if(k.startsWith('ps'))assert.equal(v,0,k);
+  assert.deepEqual(loopRows(s.q).map(x=>[x.screen,x.error_type]),[['api-pick','pick_error.Error']]);
+  assert.deepEqual(logs.filter(l=>l[0]==='error').map(l=>l.slice(1)),[['pick_error','Error']]);});
+test('pick-stats GET: token gate like /api/loop-events; closed days only; since filter; rows carry only day/kind/topic/rating/detail/count; truncation is reported',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  for(const tok of [undefined,'','short-token'])assert.equal((await invoke(pickGet(),{...s.env,LOOP_EVENTS_TOKEN:tok})).status,404,String(tok));
+  s.env.LOOP_EVENTS_TOKEN=TOKEN;
+  for(const auth of ['',TOKEN,'Bearer '+TOKEN.slice(1),'Bearer '+TOKEN+'x','bearer '+TOKEN])assert.equal((await invoke(pickGet('',auth),s.env)).status,401,auth);
+  assert.equal((await invoke(pickGet('','Bearer '+TOKEN,'POST'),s.env)).status,405);assert.equal((await invoke(pickGet('?since=2026-02-30'),s.env)).status,400);
+  const at=iso=>{Date.now=()=>Date.parse(iso);};
+  at('2026-09-23T10:00:00Z');await invoke(pickRequest(),s.env);
+  at('2026-09-24T10:00:00Z');await invoke(pickRequest({kind:'beauty',picks:[{topic:'result',rating:'good',details:['cut']}]}),s.env);
+  at('2026-09-25T00:05:00Z');await invoke(pickRequest(),s.env);
+  let body=(await invoke(pickGet('?since=2026-09-01'),s.env)).body;assert.deepEqual([...new Set(body.rows.map(r=>r.day))],['2026-09-23'],'within 10 minutes after midnight the day before is still open');
+  at('2026-09-25T12:00:00Z');body=(await invoke(pickGet('?since=2026-09-01'),s.env)).body;
+  assert.deepEqual(body,{product:'hitokoto-beta',since:'2026-09-01',before:'2026-09-25',truncated:false,rows:[
+    {day:'2026-09-23',kind:'food',topic:'dish',rating:'good',detail:'',count:1},{day:'2026-09-23',kind:'food',topic:'dish',rating:'good',detail:'taste',count:1},{day:'2026-09-23',kind:'food',topic:'dish',rating:'good',detail:'temp',count:1},
+    {day:'2026-09-23',kind:'food',topic:'drink',rating:'ok',detail:'',count:1},{day:'2026-09-23',kind:'food',topic:'wait',rating:'concern',detail:'',count:1},{day:'2026-09-23',kind:'food',topic:'wait',rating:'concern',detail:'serving',count:1},
+    {day:'2026-09-24',kind:'beauty',topic:'result',rating:'good',detail:'',count:1},{day:'2026-09-24',kind:'beauty',topic:'result',rating:'good',detail:'cut',count:1}]});
+  assert.deepEqual((await invoke(pickGet('?since=2026-09-24'),s.env)).body.rows.map(r=>r.kind),['beauty','beauty']);
+  assert.deepEqual((await invoke(pickGet('?since=2026-09-24'),s.env)).body,(await invoke(pickGet('?since=2026-09-24'),s.env)).body,'a closed day reads the same every time');
+  s.q.db.exec("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<"+(PICK_CAPS.readRows+5)+") INSERT INTO pick_stats (day,kind,topic,rating,detail,count) SELECT '2026-09-22','general','service','good','d'||i,1 FROM n");
+  body=(await invoke(pickGet('?since=2026-09-01'),s.env)).body;assert.equal(body.truncated,true);assert.equal(body.rows.length,PICK_CAPS.readRows);});
+test('pick-stat: migration 0003 and schema.sql define the same pick_stats table; the migration only adds; the table refuses values outside the fixed shape',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
+  const cols=file=>{const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL(file,import.meta.url),'utf8'));return JSON.stringify([db.prepare("PRAGMA table_info(pick_stats)").all(),db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name='pick_stats' AND sql IS NOT NULL ORDER BY name").all().map(r=>r.sql.replace(/\s+/g,' ').replace(/\( /g,'(').replace(/ \)/g,')'))]);};
+  assert.equal(cols('../migrations/0003_pick_stats.sql'),cols('../schema.sql'));
+  const sql=readFileSync(new URL('../migrations/0003_pick_stats.sql',import.meta.url),'utf8').replace(/--.*$/gm,'');assert.ok(!/^\s*(DROP|DELETE|UPDATE|ALTER|INSERT)\b/im.test(sql),'migration only adds');assert.ok(!/quota|trial_applications|loop_events/.test(sql),'other tables untouched');
+  const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
+  for(const bad of ["('2026-09-25','bar','dish','good','',1)","('2026-09-25','food','dish','great','',1)","('2026-09-25','food','料理','good','',1)","('x','food','dish','good','',1)","('2026-09-25','food','dish','good','"+'a'.repeat(21)+"',1)"])
+    assert.throws(()=>db.exec('INSERT INTO pick_stats (day,kind,topic,rating,detail,count) VALUES '+bad),/CHECK/,bad);});
+test('pick-stat: public/app.js sends only {kind, picks} to /api/pick-stat, once per session, after the candidates are shown',()=>{
+  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');const fn=app.slice(app.indexOf('function sendPickStat'),app.indexOf('function openWriteOwn'));
+  assert.ok(fn.includes("const body={kind:Object.hasOwn(Compose.TOPICS,kind)?kind:'general',picks:[...picks].map(([topic,p])=>({topic,rating:p.rating,details:[...p.details]}))};"),fn);
+  assert.ok(!/storeName|reviewUrl|tidied|addition|location|candidateTexts/.test(fn),'no store name, link or text near the pick counts');assert.ok(/hk-pick-stat/.test(fn));
+  assert.ok(/if\(!renderCandidates\(\)\)return;\n\s*sendPickStat\(\);/.test(app),'sent right after the candidates are built');});
+
+// ③ 時間と離脱（匿名）・① 店ごとの声の報告と札・② 自由記述の AI 分類
+const sha=v=>createHash('sha256').update(v).digest('hex');
+function apiReq(path,body,ip='192.0.2.70',extra={}){return new Request(origin+path,{method:'POST',headers:{origin,'content-type':'application/json','cf-connecting-ip':ip,...extra},body:typeof body==='string'?body:JSON.stringify(body)});}
+const allRows=q=>JSON.stringify(['stores','store_picks','store_steps','funnel_times','pick_stats','loop_events','quota','trial_applications'].map(t=>q.db.prepare('SELECT * FROM '+t).all()));
+async function newStore(s,kind='food',ip='192.0.2.70'){const r=await invoke(apiReq('/api/store',{kind},ip),s.env);assert.equal(r.status,200,JSON.stringify(r.body));return r.body;}
+const report=async(s,token,ip='192.0.2.71')=>invoke(apiReq('/api/report',{token},ip),s.env);
+test('store: issues a 16-byte random sid and a 32-byte random token; D1 keeps sid, SHA-256(token), kind and day only; the two are independent and never derived from the store',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s),b=await newStore(s,'food');
+  assert.match(a.sid,/^[A-Za-z0-9_-]{22}$/);assert.match(a.token,/^[A-Za-z0-9_-]{43}$/);assert.deepEqual(Object.keys(a).sort(),['sid','token']);
+  assert.notEqual(a.sid,b.sid);assert.notEqual(a.token,b.token);assert.ok(!a.token.includes(a.sid)&&!a.sid.includes(a.token.slice(0,8)));
+  const rows=s.q.db.prepare('SELECT * FROM stores ORDER BY rowid').all().map(r=>({...r}));
+  assert.deepEqual(rows[0],{sid:a.sid,token_hash:sha(a.token),kind:'food',created_day:dayOf(Date.now()),last_used_day:dayOf(Date.now())});
+  const dump=allRows(s.q);assert.ok(!dump.includes(a.token)&&!dump.includes(b.token),'the token itself is never stored');assert.ok(!dump.includes('192.0.2.70'));
+  // entropy: 200 sids/tokens are all distinct and use the whole alphabet (not derived from anything fixed)
+  const ids=new Set(),toks=new Set();for(let i=0;i<200;i++){ids.add((await import('../worker.mjs')).newStoreId());toks.add((await import('../worker.mjs')).newReportToken());}
+  assert.equal(ids.size,200);assert.equal(toks.size,200);assert.ok(new Set([...toks].join('')).size>=60,'base64url alphabet in use');
+  for(const body of [{kind:'bar'},{kind:'food',storeName:'架空の喫茶店'},{kind:'food',review:'https://g.page/r/x/review'},{},[]])assert.equal((await invoke(apiReq('/api/store',body),s.env)).status,400,JSON.stringify(body));
+  assert.equal((await invoke(apiReq('/api/store',{kind:'food'},'192.0.2.70',{origin:'https://evil.example'}),s.env)).status,403);
+  const codes=[];for(let i=0;i<STORE_CAPS.perSenderDay+1;i++)codes.push((await invoke(apiReq('/api/store',{kind:'general'},'198.51.100.90'),s.env)).status);
+  assert.deepEqual(codes,[...Array(STORE_CAPS.perSenderDay).fill(200),429]);
+  const n={QUOTA:s.q};assert.equal((await invoke(apiReq('/api/store',{kind:'food'}),n)).status,503,'no salt: nothing issued');});
+test('report: the token is checked by its hash; a wrong or made-up token gets 404 and a malformed one 400; the token is only read from the POST body',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s);
+  assert.equal((await report(s,a.token)).status,200);
+  const flip=a.token.slice(0,-1)+(a.token.endsWith('A')?'B':'A');
+  for(const tok of [flip,'A'.repeat(43),a.sid+'A'.repeat(21)])assert.equal((await report(s,tok)).status,404,tok);
+  for(const body of [{token:a.token.slice(1)},{token:a.token+'x'},{token:a.token,sid:a.sid},{},{token:1}])assert.equal((await invoke(apiReq('/api/report',body),s.env)).status,400,JSON.stringify(body));
+  assert.equal((await invoke(new Request(origin+'/api/report?token='+a.token),s.env)).status,405,'no GET with the token in the URL');});
+test('report: fewer than REPORT_MIN candidate views shows nothing but "not enough"; after that each cell under REPORT_MIN is null; only this store, only the last 4 weeks, only a sid issued for the same kind',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food'),other=await newStore(s,'food');
+  const pick=(sid,picks,ip)=>invoke(apiReq('/api/pick-stat',{kind:'food',picks,sid},ip),s.env);
+  const W={topic:'wait',rating:'concern',details:['serving']},D={topic:'dish',rating:'good'};
+  for(let i=0;i<REPORT_MIN-1;i++)assert.equal((await pick(a.sid,[W,D],'198.51.100.'+i)).status,200);
+  let r=(await report(s,a.token)).body;assert.deepEqual(r,{kind:'food',since:dayOf(Date.now()-(REPORT_DAYS-1)*86400000),days:REPORT_DAYS,min:REPORT_MIN,enough:false});
+  await pick(a.sid,[W,{topic:'drink',rating:'ok'}],'198.51.100.50');
+  for(let i=0;i<3;i++)await pick(other.sid,[{topic:'price',rating:'concern'}],'198.51.100.6'+i);
+  await invoke(apiReq('/api/pick-stat',{kind:'beauty',picks:[{topic:'result',rating:'good'}],sid:a.sid}),s.env);  // kind mismatch: not this store's
+  await pick('Z'.repeat(22),[W],'198.51.100.70');  // never issued: nothing stored
+  r=(await report(s,a.token)).body;assert.equal(r.enough,true);assert.equal(r.responses,REPORT_MIN);
+  const row=id=>r.topics.find(x=>x.topic===id);
+  assert.deepEqual(row('wait'),{topic:'wait',good:null,ok:null,concern:REPORT_MIN});assert.deepEqual(row('dish'),{topic:'dish',good:null,ok:null,concern:null},'4 of 5 is under the minimum: hidden');
+  assert.deepEqual(row('price'),{topic:'price',good:null,ok:null,concern:null},'another store never leaks in');
+  assert.deepEqual(r.topics.map(x=>x.topic),['dish','drink','service','ambience','wait','price','location']);
+  assert.deepEqual(r.steps.map(x=>x.step),REPORT_STEPS);
+  assert.equal(s.q.db.prepare("SELECT count(*) n FROM store_picks WHERE sid='"+'Z'.repeat(22)+"'").get().n,0);
+  // the 4-week window: rows older than REPORT_DAYS are left out
+  s.q.db.exec("UPDATE store_picks SET day='2026-08-01' WHERE sid='"+a.sid+"' AND topic='drink'");s.q.db.exec("UPDATE store_steps SET day='2026-08-01' WHERE sid='"+a.sid+"'");
+  assert.equal((await report(s,a.token)).body.enough,false,'old counts do not keep the report open');
+  // pick-stat without sid (older QRs) keeps working and writes nothing per store
+  const before=s.q.db.prepare('SELECT count(*) n FROM store_picks').get().n;
+  assert.equal((await invoke(apiReq('/api/pick-stat',{kind:'food',picks:[D]}),s.env)).status,200);assert.equal(s.q.db.prepare('SELECT count(*) n FROM store_picks').get().n,before);
+  for(const bad of [{kind:'food',picks:[D],sid:'short'},{kind:'food',picks:[D],sid:a.token}])assert.equal((await invoke(apiReq('/api/pick-stat',bad),s.env)).status,400);});
+test('report: per-sender daily cap; a failed read releases the slot and is counted as api-report',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s);const codes=[];for(let i=0;i<61;i++)codes.push((await report(s,a.token,'198.51.100.99')).status);
+  assert.deepEqual([...new Set(codes.slice(0,60))],[200]);assert.equal(codes[60],429);
+  s.q.db.exec('DROP TABLE store_steps');assert.equal((await report(s,a.token,'198.51.100.98')).status,503);
+  assert.equal(Object.entries(s.q.rows()).filter(([k,v])=>k.startsWith('rpip:')&&v===0).length,1,'released');
+  assert.deepEqual(loopRows(s.q).map(x=>[x.screen,x.error_type]),[['api-report','report_error.Error']]);});
+test('notice: the owner\'s one line (≤ NOTICE_MAX) is returned with secrets masked; wording that asks for ratings or reviews is refused; nothing is stored',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');const n=(topic,text)=>invoke(apiReq('/api/notice',{token:a.token,topic,text}),s.env);
+  const before=allRows(s.q).replace(/"count":\d+/g,'');
+  let r=await n('wait','待ち時間を短くするため、注文の受け方を変えました');assert.equal(r.status,200);assert.deepEqual(r.body,{topic:'wait',text:'待ち時間を短くするため、注文の受け方を変えました'});
+  r=await n('wait','ご意見は owner@example.com へ');assert.deepEqual(r.body,{topic:'wait',text:'ご意見は [MASKED:EMAIL] へ'});
+  for(const bad of ['高評価をお願いします','★5をつけてね','星5つで','5つ星','⭐️','口コミを書いてください','クチコミ','レビューお待ちしています','Googleに投稿','満点を','評価してね','ＲＥＶＩＥＷ'])
+    {r=await n('wait','待ち時間を直しました。'+bad);assert.equal(r.status,400,bad);assert.deepEqual(r.body,{error:'asks_for_rating'},bad);}
+  for(const bad of ['a'.repeat(NOTICE_MAX+1),'一行目\n二行目','<b>直した</b>','',' '])assert.deepEqual((await n('wait',bad)).body,{error:'invalid_input'},JSON.stringify(bad));
+  assert.equal((await n('result','直しました')).status,400,'topic of another kind');assert.equal((await n('bar','直しました')).status,400);
+  assert.equal((await invoke(apiReq('/api/notice',{token:'A'.repeat(43),topic:'wait',text:'直しました'}),s.env)).status,404);
+  assert.equal((await invoke(apiReq('/api/notice',{token:a.token,topic:'wait',text:'直しました',store:'x'}),s.env)).status,400);
+  assert.ok(!allRows(s.q).includes('注文の受け方')&&!allRows(s.q).includes('owner@'),'the sign text is not stored');
+  assert.deepEqual(validNotice({token:a.token,topic:'wait',text:'  ＡＢＣを直しました '},'food'),{topic:'wait',text:'ABCを直しました'});});
+test('event: {event, sec?, sid?} only; the first send carries the time bucket (counted in funnel_times) and the sid (counted for that store when issued); no IP or text anywhere',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');const ev=(body,ip='192.0.2.80')=>invoke(apiReq('/api/event',body,ip),s.env);
+  for(const b of [{event:'view',sec:'0-10',sid:a.sid},{event:'rating',sec:'10-20',sid:a.sid},{event:'rated',sec:'30-60',sid:a.sid},{event:'copy',sec:'120+'},{event:'copy'},{event:'view',sec:'0-10',sid:'Z'.repeat(22)}])
+    assert.deepEqual((await ev(b)).body,{recorded:true},JSON.stringify(b));
+  for(const b of [{event:'view',sec:'5'},{event:'view',sec:10},{event:'view',sid:a.sid},{event:'view',sec:'0-10',sid:'x'},{event:'view',sec:'0-10',storeName:'架空'},{event:'topic',sec:'0-10'},{event:'view',sec:'0-10',sid:a.sid,text:'x'}])
+    assert.equal((await ev(b)).status,400,JSON.stringify(b));
+  const ft=s.q.db.prepare('SELECT step,bucket,count FROM funnel_times ORDER BY step,bucket').all().map(r=>[r.step,r.bucket,r.count]);
+  assert.deepEqual(ft,[['copy','120+',1],['rated','30-60',1],['rating','10-20',1],['view','0-10',2]]);
+  assert.equal(s.q.rows()['ev:'+day+':copy'],2,'every send still counts in ev:');
+  const st=s.q.db.prepare('SELECT sid,step,count FROM store_steps ORDER BY step').all().map(r=>[r.sid,r.step,r.count]);
+  assert.deepEqual(st,[[a.sid,'rated',1],[a.sid,'rating',1],[a.sid,'view',1]],'the made-up sid wrote nothing');
+  assert.ok(!allRows(s.q).includes('192.0.2.80'));
+  for(const b of TIME_BUCKETS)assert.ok(validEvent({event:'view',sec:b}));});
+test('funnel-stats GET: LOOP_EVENTS_TOKEN gate; per step the reach (first sends), all sends, the bucket counts and a median estimated from the buckets; closed days only',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const get=(q='',auth='Bearer '+TOKEN)=>invoke(new Request(origin+'/api/funnel-stats'+q,{headers:auth?{authorization:auth}:{}}),s.env);
+  assert.equal((await get()).status,404);s.env.LOOP_EVENTS_TOKEN=TOKEN;assert.equal((await get('','Bearer x')).status,401);
+  s.q.db.exec("INSERT INTO funnel_times VALUES ('2026-09-23','view','0-10',10),('2026-09-23','cands','10-20',2),('2026-09-23','cands','20-30',4),('2026-09-24','cands','30-60',4),('2026-09-25','cands','0-10',50),('2026-09-24','google','120+',3)");
+  s.q.db.exec("INSERT INTO quota VALUES ('ev:2026-09-23:view',12),('ev:2026-09-24:cands',11),('ev:2026-09-25:view',9),('psday:2026-09-24',3)");
+  Date.now=()=>Date.parse('2026-09-25T12:00:00Z');const r=(await get('?since=2026-09-20')).body;
+  assert.equal(r.before,'2026-09-25');const step=id=>r.steps.find(x=>x.step===id);
+  assert.deepEqual(step('view'),{step:'view',reach:10,sends:12,buckets:{'0-10':10,'10-20':0,'20-30':0,'30-60':0,'60-120':0,'120+':0},median_sec_estimate:5,median_at_least_sec:null});
+  assert.deepEqual({...step('cands'),buckets:undefined},{step:'cands',reach:10,sends:11,buckets:undefined,median_sec_estimate:27.5,median_at_least_sec:null});
+  assert.deepEqual([step('google').median_sec_estimate,step('google').median_at_least_sec],[null,120]);
+  assert.match(r.note,/estimated from the bucket counts/);
+  assert.deepEqual(medianFromBuckets({}),{median_sec_estimate:null,median_at_least_sec:null});
+  assert.deepEqual(medianFromBuckets({'10-20':1,'20-30':1}),{median_sec_estimate:20,median_at_least_sec:null});});
+test('classify: only checked items survive: known topic and rating ids, known details, one per topic, and quote that is really in the customer\'s text',()=>{
+  const text='料理はとてもおいしかった。でも待ち時間が長くて、駐車場もせまい';
+  const out=JSON.stringify({items:[
+    {topic:'dish',rating:'good',details:['taste','spicy'],quote:'料理はとてもおいしかった'},
+    {topic:'wait',rating:'concern',details:[],quote:'待ち時間が 長くて'},
+    {topic:'location',rating:'concern',details:['parking'],quote:'駐車場が広い'},
+    {topic:'service',rating:'good',details:[],quote:'店員さんが親切'},
+    {topic:'dish',rating:'concern',details:[],quote:'料理'},
+    {topic:'result',rating:'good',quote:'料理'},{topic:'price',rating:'great',quote:'料理'},{topic:'price',rating:'ok'}]});
+  assert.deepEqual(classifyItems('food',text,'```json\n'+out+'\n```'),[{topic:'dish',rating:'good',details:['taste'],quote:'料理はとてもおいしかった'},{topic:'wait',rating:'concern',details:[],quote:'待ち時間が 長くて'}]);
+  for(const bad of ['', 'not json','{"items":"x"}','[]',null])assert.deepEqual(classifyItems('food',text,bad),[]);
+  assert.ok(validClassify({kind:'food',text:'よかった'}));for(const b of [{kind:'food',text:''},{kind:'food',text:'a'.repeat(201)},{kind:'bar',text:'x'},{kind:'food',text:'x',storeName:'s'},{kind:'food',text:'<b>'}])assert.equal(validClassify(b),null,JSON.stringify(b));});
+test('classify API: same AI quota, stop date and fallback as /api/draft; the text is never stored or logged; without AI nothing is preselected',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const text='料理はおいしかったが、待ち時間が長かった 架空の本文';let seen;
+  s.env.AI={async run(model,input){seen=input;return {response:JSON.stringify({items:[{topic:'dish',rating:'good',details:[],quote:'料理はおいしかった'},{topic:'wait',rating:'concern',details:[],quote:'待ち時間が長かった'},{topic:'price',rating:'good',details:[],quote:'安かった'}]})};}};
+  const c=(body,ip='192.0.2.90')=>invoke(apiReq('/api/classify',body,ip),s.env);
+  let r=await c({kind:'food',text});assert.deepEqual(r.body,{picks:[{topic:'dish',rating:'good',details:[],quote:'料理はおいしかった'},{topic:'wait',rating:'concern',details:[],quote:'待ち時間が長かった'}],mode:'ai'});
+  assert.match(seen.messages[0].content,/"topic":"dish"/);assert.equal(JSON.parse(seen.messages[1].content).text,text);
+  assert.equal(s.q.rows().total,1,'one AI call takes one from the shared quota');
+  for(let i=0;i<9;i++)await c({kind:'food',text});r=await c({kind:'food',text});assert.deepEqual(r.body,{picks:[],mode:'fallback'},'the 11th call from one sender falls back (10 per sender per day, shared with /api/draft)');
+  const d=await invoke(request({text:'ok',storeName:'s'},{'cf-connecting-ip':'192.0.2.90'}),s.env);assert.equal(d.body.mode,'fallback','/api/draft shares the same per-sender quota');
+  Date.now=()=>AI_UNTIL;seen=null;r=await c({kind:'food',text},'198.51.100.5');assert.deepEqual(r.body,{picks:[],mode:'fallback'});assert.equal(seen,null,'no AI after the stop date');Date.now=()=>Date.parse('2026-09-25T00:00:00Z');
+  s.env.AI={async run(){throw Error('model offline '+text);}};r=await c({kind:'food',text},'198.51.100.6');assert.deepEqual(r.body,{picks:[],mode:'fallback'});
+  assert.ok(!allRows(s.q).includes('架空の本文')&&!allRows(s.q).includes('料理'),'text never stored');assert.ok(!JSON.stringify(logs).includes('架空')&&!JSON.stringify(logs).includes('offline'),'text never logged');
+  assert.deepEqual(loopRows(s.q).map(x=>[x.screen,x.error_type]),[['api-classify','classify_error.Error']],'only the failure is counted (per-sender quota is expected), with its class name only');
+  for(const body of [{kind:'food'},{kind:'food',text,storeName:'s'}])assert.equal((await c(body)).status,400);});
+test('store report: migrations 0004+0005 and schema.sql define the same four tables; the migration only adds; CHECKs refuse other steps and buckets',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
+  const tables=['funnel_times','stores','store_picks','store_steps'];
+  const cols=(...files)=>{const db=new mod.DatabaseSync(':memory:');for(const file of files)db.exec(readFileSync(new URL(file,import.meta.url),'utf8'));return JSON.stringify(tables.map(t=>[db.prepare('PRAGMA table_info('+t+')').all(),db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL ORDER BY name").all(t).map(r=>r.sql.replace(/\s+/g,' ').replace(/\( /g,'(').replace(/ \)/g,')').replace(/ ,/g,','))]));};
+  assert.equal(cols('../migrations/0004_store_report.sql','../migrations/0005_store_last_used.sql'),cols('../schema.sql'));
+  const sql=readFileSync(new URL('../migrations/0004_store_report.sql',import.meta.url),'utf8').replace(/--.*$/gm,'');assert.ok(!/^\s*(DROP|DELETE|UPDATE|ALTER|INSERT)\b/im.test(sql));assert.ok(!/\b(quota|trial_applications|loop_events|pick_stats)\b/.test(sql));
+  const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
+  for(const bad of ["INSERT INTO funnel_times VALUES ('2026-09-25','topic','0-10',1)","INSERT INTO funnel_times VALUES ('2026-09-25','view','5',1)","INSERT INTO stores VALUES ('short','"+'a'.repeat(64)+"','food','2026-09-25',NULL)","INSERT INTO stores VALUES ('"+'A'.repeat(22)+"','XYZ','food','2026-09-25',NULL)","INSERT INTO stores VALUES ('"+'A'.repeat(22)+"','"+'a'.repeat(64)+"','food','2026-09-25','9/25')"])assert.throws(()=>db.exec(bad),/CHECK/,bad);});
+test('app.js: the events carry only {event, sec?, sid?}; the pick counts add sid only from the QR; #create sends only the kind to /api/store',()=>{
+  const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+  const tr=app.slice(app.indexOf('function track('),app.indexOf('function reach('));assert.ok(tr.includes("const body={event};")&&!/storeName|reviewUrl|text|picks/.test(tr),tr);
+  const is=app.slice(app.indexOf('async function issueStore'),app.indexOf('function showOwnerCopy'));assert.ok(is.includes('JSON.stringify({kind})')&&!/storeName|name|url\b/.test(is.replace('res.json','')),is);
+  const pf=app.slice(app.indexOf('function preparePoster'),app.indexOf('function preparePoster')+600);assert.ok(!/report|token/.test(pf),'the poster never gets the report link');});
+
+// ---- 保存期間（DECISIONS.md「保存期間・表示基準」）: scheduled() の削除。今日 = 2026-09-25（beforeEach）。
+// 期限: 13か月 → 2025-08-25、6か月 → 2026-03-25、1年 → 2025-09-25。境界の日は残し、その前の日は消える。
+async function retentionEnv(t){const s=await trialEnv(t);if(!s)return null;s.q.db.exec('PRAGMA foreign_keys = ON');return s;}  // D1 は外部キーを強制する
+const infos=[];const realLog=console.log;
+beforeEach(()=>{infos.length=0;console.log=(...a)=>infos.push(a);});afterEach(()=>{console.log=realLog;});
+async function runScheduled(env,now=Date.now()){const pending=[];await worker.scheduled({scheduledTime:now,cron:PURGE_CRON},env,{waitUntil(p){pending.push(p);}});await Promise.all(pending);}
+const SID=c=>c.repeat(22),HASH=c=>c.repeat(64);
+function addStore(db,sid,created,last){db.prepare('INSERT INTO stores (sid,token_hash,kind,created_day,last_used_day) VALUES (?,?,?,?,?)').run(sid,HASH(sid[0].toLowerCase()==sid[0]?'a':'b').slice(0,63)+sid[0].toLowerCase().replace(/[^0-9a-f]/,'c'),'food',created,last);}
+const loopRow=(db,day,fp,text)=>db.prepare("INSERT INTO loop_events (day,product,kind,screen,version,fp,category,text_masked) VALUES (?,'hitokoto-beta',?,?,'v1',?,?,?)").run(day,text===null?'error':'feedback',text===null?'customer':'lp',fp,text===null?null:'idea',text);
+const days=(db,table,where='')=>db.prepare('SELECT day FROM '+table+(where?' WHERE '+where:'')+' ORDER BY day').all().map(r=>r.day);
+test('retention: cutoffs are calendar months in UTC days (13 / 6 / 12), month ends are clamped, and the plan uses them',()=>{
+  assert.deepEqual(RETENTION_MONTHS,{counts:13,ownerText:6,storeIdle:12});
+  assert.deepEqual(purgePlan(Date.parse('2026-09-25T00:00:00Z')).cutoffs,{counts:'2025-08-25',ownerText:'2026-03-25',storeIdle:'2025-09-25'});
+  assert.deepEqual(purgePlan(Date.parse('2026-09-25T23:59:59Z')).cutoffs,{counts:'2025-08-25',ownerText:'2026-03-25',storeIdle:'2025-09-25'},'UTC day, not JST');
+  assert.equal(monthsBefore('2026-03-31',1),'2026-02-28');assert.equal(monthsBefore('2028-02-29',12),'2027-02-28');assert.equal(monthsBefore('2026-01-15',13),'2024-12-15');assert.equal(monthsBefore('2026-08-31',6),'2026-02-28');
+  assert.match(PURGE_CRON,/^\d{1,2} \d{1,2} \* \* \*$/,'once a day');});
+test('retention: each table keeps the boundary day and loses the day before it (13 months; owner text 6 months, whole row); quota rows are not touched',async(t)=>{const s=await retentionEnv(t);if(!s)return;const db=s.q.db;
+  addStore(db,SID('A'),'2025-01-01','2026-09-20');
+  for(const d of ['2025-08-24','2025-08-25','2026-09-24']){
+    db.prepare("INSERT INTO funnel_times VALUES (?,'view','0-10',1)").run(d);
+    db.prepare("INSERT INTO pick_stats VALUES (?,'food','dish','good','',1)").run(d);
+    db.prepare("INSERT INTO store_picks VALUES (?,?,'dish','good','',1)").run(SID('A'),d);
+    db.prepare("INSERT INTO store_steps VALUES (?,?,'view',1)").run(SID('A'),d);}
+  loopRow(db,'2025-08-24','e000000000000001',null);loopRow(db,'2025-08-25','e000000000000002',null);loopRow(db,'2026-03-24','e000000000000003',null);
+  loopRow(db,'2026-03-24','f000000000000001','[MASKED:EMAIL] の表示が遅い');loopRow(db,'2026-03-25','f000000000000002','ボタンが小さい');
+  db.exec("INSERT INTO quota VALUES ('total',5),('trtotal',2),('ev:2025-08-24:view',3),('ev:2025-08-25:view',4),('ev:2025-08-24:cands',1),('ip:2026-09-24:h',2),('trip:2026-09-21:h',1)");
+  await runScheduled(s.env);
+  for(const tb of ['funnel_times','pick_stats','store_picks','store_steps'])assert.deepEqual(days(db,tb),['2025-08-25','2026-09-24'],tb);
+  assert.deepEqual(days(db,'loop_events','text_masked IS NULL'),['2025-08-25','2026-03-24'],'rows without text: 13 months');
+  assert.deepEqual(db.prepare('SELECT day, fp, text_masked FROM loop_events WHERE text_masked IS NOT NULL').all().map(r=>({...r})),[{day:'2026-03-25',fp:'f000000000000002',text_masked:'ボタンが小さい'}],'owner text: the whole row (text and the fp made from it) goes after 6 months');
+  assert.equal(db.prepare("SELECT count(*) n FROM loop_events WHERE fp='f000000000000001'").get().n,0);
+  assert.equal(db.prepare('SELECT count(*) n FROM stores').get().n,1,'a store in use stays');
+  assert.deepEqual(s.q.rows(),{'ev:2025-08-25:view':4,'ip:2026-09-24:h':2,total:5,trtotal:2},'ev: step counts: 13 months by the day in the key; lifetime counters stay; rate-limit rows older than 3 days go daily (trip:2026-09-21), newer ones stay');
+  const line=infos.find(a=>a[0]==='retention_purge');assert.ok(line,'one summary line');
+  const out=JSON.parse(line[1]);const rate=Object.fromEntries(Object.entries(out.deleted).filter(([k])=>k.startsWith('quota_rate_')));for(const k of Object.keys(rate))delete out.deleted[k];assert.equal(rate.quota_rate_trip,1);assert.equal(Object.values(rate).reduce((a,b)=>a+b,0),1);assert.deepEqual(out,{deleted:{funnel_times:1,pick_stats:1,quota_ev:2,store_picks:1,store_steps:1,loop_events:1,loop_events_owner_text:1,store_picks_idle_store:0,store_steps_idle_store:0,stores:0},more:[],failed:[]});
+  const all=JSON.stringify([infos,logs]);for(const secret of ['MASKED','遅い','ボタン',SID('A'),'2025-08-24','2026-03-24'])assert.ok(!all.includes(secret),'log has table names and counts only: '+secret);});
+test('retention: a store goes 1 year after it was last used (last_used_day, else created_day), with its store_picks/store_steps first; the day of the boundary stays',async(t)=>{const s=await retentionEnv(t);if(!s)return;const db=s.q.db;
+  addStore(db,SID('A'),'2024-01-01','2025-09-24');  // idle: 1 day past the year
+  addStore(db,SID('B'),'2024-01-01','2025-09-25');  // exactly one year: stays
+  addStore(db,SID('C'),'2025-09-24',null);          // never used since 0004: created_day counts
+  addStore(db,SID('D'),'2025-09-25',null);
+  for(const sid of ['A','B','C','D'].map(SID)){db.prepare("INSERT INTO store_picks VALUES (?,'2025-09-20','dish','good','',1)").run(sid);db.prepare("INSERT INTO store_steps VALUES (?,'2025-09-20','picks',1)").run(sid);}
+  await runScheduled(s.env);
+  assert.deepEqual(db.prepare('SELECT sid FROM stores ORDER BY sid').all().map(r=>r.sid),[SID('B'),SID('D')]);
+  for(const tb of ['store_picks','store_steps'])assert.deepEqual(db.prepare('SELECT DISTINCT sid FROM '+tb+' ORDER BY sid').all().map(r=>r.sid),[SID('B'),SID('D')],tb);
+  const out=JSON.parse(infos.find(a=>a[0]==='retention_purge')[1]);assert.equal(out.deleted.stores,2);assert.equal(out.deleted.store_picks_idle_store,2);assert.equal(out.deleted.store_steps_idle_store,2);assert.deepEqual(out.failed,[]);});
+test('retention: at most PURGE_LIMIT rows per statement; the rest waits for the next day, and a store is removed only after its rows are gone (no foreign key error)',async(t)=>{const s=await retentionEnv(t);if(!s)return;const db=s.q.db;
+  assert.equal(PURGE_LIMIT,5000);
+  for(let i=0;i<7;i++)db.prepare("INSERT INTO funnel_times VALUES (?,'view','0-10',1)").run('2024-0'+(i+1)+'-01');
+  addStore(db,SID('A'),'2024-01-01','2025-01-01');for(let i=0;i<5;i++)db.prepare("INSERT INTO store_picks VALUES (?,?,'dish','good','',1)").run(SID('A'),'2025-09-0'+(i+1));
+  const runs=[];for(let i=0;i<4;i++)runs.push(await purgeExpired(s.q,Date.now(),3));
+  assert.deepEqual(runs.map(r=>r.deleted.funnel_times),[3,3,1,0]);assert.deepEqual(runs.map(r=>r.more.includes('funnel_times')),[true,true,false,false]);
+  assert.deepEqual(runs.map(r=>r.deleted.store_picks_idle_store),[3,2,0,0]);assert.deepEqual(runs.map(r=>r.deleted.stores),[0,1,0,0],'the store waits until its picks are gone');
+  assert.ok(runs.every(r=>r.failed.length===0),JSON.stringify(runs.map(r=>r.failed)));
+  assert.equal(db.prepare('SELECT count(*) n FROM funnel_times').get().n,0);assert.equal(db.prepare('SELECT count(*) n FROM stores').get().n,0);});
+test('retention: one failing statement is logged by table name only and the other tables are still purged; no D1 binding logs and returns',async(t)=>{const s=await retentionEnv(t);if(!s)return;const db=s.q.db;
+  db.prepare("INSERT INTO funnel_times VALUES ('2024-01-01','view','0-10',1)").run();db.prepare("INSERT INTO pick_stats VALUES ('2024-01-01','food','dish','good','',1)").run();
+  const prep=s.q.prepare.bind(s.q);const broken={...s.q,prepare:sql=>sql.includes('FROM funnel_times')?{bind(){return {async run(){throw new TypeError('D1_ERROR: secret detail 2024-01-01');}};}}:prep(sql)};
+  await runScheduled({QUOTA:broken});
+  assert.equal(db.prepare('SELECT count(*) n FROM funnel_times').get().n,1);assert.equal(db.prepare('SELECT count(*) n FROM pick_stats').get().n,0);
+  assert.deepEqual(logs.filter(l=>l[1]==='retention_purge_failed'),[['error','retention_purge_failed','funnel_times','TypeError']]);
+  assert.ok(!JSON.stringify([logs,infos]).includes('secret detail'));assert.deepEqual(JSON.parse(infos.find(a=>a[0]==='retention_purge')[1]).failed,['funnel_times']);
+  logs.length=0;await runScheduled({});assert.deepEqual(logs,[['error','retention_purge_failed','bindings']]);});
+test('retention: last_used_day is set when the store is made, and moved to today by a pick, a stage and the owner opening the report; at most one write per store per day',async(t)=>{const s=await retentionEnv(t);if(!s)return;const db=s.q.db;
+  Date.now=realNow;  // /api/event dates by new Date() (the real clock), so every route here runs on the real clock
+  const a=await newStore(s,'food');const today=dayOf(Date.now());const last=()=>db.prepare('SELECT last_used_day d FROM stores WHERE sid=?').get(a.sid).d;
+  assert.equal(last(),today);
+  const writes=[];const prep=s.q.prepare.bind(s.q);s.q.prepare=sql=>{const st=prep(sql);if(!sql.startsWith('UPDATE stores'))return st;return {bind(...v){const b=st.bind(...v);return {...b,async run(){const r=await b.run();writes.push(r.meta.changes);return r;}};}};};
+  const old=()=>db.prepare("UPDATE stores SET last_used_day='2025-01-01' WHERE sid=?").run(a.sid);
+  old();assert.equal((await invoke(apiReq('/api/pick-stat',{kind:'food',picks:[{topic:'dish',rating:'good'}],sid:a.sid},'198.51.100.1'),s.env)).status,200);assert.equal(last(),today,'pick');
+  old();assert.equal((await invoke(apiReq('/api/pick-stat',{kind:'beauty',picks:[{topic:'result',rating:'good'}],sid:a.sid},'198.51.100.2'),s.env)).status,200);assert.equal(last(),'2025-01-01','a sid sent with another kind is not this store');
+  old();assert.equal((await invoke(apiReq('/api/event',{event:'view',sec:'0-10',sid:a.sid},'198.51.100.3'),s.env)).status,200);assert.equal(last(),today,'stage');
+  old();assert.equal((await report(s,a.token)).status,200);assert.equal(last(),today,'report');
+  writes.length=0;await report(s,a.token);await invoke(apiReq('/api/pick-stat',{kind:'food',picks:[{topic:'dish',rating:'good'}],sid:a.sid},'198.51.100.4'),s.env);await invoke(apiReq('/api/event',{event:'view',sec:'0-10',sid:a.sid},'198.51.100.5'),s.env);
+  assert.deepEqual(writes,[0,0,0],'same day: the UPDATE matches no row, nothing is written');
+  const n=await invoke(apiReq('/api/report',{token:'Q'.repeat(43)}),s.env);assert.equal(n.status,404);assert.equal(last(),today);});
+test('retention: migration 0005 adds last_used_day to stores and marks stores that already exist as used on the day it is applied (never older)',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
+  const sql=readFileSync(new URL('../migrations/0005_store_last_used.sql',import.meta.url),'utf8');const bare=sql.replace(/--.*$/gm,'').trim();
+  assert.ok(!/\b(DROP|DELETE|INSERT)\b/i.test(bare));assert.ok(!/\b(quota|trial_applications|loop_events|pick_stats|funnel_times|store_picks|store_steps)\b/.test(bare));
+  const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL('../migrations/0004_store_report.sql',import.meta.url),'utf8'));
+  db.prepare("INSERT INTO stores VALUES (?,?,'food','2024-01-01')").run(SID('A'),HASH('a'));db.exec(sql);
+  const today=new Date().toISOString().slice(0,10);  // SQLite date('now') is the real UTC day
+  assert.deepEqual({...db.prepare('SELECT created_day, last_used_day FROM stores').get()},{created_day:'2024-01-01',last_used_day:today});});
+test('retention: privacy.html and the LP state the same periods as the code, and no TODO is left',()=>{
+  const privacy=readFileSync(new URL('../public/privacy.html',import.meta.url),'utf8'),lp=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
+  assert.ok(!/TODO/.test(privacy),'no TODO left in privacy.html');
+  const list=privacy.slice(privacy.indexOf('<dl class="retention-list">'),privacy.indexOf('</dl>'));
+  const when=Object.fromEntries([...list.matchAll(/<dt>([^<]+)<\/dt>[\s\S]*?いつ消すか<\/span>([^<]+)<\/dd>/g)].map(m=>[m[1],m[2]]));
+  assert.deepEqual(Object.keys(when),['試用のお申し込み','時間の計測（利用状況の件数）','話題の件数','お店ごとの報告','店主のご意見','エラーの記録','連打対策']);
+  const m=RETENTION_MONTHS;
+  for(const k of ['時間の計測（利用状況の件数）','話題の件数','エラーの記録'])assert.equal(when[k],'記録した日から'+m.counts+'か月',k);
+  assert.ok(when['お店ごとの報告'].startsWith('件数は記録した日から'+m.counts+'か月。')&&when['お店ごとの報告'].includes('最後に使われた日から'+(m.storeIdle/12)+'年'));
+  assert.equal(when['店主のご意見'],'受け取ってから'+m.ownerText+'か月');assert.equal(when['連打対策'],'3日後');
+  assert.ok(when['試用のお申し込み'].startsWith('試用期間の終了から1年。'));
+  assert.ok(privacy.includes('ご意見の内容は、受け取ってから'+m.ownerText+'か月で削除します。'));
+  assert.ok(lp.includes('エラーの記録は'+m.counts+'か月、店主のご意見は'+m.ownerText+'か月、お店の登録は最後に使われてから1年で、毎日自動で削除します。'));});
+test('retention: when the last-used write fails, the report answers 503 (the owner can retry) and the failure is counted, never silently skipped',async(t)=>{const s=await retentionEnv(t);if(!s)return;
+  const a=await newStore(s,'food');const prep=s.q.prepare.bind(s.q);
+  s.q.prepare=sql=>sql.startsWith('UPDATE stores SET last_used_day')?{bind(){return {async run(){throw new TypeError('D1_ERROR');}};}}:prep(sql);
+  assert.equal((await report(s,a.token)).status,503);
+  assert.equal(s.q.db.prepare("SELECT count(*) n FROM loop_events WHERE screen='api-report' AND error_type='report_error.TypeError'").get().n,1);});
+
+test('連打対策の行は API が使われない日が続いても毎日3日で消える（接頭辞は worker 内の LIKE と一致）', async () => {
+  const src=(await import('node:fs')).readFileSync(new URL('../worker.mjs', import.meta.url),'utf8');
+  const likes=[...src.matchAll(/LIKE '([a-z]+):%'/g)].map(m=>m[1]).filter(p=>p!=='ev');
+  const mod=await import('../worker.mjs');
+  assert.deepEqual([...new Set(likes)].sort(),[...mod.RATE_KEY_PREFIXES].sort());
+  const now=Date.parse('2026-10-10T00:00:00Z');
+  const plan=mod.purgePlan(now);
+  for(const p of mod.RATE_KEY_PREFIXES){
+    const step=plan.steps.find(s=>s[0]==='quota_rate_'+p);
+    assert.ok(step,p);
+    assert.equal(step[2],p+':2026-10-07');
+    // 3日前の日付のキーは残り、それより前は消える（文字列の大小）
+    assert.ok((p+':2026-10-06:x') < step[2]);
+    assert.ok(!((p+':2026-10-07:x') < step[2]));
+  }
+});

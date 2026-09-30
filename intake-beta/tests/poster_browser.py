@@ -9,13 +9,13 @@ R=Path(__file__).resolve().parents[1];PUB=R/'public'
 BASE='https://hitokoto.example';GOOGLE='https://g.page/r/qa-fictional-store/review';STORE='QA用の架空店舗'
 # Same policy the worker sets on every static response (worker.mjs); kept in sync by the assertion below.
 SECURITY_HEADERS={'content-security-policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",'x-content-type-options':'nosniff','referrer-policy':'no-referrer'}
-HIDDEN_IN_PRINT=['header','footer','#store-form','.lp-hero','#faq','#copy-link','#preview-link','#poster-actions','#share-url','#how-it-works','#price','.lp-aside','#customer-view']
+HIDDEN_IN_PRINT=['header','footer','#store-form','#owner-copy','#owner-copy-none','.lp-hero','#faq','#copy-link','#preview-link','#poster-actions','#share-url','#how-it-works','#price','.lp-aside','#customer-view']
 PRINT_ALLOWLIST={'share-result'}  # #store-view の直下でprint時に残ってよい要素はこれだけ
 LONG_GOOGLE='https://g.page/r/'+'A'*2400+'/review'  # validGoogle は通るが QR(v40-M 2331B) に入らない
 SHOWN_IN_PRINT=['#print-store','#print-url','#qr-area svg']
 def main():
  ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);args=ap.parse_args()
- result={'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'base':BASE,'served_from_disk':True,'synthetic_inputs':True,'real_google_posts':0,'draft_api_requests':0,'external_requests_blocked':[],'errors':[],'files':{}}
+ result={'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'base':BASE,'served_from_disk':True,'synthetic_inputs':True,'real_google_posts':0,'draft_api_requests':0,'store_api_bodies':[],'external_requests_blocked':[],'errors':[],'files':{}}
  assert SECURITY_HEADERS['content-security-policy'] in (R/'worker.mjs').read_text(),'test CSP drifted from worker.mjs'
  for name in ('index.html','app.js','styles.css','qrcode.min.js'):result['files'][name]=hashlib.sha256((PUB/name).read_bytes()).hexdigest()
  with sync_playwright() as p:
@@ -23,6 +23,8 @@ def main():
   def route(r):
    url=r.request.url
    if not url.startswith(BASE+'/'):result['external_requests_blocked'].append(url.split('?')[0]);return r.abort()
+   # ① /api/store is refused here (network down): the QR must come out exactly as before, without s= and without a report link
+   if url.startswith(BASE+'/api/store'):result['store_api_bodies'].append(json.loads(r.request.post_data));return r.abort()
    if '/api/' in url:result['draft_api_requests']+=1;return r.abort()
    path=url[len(BASE):].split('?')[0].lstrip('/') or 'index.html';f=PUB/path
    if not f.is_file():return r.fulfill(status=404,body='')
@@ -35,6 +37,7 @@ def main():
   expect(page.locator('#share-result')).to_be_visible();share=page.locator('#share-url').input_value();result['share_url']=share
   expect(page.locator('#qr-area svg')).to_be_visible();expect(page.locator('#poster-actions')).to_be_visible()
   assert page.locator('#print-store').text_content()==STORE;assert page.locator('#print-url').text_content()==share
+  assert result['store_api_bodies']==[{'kind':'general'}],result['store_api_bodies'];assert '&s=' not in share;expect(page.locator('#owner-copy')).to_be_hidden();expect(page.locator('#owner-copy-none')).to_be_visible()
   assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'),'mobile overflow'
   # download: file is an SVG carrying the same modules as the on-screen QR
   with page.expect_download() as dl:page.locator('#download-qr').click()
@@ -57,10 +60,10 @@ def main():
   page.emulate_media(media='screen');page.set_viewport_size({'width':1440,'height':1000});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
   page.screenshot(path=str(Path(args.out).with_suffix('.desktop.png')),full_page=True)
   # regenerating with the same inputs yields the same share URL (store keeps no record)
-  page.locator('#store-form button').click();assert page.locator('#share-url').input_value()==share
+  page.locator('#share-url').evaluate("e=>{e.value=''}");page.locator('#store-form button').click();expect(page.locator('#share-url')).to_have_value(share)  # the form waits for /api/store now
   # failed regeneration must not leave the previous poster in the print sheet (Devin review finding 1)
   page.locator('#review-url').fill(LONG_GOOGLE);page.locator('#store-form button').click()
-  assert '長すぎ' in (page.locator('#qr-area').text_content() or ''),'over-long url must fall back to the share link';assert page.locator('#qr-area svg').count()==0
+  expect(page.locator('#qr-area')).to_contain_text('長すぎ');assert page.locator('#qr-area svg').count()==0
   expect(page.locator('#poster-actions')).to_be_hidden();assert page.locator('#print-store').text_content()=='' and page.locator('#print-url').text_content()=='',('stale poster text after failed regeneration',page.locator('#print-store').text_content())
   assert page.locator('#download-qr').get_attribute('href') is None,'stale download href after failed regeneration'
   page.emulate_media(media='print');assert page.locator('#print-store').evaluate('e=>e.textContent')=='' and page.locator('#qr-area svg').count()==0,'stale poster visible in print after failed regeneration';page.emulate_media(media='screen')
