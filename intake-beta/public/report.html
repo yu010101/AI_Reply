@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>お店の声の報告 — ひとことβ</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header report-screen"><div class="wrap header-inner"><a class="logo" href="/">ひとこと<span class="logo-beta">β</span></a></div></header>
+<main class="report-page">
+<div class="report-screen">
+<h1>お店の声の報告</h1>
+<p class="hint">このページは店主控えの「報告用リンク」から開いたお店の方だけのページです。リンクを知っている人は誰でも見られるので、共有しないでください。<a href="privacy.html#store-report">データの扱い</a></p>
+<p id="report-status" class="hint" role="status" aria-live="polite">読み込んでいます…</p>
+<section id="report-few" class="card hidden"><h2>まだ少ないため、表示していません</h2><p>このQRから文章の候補を見たお客さまが <span id="report-min">5</span> 件以上になると、話題と評価の件数を表示します。件数が少ないうちは、お客さまが特定されないよう数を出していません。</p></section>
+<section id="report-body" class="card hidden">
+<h2>話題と評価（<span id="report-range"></span>）</h2>
+<p class="hint">お客さまが答えた話題と評価の件数です。1つの欄が <span class="report-min-inline">5</span> 件未満のときは「5件未満」とだけ表示します。感想の文章は運営にも届いていません。</p>
+<table class="report-table"><thead><tr><th scope="col">話題</th><th scope="col">よかった</th><th scope="col">ふつう</th><th scope="col">気になった</th></tr></thead><tbody id="report-topics"></tbody></table>
+<h2>どこまで進んだか</h2>
+<p class="hint">このQRからお客さま画面を開いた回数と、そこから各段階まで進んだ回数です（同じ画面では1回だけ数えます）。</p>
+<dl class="report-steps" id="report-steps"></dl>
+</section>
+<section id="effect-card" class="card hidden">
+<h2>効果を自分で確かめる</h2>
+<p class="effect-warn"><strong>ご自身で入力した数字です。ひとことβの効果を示すものではありません。</strong>口コミの件数は、季節・来店数・ほかの取り組みなどでも変わります。</p>
+<p class="hint">Google の店のページで口コミの件数を見て、設置した日と今日の件数を入れると、その差を表示します。入れた数字はこの端末のブラウザの中にだけ保存し、運営には送りません。</p>
+<form id="effect-form"><label for="effect-start">設置した日の Google の口コミ件数</label><input id="effect-start" type="number" inputmode="numeric" min="0" max="100000" step="1">
+<label for="effect-today">今日の件数</label><input id="effect-today" type="number" inputmode="numeric" min="0" max="100000" step="1">
+<p id="effect-diff" class="effect-diff" role="status" aria-live="polite"></p></form>
+<p><a id="effect-maps" class="text-link" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps">Google マップで店のページを開く ↗</a><br><a class="text-link" target="_blank" rel="noopener noreferrer" href="https://business.google.com/">Google ビジネスプロフィール（店の管理画面）を開く ↗</a></p>
+<p class="hint" id="effect-maps-note">店のページへのリンクは、QRを作るときに入れた Google の口コミリンクから作っています。開けないときは、Google マップで店名を検索してください。</p>
+</section>
+<section id="notice-card" class="card hidden">
+<h2>「直しました」の札を作る</h2>
+<p class="hint">気になったが多い話題を上から並べています。直したことを短く書くと、掲示用の札を印刷できます。札は、来店したすべての方に同じものを見せる掲示用です。特定のお客さまにだけ見せたり、口コミや評価のお願い・特典と組み合わせたりしないでください（「高評価」「★5」「口コミ」などの言葉は使えません）。</p>
+<form id="notice-form">
+<label for="notice-topic">話題</label><select id="notice-topic"></select>
+<label for="notice-text">直したこと <span class="optional">60字まで・1行</span></label><input id="notice-text" maxlength="60" placeholder="例：待ち時間を短くするため、注文の受け方を変えました" autocomplete="off">
+<p class="hint">メールアドレス・電話番号・URLなどは自動で伏せ字になります。</p>
+<button class="primary" type="submit">札を作る</button>
+<p id="notice-status" class="hint" role="status" aria-live="polite"></p>
+</form>
+<button id="notice-print" class="secondary hidden" type="button">札を印刷する</button>
+</section>
+</div>
+<section id="notice-sheet" aria-label="札の見本"><p class="notice-head">お客さまの声から、直しました</p><p class="notice-topic" id="notice-sheet-topic"></p><p class="notice-text" id="notice-sheet-text"></p><p class="notice-foot">よかったことも、気になったことも、QRからひとことお聞かせください。</p></section>
+</main>
+<script src="compose.js" defer></script>
+<script src="report.js" defer></script>
+</body>
+</html>

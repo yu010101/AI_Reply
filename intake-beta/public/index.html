@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f3f5f1">
 <title>ひとことβ｜QRを置くだけ。お客さまが、自分の言葉で書ける。</title>
-<meta name="description" content="お店の口コミ入口をつくる「ひとことβ」。店名とGoogleの口コミリンクでQRと掲示用ポスターを作成。お客さまは何がどうだったかをタップで選び、選んだことだけでできた文章を自由に直して、確認してから自分でGoogleに投稿します。振り分け・特典との引き換え・自動投稿はしません。">
+<meta name="description" content="お店の口コミ入口をつくる「ひとことβ」。店名とGoogleの口コミリンクでQRと掲示用ポスターを作成。お客さまは話題ごとにどうだったかをタップで選び（書いた感想からAIが先に選ぶこともできます）、選んだことだけでできた文章を自由に直して、確認してから自分でGoogleに投稿します。振り分け・特典との引き換え・自動投稿はしません。">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -30,7 +30,7 @@
 <p class="lead">店名とGoogleの口コミリンクを入れると、お客さま用の共有リンク・QR・掲示用ポスターができます。登録やクレジットカードは要りません。</p>
 </div>
 <form id="store-form" class="card create-part"><h2>店名とリンクを入れる</h2><p class="muted">必要なのは店名とGoogleの口コミリンクだけ。作成後にお客さまの画面を確認できます。</p><label for="store-name">お店の名前</label><input id="store-name" maxlength="80" required placeholder="例：喫茶 こもれび" autocomplete="organization"><details class="optional-settings"><summary>お店に合わせた質問を選ぶ（任意）</summary><label for="store-kind">お店の種類 <span class="optional">任意</span></label><select id="store-kind"><option value="general">その他・指定しない</option><option value="food">飲食店・カフェ</option><option value="beauty">美容室・サロン</option><option value="retail">ショップ</option></select></details><label for="review-url">Googleの口コミリンク</label><input id="review-url" type="url" required placeholder="https://g.page/r/…/review" aria-describedby="url-help"><p id="url-help" class="hint">お店のGoogleビジネスプロフィールにある「クチコミを依頼」からコピーできます。例：https://g.page/r/店舗ID/review</p><button class="primary" type="submit">共有リンクを作る <span>↗</span></button><p class="error" id="store-error" role="alert"></p></form>
-<section id="share-result" class="card create-part hidden" aria-label="共有リンク"><div class="eyebrow">準備ができました</div><h2>お客さまへ、このリンクを。</h2><input id="share-url" readonly aria-label="共有URL"><button id="copy-link" class="primary">リンクをコピー</button><a id="preview-link" class="text-link">お客さまの画面を開く ↗</a><p class="print-only" id="print-store"></p><div id="qr-area" class="hidden"></div><p class="print-only" id="print-message"></p><p class="print-only" id="print-url"></p><div id="poster-actions" class="hidden"><button id="print-qr" class="secondary" type="button">掲示用に印刷する</button><a id="download-qr" class="text-link" download="hitokoto-qr.svg">QR画像を保存する（SVG）</a><p class="hint">印刷には店名・QR・共有URLが入ります。共有URLは保存されないため、印刷物やメモで保管してください。同じ店名とリンクで作り直すと同じ共有URLになります。</p><div class="voice-kit" id="voice-kit"><strong>声かけの例（画面だけに表示・印刷されません）</strong><p id="voice-script"></p><p class="hint">割引・特典と引き換えにしたり、よい評価だけをお願いしたりしないでください。Googleの口コミのポリシーで禁止されています。</p></div></div></section>
+<section id="share-result" class="card create-part hidden" aria-label="共有リンク"><div class="eyebrow">準備ができました</div><h2>お客さまへ、このリンクを。</h2><input id="share-url" readonly aria-label="共有URL"><button id="copy-link" class="primary">リンクをコピー</button><a id="preview-link" class="text-link">お客さまの画面を開く ↗</a><p class="print-only" id="print-store"></p><div id="qr-area" class="hidden"></div><p class="print-only" id="print-message"></p><p class="print-only" id="print-url"></p><div id="poster-actions" class="hidden"><button id="print-qr" class="secondary" type="button">掲示用に印刷する</button><a id="download-qr" class="text-link" download="hitokoto-qr.svg">QR画像を保存する（SVG）</a><p class="hint">印刷には店名・QR・共有URLが入ります（報告用リンクは入りません）。店名と共有URLは運営に保存されないため、印刷物やメモで保管してください。</p><div class="voice-kit" id="voice-kit"><strong>声かけの例（画面だけに表示・印刷されません）</strong><p id="voice-script"></p><p class="hint">割引・特典と引き換えにしたり、よい評価だけをお願いしたりしないでください。Googleの口コミのポリシーで禁止されています。</p><p class="hint" data-staff-note>お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから口コミを投稿しないでください。Googleのポリシーで、雇用関係や家族関係などの「利益相反に基づくコンテンツ」は禁止されています。</p></div></div><div id="owner-copy" class="owner-copy hidden"><h3>店主控え（お客さまに見せないでください）</h3><p class="hint">報告用リンクを開くと、このQRから来たお客さまが選んだ話題と評価の件数（直近4週）と、どこまで進んだかを見られます。件数が少ないうちは、お客さまが特定されないよう「まだ少ない」とだけ表示します。リンクを知っている人は誰でも見られるので、お店の方だけで保管してください。運営はこのリンクを保存していないため、再発行できません。お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから口コミを投稿しないでください。Googleのポリシーで、雇用関係や家族関係などの「利益相反に基づくコンテンツ」は禁止されています。<a href="privacy.html#store-report">データの扱い</a></p><label for="report-url">報告用リンク（店主だけ）</label><input id="report-url" readonly><button id="copy-report" class="secondary" type="button">報告用リンクをコピー</button><button id="print-owner" class="secondary" type="button">店主控えを印刷する</button><a id="open-report" class="text-link" target="_blank" rel="noopener noreferrer">報告を開く ↗</a><p id="owner-copy-status" class="hint" role="status" aria-live="polite"></p><p class="hint">作り直すと、新しい報告用リンクになります（前のQRと前の報告用リンクもそのまま使えます）。</p><div class="owner-print print-only"><p class="owner-print-title">ひとことβ 店主控え（お客さまに見せないでください）</p><p id="owner-print-store"></p><p class="owner-print-label">報告用リンク（店主だけ）</p><p id="owner-print-report" class="owner-print-url"></p><p class="owner-print-label">お客さま用の共有リンク</p><p id="owner-print-share" class="owner-print-url"></p><p>報告用リンクを知っている人は誰でも件数を見られます。運営は再発行できないため、この紙は店内の見えない場所に保管してください。</p></div></div><p id="owner-copy-none" class="hint hidden">報告用リンクは作れませんでした（通信できなかったため）。QRと共有リンクはそのまま使えます。報告が必要なときは、時間をおいて作り直してください。</p></section>
 
 <div id="lp">
 <section class="slide lp-hero" id="top" aria-labelledby="fv-h">
@@ -49,7 +49,7 @@
 <figure class="hero-visual" aria-label="お店でQRを読み取ったお客さまと、お客さまのスマホ画面の見本">
 <div class="hero-stage">
 <div class="scene-img hero-photo"><img src="img/hero-cafe.webp" width="1200" height="900" loading="eager" fetchpriority="high" decoding="async" alt="窓際の席で、コーヒーを前にスマホを見て微笑む女性。テーブルにはQRの卓上カードが立っている"><span class="ai-badge">イメージ（AI生成）</span></div>
-<div class="phone hero-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="eager" decoding="async" alt="お客さまの画面。選んだことから組み立てた文章「料理・飲み物は、味と温かさがよかったです。待ち時間は、料理が出るまでが気になりました。」を自由に直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
+<div class="phone hero-phone"><img src="img/screen-result.webp" width="600" height="1200" loading="eager" decoding="async" alt="お客さまの画面。選んだことから組み立てた文章「料理は、味と温かさがよかったです。待ち時間は、注文から出てくるまでが気になりました。」を自由に直せる欄、確認のチェック、「感想をコピー」と「Googleを開く」のボタン"></div>
 </div>
 <figcaption>スマホはお客さまの実際の画面です（店名・感想は架空の例）。写真はAIで生成したイメージで、実在のお店・人物ではありません。</figcaption>
 </figure>
@@ -89,8 +89,8 @@
 <li class="reveal">
 <p class="step-who">お客さま</p>
 <h3>QRを読んで、タップで選ぶ</h3>
-<p>何が・どうだったかを選ぶと、その内容だけで文章の候補ができます。</p>
-<div class="phone step-phone"><video class="lp-video" poster="video/step-customer-poster.webp" width="600" height="1200" muted playsinline loop preload="none" aria-label="お客さまの画面の録画（約9秒・音声なし）。料理・飲み物と待ち時間を選び、料理・飲み物は「よかった」で味と温かさ、待ち時間は「気になった」で料理が出るまでを選び、「文章の候補を見る」で候補が3つ出る"><source src="video/step-customer.mp4" type="video/mp4"><source src="video/step-customer.webm" type="video/webm"></video></div>
+<p>話題ごとにどうだったかを選ぶと、その内容だけで候補ができます。</p>
+<div class="phone step-phone"><video class="lp-video" poster="video/step-customer-poster.webp" width="600" height="1200" muted playsinline loop preload="none" aria-label="お客さまの画面の録画（約9秒・音声なし）。思ったことを書いて「書いた内容から選ぶ」を押すと料理と待ち時間が先に選ばれ、残りの話題も選んで「文章の候補を見る」で候補が3つ出る"><source src="video/step-customer.mp4" type="video/mp4"><source src="video/step-customer.webm" type="video/webm"></video></div>
 </li>
 <li class="reveal">
 <p class="step-who">お客さま本人</p>
@@ -109,18 +109,18 @@
 <h2 id="example-h" class="reveal">選んだことだけが、文章になる。</h2>
 <p class="section-lead">選んだ「何が・どうだった・どこが」だけから、言い回しの違う候補を3つ組み立てます。ほめ言葉や推薦を足したり、気になった点を消したりはしません。</p>
 <div class="example-grid">
-<figure class="demo reveal"><div class="phone demo-phone"><video id="demo-video" class="lp-video" poster="video/demo-customer-poster.webp" width="600" height="1200" muted playsinline loop controls preload="none" aria-label="お客さまの画面の操作。料理・飲み物は「よかった」（味・温かさ）、待ち時間は「気になった」（料理が出るまで）を選び、できた候補から文章を選んで、確認のチェックを入れてGoogleを開くまで（約33秒・音声なし）"><source src="video/demo-customer.mp4" type="video/mp4"><source src="video/demo-customer.webm" type="video/webm"></video></div>
-<figcaption>お客さまの画面を録画したものです（約33秒・音声なし）。店名・選んだ内容・文章は架空の例で、字幕は説明のために重ねています。</figcaption></figure>
+<figure class="demo reveal"><div class="phone demo-phone"><video id="demo-video" class="lp-video" poster="video/demo-customer-poster.webp" width="600" height="1200" muted playsinline loop controls preload="none" aria-label="お客さまの画面の操作。思ったことを書くとAIが料理（よかった・味）と待ち時間（気になった・注文から出てくるまで）を先に選び、残りの話題を選んで、できた候補から文章を選び、確認のチェックを入れてGoogleを開くまで（約35秒・音声なし）"><source src="video/demo-customer.mp4" type="video/mp4"><source src="video/demo-customer.webm" type="video/webm"></video></div>
+<figcaption>お客さまの画面を録画したものです（約35秒・音声なし）。店名・選んだ内容・文章とAIの読み取り結果は録画用の架空の例で、字幕は説明のために重ねています。</figcaption></figure>
 <div class="example-col">
 <div class="before-after">
 <div class="ba-box reveal">
 <p class="ba-label">お客さまが選んだこと</p>
-<p class="ba-text ba-picks">料理・飲み物：よかった（味・温かさ）<br>待ち時間：気になった（料理が出るまで）</p>
+<p class="ba-text ba-picks">料理：よかった（味・温かさ）<br>待ち時間：気になった（注文から出てくるまで）</p>
 </div>
 <p class="ba-arrow" aria-hidden="true">↓</p>
 <div class="ba-box ba-after reveal">
 <p class="ba-label">できた文章の候補の一つ（ていねい）。このあと本人が自由に直せます</p>
-<p class="ba-text">料理・飲み物は、味と温かさがよかったです。待ち時間は、料理が出るまでが気になりました。</p>
+<p class="ba-text">料理は、味と温かさがよかったです。待ち時間は、注文から出てくるまでが気になりました。</p>
 </div>
 </div>
 <p class="fiction-note">架空の例です。実際のお客さまの口コミではありません。</p>
@@ -129,8 +129,8 @@
 <p class="example-note">「気になった」を選んだことは、どの候補にも必ず残ります。候補はAIを使わずに組み立てます（<a href="#faq-use">くわしくはよくある質問</a>）。</p>
 <h3 class="sub-h">お店の種類で変わる、選べる話題</h3>
 <dl class="prompt-list">
-<div><dt><svg class="ico" aria-hidden="true"><use href="#i-coffee"></use></svg>飲食店・カフェ</dt><dd>料理・飲み物／接客／雰囲気・席／待ち時間／価格</dd></div>
-<div><dt><svg class="ico" aria-hidden="true"><use href="#i-scissors"></use></svg>美容室・サロン</dt><dd>仕上がり／カウンセリング／接客／雰囲気／待ち時間／価格</dd></div>
+<div><dt><svg class="ico" aria-hidden="true"><use href="#i-coffee"></use></svg>飲食店・カフェ</dt><dd>料理／飲み物／接客／雰囲気・席／待ち時間／価格／立地・アクセス</dd></div>
+<div><dt><svg class="ico" aria-hidden="true"><use href="#i-scissors"></use></svg>美容室・サロン</dt><dd>技術・仕上がり／カウンセリング／接客サービス／雰囲気／待ち時間／メニュー・料金</dd></div>
 <div><dt><svg class="ico" aria-hidden="true"><use href="#i-shopping-bag"></use></svg>ショップ</dt><dd>品ぞろえ／接客／お店の雰囲気／お会計・待ち時間／価格</dd></div>
 <div><dt><svg class="ico" aria-hidden="true"><use href="#i-store"></use></svg>その他</dt><dd>接客／雰囲気／待ち時間／価格／わかりやすさ</dd></div>
 </dl>
@@ -251,7 +251,7 @@
 <div class="scope-grid">
 <div>
 <h3 class="sub-h">できること</h3>
-<ul class="icon-list scope-yes"><li><svg class="ico" aria-hidden="true"><use href="#i-qr-code"></use></svg><span>共有リンクとQRの作成</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-printer"></use></svg><span>掲示用ポスターの印刷、QR画像の保存</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-mouse-pointer-click"></use></svg><span>話題・評価・「どこが？」を選ぶだけの文章の候補（AIは使いません）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-spell-check"></use></svg><span>自分で書いた感想の、AIによる句読点の整え</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-languages"></use></svg><span>お客さま画面の4言語表示</span></li></ul>
+<ul class="icon-list scope-yes"><li><svg class="ico" aria-hidden="true"><use href="#i-qr-code"></use></svg><span>共有リンクとQRの作成</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-printer"></use></svg><span>掲示用ポスターの印刷、QR画像の保存</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-mouse-pointer-click"></use></svg><span>話題・評価・「どこが？」を選ぶだけの文章の候補（候補の文にAIは使いません）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-message-square-text"></use></svg><span>書いた感想から、AIが話題と評価を先に選ぶ（お客さまが確かめて直せます）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-chart-line"></use></svg><span>お店ごとの声の報告（店主だけのリンク）と「直しました」の札</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-spell-check"></use></svg><span>自分で書いた感想の、AIによる句読点の整え</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-languages"></use></svg><span>お客さま画面の4言語表示</span></li></ul>
 </div>
 <div>
 <h3 class="sub-h">まだできないこと</h3>
@@ -271,12 +271,14 @@
 <div class="scope-part" id="data">
 <h3 class="part-h">お客さまの感想は、保存しません。</h3>
 <ul class="plain-notes">
-<li>感想の本文は、ひとことβのデータベースに保存しません。選んだ話題からの文章の候補は、お客さまのスマホの中だけで組み立てます。自分で書いた感想や「ひとこと足す」の言葉を整えるときだけ、Cloudflare Workers AIへ送ります。</li>
-<li>共有リンクに入るのは、店名・Googleの口コミリンク・お店の種類だけです。</li>
+<li>感想の本文は、ひとことβのデータベースに保存しません。選んだ話題からの文章の候補は、お客さまのスマホの中だけで組み立てます。お客さまが書いた感想は、句読点を整えるときと、話題と評価を読み取るときだけ、Cloudflare Workers AIへ送ります。</li>
+<li>共有リンクに入るのは、店名・Googleの口コミリンク・お店の種類と、新しく作ったQRではお店ごとの件数を数えるための乱数の店ID（店名から作ったものではありません）だけです。</li>
 <li>利用状況は、日付と操作の種類だけを数えます。店名・本文・IPアドレスは送りも保存もしません。</li>
+<li>候補を作るときに選んだ話題と評価の組み合わせの件数を、業種ごとに数えます。店舗やお客さまとは結びつけず、感想の文章は送りません。</li><li>新しいQRでは、同じ件数をお店ごとにも数え、店主だけが持つ報告用リンクで見られます。件数が少ないうちは、お客さまが特定されないよう表示しません。</li><li>お客さま画面の各段階に、開いてから何秒ごろ着いたか（10秒・20秒などの区切り）を数えます。秒そのもの・本文・店名は送りません。</li>
+<li>時間の計測・話題の件数・お店ごとの件数・エラーの記録は13か月、店主のご意見は6か月、お店の登録は最後に使われてから1年で、毎日自動で削除します。連打対策の記録は3日で消します。</li>
 <li>試用のお申し込み内容は、試用期間の終了から1年で削除します。正式版をお申し込みのお店は契約期間中保管します。</li>
 </ul>
-<p><a class="text-link" href="privacy.html">データの扱いをくわしく見る</a></p>
+<p><a class="text-link" href="privacy.html#retention">記録ごとの保存期間</a>　<a class="text-link" href="privacy.html">データの扱いをくわしく見る</a></p>
 </div>
 </div>
 </section>
@@ -291,12 +293,12 @@
 <details><summary>やめたいときは、どうすればいいですか？</summary><p>ポスターやQRを外すだけです。お店の登録情報はないため、解約の手続きもありません。</p></details>
 <h3 class="faq-cat" id="faq-rule"><svg class="ico" aria-hidden="true"><use href="#i-shield-check"></use></svg>Googleのルールと3つの約束</h3>
 <details><summary>Googleに自動で投稿されますか？</summary><p>されません。お客さまがご自身でGoogleを開き、星を選んで文章を貼り付け、投稿します。投稿せずに閉じてもかまいません。</p></details>
-<details><summary>Googleのルールに反しませんか？</summary><p>Googleのポリシーでは、特典と引き換えに口コミを頼むことや、よい口コミだけを選んで頼むことが禁止されています。ひとことβは感想で振り分けず、特典も付けません。お店の頼み方もルールの対象なので、声かけの際はご注意ください。</p><p>よかった感想も、気になった感想も、同じGoogleの入口へ。低い評価だけを別の窓口に回すしくみはありません。</p></details>
+<details><summary>Googleのルールに反しませんか？</summary><p>Googleのポリシーでは、特典と引き換えに口コミを頼むことや、よい口コミだけを選んで頼むことが禁止されています。ひとことβは感想で振り分けず、特典も付けません。お店の頼み方もルールの対象なので、声かけの際はご注意ください。</p><p>よかった感想も、気になった感想も、同じGoogleの入口へ。低い評価だけを別の窓口に回すしくみはありません。</p><p>お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから投稿しないでください。Googleのポリシーで「利益相反に基づくコンテンツ」（雇用関係・家族関係など）は禁止されています。店主控えにも同じ注意を載せています。</p></details>
 <details><summary>気になった感想も、そのまま投稿されますか？</summary><p>はい。どんな感想にも同じGoogleへの入口を用意しています。AIが気になった点を消したり、やわらげたりすることもありません。</p></details>
 <details><summary>口コミを書いてくれたお客さまに、割引をしてもいいですか？</summary><p>いけません。割引・プレゼント・ポイントなどと引き換えに口コミを頼むことは、Googleのポリシーで禁止されています。お店の方にも、特典を付けないようお願いしています。</p></details>
 <details><summary>お店が文章を用意して、書いてもらえますか？</summary><p>できません。投稿するかどうか、何を書くかを決めるのはお客さまです。お店が文章を用意して書いてもらうこともできません。</p><p>選べる話題はお店の種類ごとに決まった言葉で、お店が変えることはできません。</p></details>
 <h3 class="faq-cat" id="faq-use"><svg class="ico" aria-hidden="true"><use href="#i-circle-help"></use></svg>使い方</h3>
-<details><summary>文章の候補は、どうやって作られますか？</summary><p>候補はAIを使わず、選んだ話題・評価・「どこが？」だけで組み立てます。お客さまは「何があったか」と「どうだったか」、よければ「どこが？」をタップで選ぶだけです。</p><p>「気になった」を選んだことは、どの候補にも必ず残ります。「よかった」「ふつう」「気になった」は同じ見た目で並び、最初はどれも選ばれていません。</p><p>「どこが？」（例：料理・飲み物なら味・温かさ・量・見た目・メニューの種類）は選ばなくてもかまいません。選んだときは、その話題と同じ評価の文になります。話題ごとの「どこが？」の項目も、お店の種類ごとに決まった言葉です。</p></details>
+<details><summary>文章の候補は、どうやって作られますか？</summary><p>候補の文はAIを使わず、選んだ話題・評価・「どこが？」だけで組み立てます。お客さまは話題ごとに「どうだったか」を、よければ「どこが？」もタップで選びます。思ったことを書いて「書いた内容から選ぶ」を押すと、AIが文章から話題と評価を読み取って先に選びます（書いた言葉の中に根拠があるものだけ）。お客さまが確かめて直せます。</p><p>「気になった」を選んだことは、どの候補にも必ず残ります。「よかった」「ふつう」「気になった」は同じ見た目で並び、最初はどれも選ばれていません。</p><p>「どこが？」（例：料理なら味・温かさ・量・見た目・メニューの種類）は選ばなくてもかまいません。選んだときは、その話題と同じ評価の文になります。話題ごとの「どこが？」の項目も、お店の種類ごとに決まった言葉です。</p></details>
 <details><summary>お客さまが自分で書くこともできますか？</summary><p>できます。候補を使わず、自分で書くこともできます。そのときAIが整えるのは句読点と区切りだけで、AIが使えないときは入力した文章をそのまま編集して続けられます。</p></details>
 <details><summary>外国のお客さまも使えますか？</summary><p>お客さまの画面は、日本語・英語・中国語（簡体字）・韓国語で表示できます。訳すのは画面の案内だけです。</p></details>
 <details><summary>QRはどこに置けばいいですか？</summary><p>レジ横やテーブル、お会計のトレーなど、お客さまの目に入る場所に置いてください。印刷すると、店名・QR・共有リンクと、ひとことの案内が1枚に入ります。</p></details>
@@ -328,24 +330,27 @@
 </section>
 <section id="customer-view" class="hidden"><div class="lang-switch" role="group" aria-label="Language / 言語"><button type="button" data-lang="ja" lang="ja" aria-pressed="true">日本語</button><button type="button" data-lang="en" lang="en" aria-pressed="false">English</button><button type="button" data-lang="zh" lang="zh-Hans" aria-pressed="false">简体中文</button><button type="button" data-lang="ko" lang="ko" aria-pressed="false">한국어</button></div><div class="eyebrow" id="customer-store"></div><h1 data-i18n="h1">どんな時間でしたか？</h1><p class="lead"><span data-i18n="lead1">タップで選ぶだけで、文章の候補ができます。</span><br><span data-i18n="lead2">自分の言葉で書くこともできます。</span></p>
 <div class="card" id="pick-card">
-<h2 id="pick-title" data-i18n="pickTitle">何がありましたか？</h2><p class="hint" data-i18n="pickNote">いくつでも選べます。選んだことだけが文章になります。</p>
-<div class="chips topic-chips" role="group" aria-labelledby="pick-title" id="topics"></div>
+<h2 id="pick-title" data-i18n="pickTitle">それぞれ、どうでしたか？</h2><p class="hint" data-i18n="pickNote">すべての話題で、よかった・ふつう・気になった のどれかを選んでください。「どこが？」は選ばなくても大丈夫です。</p>
 <button type="button" class="text-link write-own-toggle" id="write-own-toggle" aria-controls="write-own" aria-expanded="false"><span data-i18n="writeOwn">選ばずに、自分で書く</span> →</button>
-<div id="ratings" class="ratings"></div>
-<div id="addition-part" class="hidden"><label for="addition"><span data-i18n="addLabel">ひとこと足す</span> <span class="optional" data-i18n="addOptional">なくてもOK</span></label><textarea id="addition" rows="2" maxlength="200" placeholder="例：コーヒーは少し熱かった"></textarea><p class="hint" data-i18n="addNote">入れた言葉は、AIが句読点だけを整えて文章の最後に付けます。名前・連絡先などの個人情報は書かないでください。200文字まで。</p></div>
-<button id="compose-button" class="primary" type="button"><span data-i18n="composeBtn">文章の候補を見る</span> <span>→</span></button>
+<div id="addition-part"><label for="addition"><span data-i18n="addLabel">思ったことを書く</span> <span class="optional" data-i18n="addOptional">なくてもOK</span></label><textarea id="addition" rows="2" maxlength="200" placeholder="例：料理はおいしかった。待ち時間が少し長かった"></textarea><p class="hint" data-i18n="addNote">書いた文章はAIが読み取って、下の表を先に選びます（違うところは直せます）。文章は句読点だけを整えて、候補の最後に付けます。名前・連絡先などの個人情報は書かないでください。200文字まで。</p><button id="classify-button" class="secondary" type="button" data-i18n="classifyBtn">書いた内容から選ぶ</button><p id="classify-status" class="hint" role="status" aria-live="polite"></p></div>
+<div class="topic-rows" role="group" aria-labelledby="pick-title" id="topics"></div>
+<button id="compose-button" class="primary" type="button" disabled aria-describedby="compose-need"><span data-i18n="composeBtn">文章の候補を見る</span> <span>→</span></button><p id="compose-need" class="hint need-left"></p>
 <p id="compose-status" class="hint" role="status" aria-live="polite"></p>
 </div>
 <section id="candidates" class="card hidden" aria-labelledby="cand-title"><h2 id="cand-title" tabindex="-1" data-i18n="candH2">近いものを1つ選んでください</h2><p class="hint" data-i18n="candNote">あなたが選んだことだけで組み立てた文章です。言い回しだけが違います。選んだあとで自由に直せます。</p><fieldset class="cand-list"><legend class="sr-only" data-i18n="candLegend">文章の候補</legend><div id="cand-options"></div><label class="cand cand-own"><input type="radio" name="cand" value="own"><span class="cand-body"><span class="cand-style" data-i18n="ownOption">自分で書く</span><span class="cand-text" data-i18n="ownOptionNote">候補を使わず、自分の言葉で書きます。</span></span></label></fieldset></section>
 <div class="card hidden" id="write-own"><form id="draft-form"><aside class="writing-hint"><strong data-i18n="hintTitle">何から書こう？と思ったら</strong><p id="writing-prompt">今日の体験で、印象に残ったことは？</p><p class="hint" data-i18n="hintNote">よかった点も、気になった点も。答えずに自由に書いても大丈夫です。</p></aside><label for="experience" data-i18n="expLabel">あなたの感想</label><textarea id="experience" rows="4" maxlength="580" placeholder="例：窓際の席でゆっくりできました。コーヒーは少し熱かったです。"></textarea><p class="hint" data-i18n="expNote">名前・連絡先などの個人情報は書かないでください。文章を整えるとき、入力文をAIへ送ります。感想は580文字まで。</p><button id="draft-button" class="primary" type="submit"><span data-i18n="draftBtn">文章を整えてみる</span> <span>→</span></button><p id="draft-status" class="hint" role="status" aria-live="polite"></p><a class="text-link direct-google" target="_blank" rel="noopener noreferrer"><span data-i18n="direct">文章を整えず、Googleで書く</span> ↗</a></form></div>
-<section id="draft-result" class="card hidden"><div class="eyebrow" data-i18n="resultEyebrow">仕上げは、あなたの言葉で。</div><h2 data-i18n="resultH2">この内容で伝わりますか？</h2><label for="draft-text" data-i18n="editLabel">自由に直せます</label><textarea id="draft-text" rows="5" maxlength="1600"></textarea><p class="hint" id="draft-mode"></p><label class="check"><input id="confirm" type="checkbox"><span data-i18n="confirm">自分の体験と合っていることを確認しました</span></label><button id="copy-draft" class="primary" disabled data-i18n="copyBtn">感想をコピー</button><a id="google-link" class="secondary disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true"><span data-i18n="googleBtn">Googleを開く</span> ↗</a><p class="hint" data-i18n="googleNote">Googleで貼り付けて、星と内容を確認してください。投稿はご自身の操作で行います。自動では投稿されません。</p><p id="copy-status" role="status" aria-live="polite"></p></section></section>
+<section id="draft-result" class="card hidden"><div class="eyebrow" data-i18n="resultEyebrow">仕上げは、あなたの言葉で。</div><h2 data-i18n="resultH2">この内容で伝わりますか？</h2><label for="draft-text" data-i18n="editLabel">自由に直せます</label><textarea id="draft-text" rows="5" maxlength="1600"></textarea><p class="hint" id="draft-mode"></p><label class="check"><input id="confirm" type="checkbox"><span data-i18n="confirm">自分の体験と合っていることを確認しました</span></label><button id="copy-draft" class="primary" disabled data-i18n="copyBtn">感想をコピー</button><a id="google-link" class="secondary disabled" target="_blank" rel="noopener noreferrer" aria-disabled="true"><span data-i18n="googleBtn">Googleを開く</span> ↗</a><p class="hint" data-i18n="googleNote">Googleで貼り付けて、星と内容を確認してください。投稿はご自身の操作で行います。自動では投稿されません。</p><p id="copy-status" role="status" aria-live="polite"></p></section>
+<details class="loop-fb" id="customer-fb"><summary data-fb="summary">この画面について知らせる（選ぶだけ）</summary><form id="customer-fb-form"><fieldset class="fb-cats"><legend data-fb="q1">どうでしたか？</legend><label class="check"><input type="radio" name="fb-cat" value="hard_to_use"><span data-fb="hard_to_use">使いにくい</span></label><label class="check"><input type="radio" name="fb-cat" value="confusing"><span data-fb="confusing">分かりにくい</span></label><label class="check"><input type="radio" name="fb-cat" value="broken"><span data-fb="broken">動かない</span></label><label class="check"><input type="radio" name="fb-cat" value="good"><span data-fb="good">よかった</span></label></fieldset><label for="customer-fb-where" data-fb="q2">どこで？</label><select id="customer-fb-where"><option value="" data-fb="choose">選んでください</option><option value="customer-pick" data-fb="customer-pick">何があったかを選ぶところ</option><option value="customer-candidates" data-fb="customer-candidates">文章の候補</option><option value="customer-edit" data-fb="customer-edit">直す・コピー・Googleを開く</option><option value="customer-own" data-fb="customer-own">自分で書く</option></select><p class="hint" data-fb="note">選んだ2つと画面の種類だけを運営に送ります。感想の文章・お店の名前・リンクは送りません。</p><button type="submit" class="secondary" data-fb="send">送る</button></form><p id="customer-fb-status" class="hint" role="status" aria-live="polite"></p></details>
+</section>
 </main>
 <footer class="site-footer">
 <div class="wrap">
 <p class="footer-name">ひとことβ <span>あなたの感想を、あなたの言葉で。</span></p>
 <p class="footer-meta">運営：合同会社Radineer　<a href="privacy.html">データの扱い</a>　<a href="licenses.txt">使用素材のライセンス</a></p>
+<details class="loop-fb owner-fb" id="owner-fb"><summary>ご意見・不具合を送る（お店の方へ）</summary><form id="owner-fb-form"><label for="owner-fb-cat">内容の種類</label><select id="owner-fb-cat"><option value="">選んでください</option><option value="bug">不具合・動かない</option><option value="hard_to_use">使いにくい</option><option value="idea">こうしてほしい</option><option value="question">分からないこと</option><option value="other">その他</option></select><label for="owner-fb-text">ひとこと <span class="optional">任意・200字まで</span></label><textarea id="owner-fb-text" rows="3" maxlength="200"></textarea><p class="hint">送った内容は、サービスの改善のために保存します。メールアドレス・電話番号・URLなどは自動で伏せ字にしてから保存します。お返事はしていません。返事が必要なご相談は<a href="#trial">試用・相談フォーム</a>へお送りください。<a href="privacy.html#feedback">データの扱い</a></p><button type="submit" class="secondary">送る</button><p id="owner-fb-status" class="hint" role="status" aria-live="polite"></p></form></details>
 </div>
 </footer>
+<script src="loop.js" defer></script>
 <script src="qrcode.min.js" defer></script>
 <script src="compose.js" defer></script>
 <script src="app.js" defer></script>
