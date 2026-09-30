@@ -1,251 +1,59 @@
 {
-  "task_id": "intake-lp-redesign-20260929",
-  "owner": "reviews-lp (Claude実装・ローカルcommitのみ) → メインが本人確認のうえ push/PR",
-  "acceptance": [
-    "トップを店舗オーナー向けLPに作り直す（RESEARCH.md 6章の構成、見出し案C、実績の数字なし、入力例は架空と明記、3つの約束）。QR作成は #create の別画面に分け、既存のQR作成・印刷・SVG保存・/api/event・多言語は維持",
-    "POST /api/trial: 店名80・お名前40・連絡先120(メールか電話10〜15桁)・ひとこと400字(任意)を検証し D1 trial_applications に保存。IPは保存しない。同一送信元1日3件・全体1日30件・累計500件で429。/api/draft と同じ Origin/POST/JSON 門。隠し欄が埋まっていれば保存せず ok",
-    "AI 期限を定数 AI_UNTIL にし 2027-04-01T00:00+09:00（2027-03-31 JST いっぱい）を仮置き",
-    "D1 マイグレーションは intake-beta/migrations/0001_trial_applications.sql をファイルで用意するだけ（本番未適用）",
-    "既存の worker.test.mjs・poster_kit.test.mjs・funnel_browser.py・poster_browser.py を維持し、lp_browser.py と /api/trial の試験を追加。配備・wrangler 書込は行わない",
-    "LP v2（もっとリッチに）: 実UIから撮ったスマホ画面(tools/capture_screens.py→public/img/screen-*.webp)をCSSの端末枠でFVと3ステップに表示。AI生成の店舗写真4枚(Higgsfield z_image)に各「イメージ（AI生成）」表記。悩み・しくみ・約束・向いているお店に自作のインラインSVG線画アイコン。朱のアクセント(#b4441c, WCAG AA)。IntersectionObserverのふわっと表示（prefers-reduced-motionでは無効）。画像は同一オリジンのWebP・1枚200KB以下・loading=lazy・width/height指定。CSP変更なし",
-    "LP v3（配色・写真・動画）: 配色を紺(#1b3a6b)＋明るい青(#2563d9, 白文字5.43:1・地5.10:1)に変更し変数名を --accent に。FVに人物入りのAI生成写真(hero-cafe.webp,「イメージ（AI生成）」表記・写真内QRは復号不可)＋実画面のスマホを重ね、FVの画像だけ eager。実例の欄にお客さま画面の録画デモ(tools/record_demo.py: CDP screencastで2倍解像度・/api/draftは架空例を返す・字幕は録画用の重ね表示)を mp4/webm で置き、画面内に入ったときだけ無音で再生・動きを減らす設定では再生しない",
-    "お客さま画面 v4（選ぶだけで下書き）: 業種(kind=general/food/beauty/retail)ごとの固定の中立な名詞の話題を選び、話題ごとに よかった/ふつう/気になった（同じ見た目・初期選択なし）を選ぶと、public/compose.js（AIなしの決定論・純関数）がその選択だけから3文体（短く/ていねい/くだけた）の候補を組み立てる。選んでいない話題・ほめ言葉の上乗せ・推薦/再訪意向・数字は入れず、気になったは必ず残る。任意の「ひとこと足す」だけを /api/draft に通して末尾に付ける（fallbackでも動く）。候補を選ぶと既存の編集欄→確認→コピー/Googleへ。「自分で書く」から既存の整文の流れも使える。ja/en/zh/ko すべてで候補を出す。tests/compose.test.mjs で全kind×全話題部分集合×全評価×4言語×3文体を網羅検査。デモ動画・スクショ・LPの#exampleを新しい流れに更新",
-    "お客さま画面 v5（どこが？の細目）: 話題の評価を選ぶと「よかったのはどこ？／どこがふつう？／気になったのはどこ？」で業種×話題ごとの固定の中立な名詞の細目チップ（任意・複数・初期選択なし・同じ見た目）を選べる。細目は話題の評価を受け継ぎ、その話題の文だけに入る（例「料理・飲み物は、味と温かさがよかったです。」）。細目なしなら従来の文のまま。ja/en/zh/ko の訳と文型あり。tests/compose.test.mjs は細目なしの全網羅に加え、細目を層化（話題単独×評価×細目の全部分集合／2話題×評価×細目の境界4通り／全話題×全細目と先頭細目×全評価割当／固定シードの無作為40,000件）で同じ検査(a)〜(f)＋文型の骨格を行う",
-    "LP v5 文言: DECISIONS.md の約束①②④・予定価格の文・申込情報の保管期間を一字一句そのまま掲載（③は /api/trial 申込完了の画面メッセージ）。予定価格は無料試用とは別の段、打ち消し線・「通常」「今なら」なし（lp_browser.py で検査）。FVのリードを選ぶ流れに書き換え（H1は不変）",
-    "/api/trial の Slack 通知: D1 保存に成功し env.SLACK_WEBHOOK_URL があるときだけ ctx.waitUntil(fetch) で1回、本文は店名と受付番号(trial_applications.id)のみ。redirect:'manual'。失敗しても応答は200 ok、ログは状態コードかエラー種別だけ。隠し欄・不正入力・429・保存失敗では送らない。Webhook の本番設定は本人が wrangler secret put で行う（未設定）",
-    "LP v6（縦スライド＋右に申込フォーム）: #lp を1節=1枚のスライド9枚（FV/悩み/しくみ/実例/約束/置く場所とポスター/料金/できること・データ/FAQ・運営・締め）にし、各 min-height:100svh・scroll-snap-type:y proximity（動きを減らす設定ではなし）・左上に「NN / 09」。1024px以上は既存の試用フォーム(#trial, 4項目・/api/trial・③④の文言そのまま)を右の列に position:sticky で常に表示し、ヘッダーのナビはスライド番号へのリンク（表示中のスライドに aria-current）。1024px未満は固定せず料金の次に置き、下部固定バーに「試用を申し込む」を追加（フォームが画面にある間はバーを隠す）。線付き小見出し・蛍光マーカー・線画アイコン・色付きの縁/縦線・枠で囲んだカード・丸い番号バッジ・チェック印をやめ、角丸は操作部品とスマホ以外8px以下、影は写真とスマホだけ、青は主ボタンとリンクだけ、紺の面は約束の1枚だけ。lp_browser.py で FORBID（computed style による機械検査）・スライドの高さと番号・1280x800 で全スライドと最下部でフォームが画面内・390 でバーからフォームへ移動・390/1024/1280/1440 で横スクロールなしを検査。#create とお客さま画面は変更なし",
-    "LP v7（黒字を減らし、写真・動画・アイコン・図解を増やす）: 各スライドの地の文を1280x800で2行以内に（04/06/08/09の長い節は例外）。詳細はFAQへ移し分類（料金と試用/Googleのルールと3つの約束/使い方/お客さまのデータ）。決定文言（約束①〜④・予定価格・保管期間・FVリード・申込完了③）とGoogleポリシー/ステマ関連の注記は一字一句そのまま（場所の移動のみ）。AI生成写真4枚（Higgsfield z_image 4:3、悩み/約束の背景/料金/締め）に「イメージ（AI生成）」、写真内QRはOpenCV（QRCodeDetector＋WeChat）で復号不可を確認、WebP 60KB以下・width/height・lazy。実画面の短い無音ループ4本（tools/record_demo.py --clips: 03の3ステップ＋06ポスター、5〜10秒、mp4＋webm＋poster、preload=none、画面内でだけ再生・動きを減らす設定では再生せず controls を付ける。既存デモと同じ仕組みを video.lp-video で共通化）。Lucide（ISC）のアイコンを tools/build_icons.py でインラインの <symbol> スプライトにし（外部読み込み・CSP変更なし、public/licenses.txt）、文や見出しの横に22pxで置く（枠・背景・カードに入れない）。汎用イラストは使わず、実物（吹き出し・スマホ・卓上カード・Googleの星）の線画 svg.illus。lp_browser.py: FORBID は .ico/.illus だけ例外にして据え置き、check_icons・check_videos・check_text_lines を追加（それぞれ入れ替え試験で落ちることを確認）",
-    "改善ループの受け口（Radineer/tickets tools/loop events.py のプロダクト受け口に合わせる）: POST /api/loop-event は既存の refuse()/boundedJSON()/UNSAFE_CHARS の門のうえで3つの形だけ受ける（例外 {kind,screen,version,error_type,frame?,fp}／お客さまの選択式FB {kind,screen,version,category}／店主のご意見 {kind,screen:lp|create,version,category,text?≤200字}）。許可外の鍵は捨てずに400。日付はサーバーが付け、指紋はサーバーが検証済みの項目から作る。店主の文は保存前にメール・電話・URL・鍵を [MASKED:種類] に。D1 loop_events に (day,kind,fp) ごとの count で集約（1行の上限 10000）。上限は quota 表の lpip:（1送信元1日20）/lfip:（店主のご意見 1日5）/lpday:（全体1日2000）、3日で削除。IP・店名・本文・URL・例外メッセージ・スタック本文は保存しない。サーバー側の失敗（draft の error/bindings/ceiling/quota_day/quota_total、trial_error、trial_notify_*、event_error）を理由コード＋エラー種別名だけで同じ表に数え、応答・ログは変えない。GET /api/loop-events?since= は LOOP_EVENTS_TOKEN（32字以上）が無ければ404、Bearer を SHA-256 後の定数時間比較、締まった日（UTC で10分前の日付より前）だけを events.py が読む JSON 配列で返す（本文・IP・店名なし）。public/loop.js は window error/unhandledrejection から自分たちのJSファイル名:関数名だけを取り、同じ指紋は1セッション1回・1ページ5件まで。お客さま画面は選択式だけ（自由記述欄なし）で1セッション1回、店主のご意見はフッター（お客さま画面では非表示）。migrations/0002_loop_events.sql はファイルのみ（本番未適用）。privacy.html に追記案（ご意見の保存期間は本人決定待ちのため未記入・配備前に要決定）。CSP 変更なし。試験: worker.test.mjs（14件追加）、tests/loop_browser.py、tests/loop_adapter_check.py（実際の GET 出力を tickets 側 events.py に無改変で通し reject 0・読み直しで event_id 同一）",
-    "話題の表の見直し（DECISIONS.md「話題の外部根拠と選択の記録」の本人決定）: 飲食の「料理・飲み物」を「料理」(味/温かさ/量/見た目/メニューの種類)と「飲み物」(味/温度/量/種類)に分け（食べログの taste/drinks）、「立地・アクセス」(駅からの近さ/道の分かりやすさ/駐車場)を追加（SemEval-2016 location）。「料理が出るまで」は話題名「料理」を含むため「注文から出てくるまで」に改名（en/ko も同様）。美容はホットペッパービューティー公式の口コミ一覧ページで項目名（雰囲気/接客サービス/技術・仕上がり/メニュー・料金）の原文を確認できたので 技術・仕上がり/接客サービス/メニュー・料金 に（価格の細目「メニューとのつりあい」は話題名と重なるため「内容とのつりあい」）。各話題に compose.js EVIDENCE で出どころを持たせ、待ち時間・カウンセリング（と外部根拠未確認の小売・その他の全話題）は evidence:'internal-unverified'。画面表示は変えない。MAX_TOPICS は最大の業種の話題数（7）。ja/en/zh/ko を揃え、compose.test.mjs の網羅（細目なし全網羅 90,096 件×3文体）と層化・変異試験を新しい表に適用。LP の話題一覧・実例・FAQ、tools/capture_screens.py・record_demo.py の例を新しい話題名にし、スクショ3枚・デモ動画・step-customer 動画を撮り直し",
-    "選択の件数（本人「はい」）: 候補を初めて表示したとき（1セッション1回・sessionStorage、使えなければ1ページ1回）に POST /api/pick-stat へ {kind, picks:[{topic,rating,details}]} だけを送る。worker は refuse()/boundedJSON() の門のうえで鍵を完全一致で検査し、値は compose.js の固定の表（Compose.normalize）で検査、許可外は捨てずに400。日付はサーバーが付け、D1 pick_stats に (day,kind,topic,rating,detail) ごとの件数（detail='' = 話題が選ばれた回数、detail=細目 = その細目も選ばれた回数、1行の上限あり）。上限は quota 表の psip:（1送信元1日50）/psday:（全体1日5000）、3日で削除。店名・共有URL・本文・ひとこと・IP は受けず保存しない。GET /api/pick-stats?since= は LOOP_EVENTS_TOKEN の Bearer（定数時間比較・operatorRead() を /api/loop-events と共用）で締まった日だけ返す。保存失敗は loop_events に api-pick の理由コードで数える。migrations/0003_pick_stats.sql はファイルのみ（本番未適用）。privacy.html と LP「データの扱い」に追記案（本人確認待ち）。試験: worker.test.mjs（8件追加）、funnel_browser.py・loop_browser.py（送る JSON が kind/picks だけ・1セッション1回）",
-    "③ 時間と離脱（匿名）・① 店ごとの声の報告と「直しました」の札・お客さま画面の全話題必須（本人決定: 江藤さん案）・自由記述1か所の AI 分類・報告ページの効果欄（本人決定 A+D）: /api/event は {event, sec?, sid?} だけ（sec は 0-10/10-20/20-30/30-60/60-120/120+ の区分、各段階の初回だけ。sid は新しいQRの乱数の店ID）。D1 funnel_times に (日付,段階,区分) の件数、GET /api/funnel-stats（LOOP_EVENTS_TOKEN・operatorRead）が段階別の到達数・送信数・区分・区分からの中央値の推定（推定と明記）を返す。POST /api/store {kind} が 16バイト乱数の sid と 32バイト乱数の報告トークンを発行し、D1 stores には sid・SHA-256(トークン)・kind・日だけ。共有リンクに s=<sid>（無い古いQRは従来どおり）。/api/pick-stat は任意の sid で store_picks・store_steps にも数える（発行済み・同じ業種の sid だけ）。POST /api/report {token}（本文で送る・URL は fragment）が直近28日の話題×評価と段階の件数を返し、候補を見た件数が REPORT_MIN(5) 未満なら enough:false だけ、以降も 5 未満の欄は null。POST /api/notice は店主の1行60字を検査（評価・口コミのお願いは拒否、秘密は伏せ字、保存なし）。public/report.html・report.js（札の印刷1ページ、効果欄は店主の端末の localStorage だけ・Google の店ページと Business Profile へのリンク）。お客さま画面は全話題を最初から並べ、各行で よかった/ふつう/気になった のどれかが必須（未回答は文字で表示、全部答えるまで候補ボタンは押せない）、細目は任意。自由記述1か所を POST /api/classify（/api/draft と同じ AI の期限・上限・fallback）で分類し、topic/rating/details は compose の許可 id だけ・各話題の quote が本文に実在するものだけ採用して先に選ぶ（手で選んだ行は上書きしない、候補文は compose の決定論のまま）。migrations/0004_store_report.sql はファイルのみ（本番未適用）。privacy・LP の追記案（本人確認待ち・保存期間は TODO）。試験: worker.test.mjs（11件追加・変異試験5種で赤）、funnel_browser.py・loop_browser.py・poster_browser.py を新しい流れに、tests/report_browser.py 追加。スクショ3枚・デモ動画・短いループ4本を新しい流れで撮り直し",
-    "保存期間（DECISIONS.md「保存期間・表示基準」2026-09-29 本人決定）: worker に scheduled()（Cron Trigger・毎日 UTC 18:17 = PURGE_CRON）を足し、purgeExpired() が暦の月で数えた期限（UTC 日付・月末は丸め・境界の日は残す）より前の行を消す。funnel_times・pick_stats・store_picks・store_steps・loop_events（text_masked なし）・quota の ev:<日付>:<操作> 行 = 13か月、loop_events の店主のご意見（text_masked あり）= 6か月で行ごと（本文から作った fp も残さない）、stores = COALESCE(last_used_day, created_day) から1年（子の store_picks/store_steps を先に消し、子が無くなった店だけ消す。D1 は外部キーを強制）。1文 PURGE_LIMIT=5000 行まで・残りは翌日、1文の失敗は表名とエラー種別だけ記録して続行、要約ログは表名と件数だけ。連打対策の quota 3日削除と累計の上限の行は変えない。stores.last_used_day は migrations/0005_store_last_used.sql（ALTER TABLE ADD COLUMN と、既にある店の last_used_day を適用日にする UPDATE だけ・本番未適用）で足し、店の作成・pick（同じ業種の sid）・段階の記録・報告の閲覧/札の確認で今日にする（同じ日は WHERE で外れて書き込みなし。報告側は待って書き、失敗は 503 と loop_events の記録で握り潰さない。別モデルの反証の指摘で修正）。wrangler.json はリポジトリに無いため、triggers.crons の追加は ~/tasks/reviews-lp/DEPLOY-NEXT.md に記載。privacy.html の TODO(本人決定) を決定の期間で埋め、記録ごとの「何を・何のために・いつ消すか」の節（#retention）と LP「データの扱い」の要約を追加（本人確認用の全文と差分は ~/tasks/reviews-lp/PRIVACY-FINAL-DRAFT.md）。試験: worker.test.mjs に9件（境界日の前後・店の最終利用・上限と翌日回し・失敗時の続行とログ・0005 の既存店の扱い・最終利用日の書き込み失敗・privacy/LP とコードの期間の一致）、境界をずらす変異で赤",
-    "LP v11（本人「文字が多い。図解と一言で。特に03,04以降」）: スライド03〜09を「見出し1行＋一言(.one)1行＋図1つ」に。03=店主→お客さま→本人の3コマ（既存の録画ループ、ラベルは語1〜2個）、04=選んだ話題×評価×細目のチップ→矢印→候補の文（文は compose.js の出力と一字一句同じ・節ごとの span、気になったの行に「必ず残る」の矢印）＋既存デモ動画、05=3つの約束を大きな線画(svg.illus)＋一言、06=写真4枚とポスター見本、07=「試用中 0円」と「正式版（予定）月2,980円（税込）」を別の段で大きく・約束①②と予定価格の文は小さな注記で一字一句、08=できる/まだできないを記号＋語・報告画面と「直しました」の札の縮小見本（数字・文は架空と明記）・使えるお店の3段の図・保存しないもの／保存期間の表、09=FAQは質問だけ・運営1行。外した本文はFAQの答え(details)へ移し、決定文言（約束①〜④・予定価格・保管期間・FVリード・申込完了③・利益相反の注意・データの扱いの全文と保存期間の文）は一字一句残す。AI表記のバッジは10→11px。lp_browser.py: 03以降は例外なしでFAQの答え以外の見える文がすべて1280x800で2行以内、見出しと一言は1行、03〜09に一言、03〜09の見える文字数の上限 2,200（v11前 3,308）、390で11px未満の文字なし（段落の追加で落ちることを確認）。compose.test.mjs の実例の検査は span を除いた文字列の完全一致に",
-    "LP v12（本人「もっと文字を減らして」）: 03〜09 の見える文字（非空白の innerText、閉じた details は数えない、1280x800）を 2,039（a60e780）→ 1,000 以下に、右に固定の申込フォーム #trial の見える文字を 209 → 半分以下（104）に。見出し(h2)・一言(.one)・締めの一行は 02〜09 で 1280 と 390 の両方で1行。決定文言（約束①②・予定価格の文・保管期間・約束④）は FAQ の答えとフォーム内の「試用の条件とデータの扱い」（details）に一字一句移し、料金の段には「正式版（予定）」と「予定価格です。変更する場合はこのページでお知らせします。」を数字のそばに見える形で残す（0円と予定価格は別の段、打ち消し線・「通常」「今なら」なし）。08 の報告画面と札の縮小見本は件数・文のない形だけの見本に。FAQ は4分類の details にまとめ、ページ内リンクで対象の details を開く（app.js route）。FV の決定済みリードは不変。FORBID・CSP・外部読み込みなし・reduced-motion は据え置き。lp_browser.py: 上限 1,000 とフォームの上限 104・390/1280 の1行検査・移動先での一字一句・料金の見える但し書き・縮小見本に数字なし・FAQ リンクで開くことを検査（フォームの上限と 390 の1行はそれぞれ変異で赤を確認）",
-    "配備の門: Worker に scheduled()（保存期間の自動削除）があるとき、wrangler 設定の triggers.crons に worker.mjs の PURGE_CRON と同じ時刻が無ければ deploy_preflight が config_cron_missing で拒否（privacy の『毎日自動で削除』が設定漏れで静かに破られないように。PR #14 Codex r2 / Devin r2 指摘）",
-    "本番の wrangler 設定（intake-beta/wrangler.json、定時実行 17 18 * * * を含む）をリポジトリで管理（本人決定 2026-09-30。account_id と D1 の id は秘密ではない識別子）。リポの設定そのものが配備の門の cron 検査を通ることを試験で固定",
-    "CI（quality.yml）で配備の門の試験（test_deploy_preflight / test_deploy_with_approval）も回す"
-  ],
-  "reuse": [
-    {
-      "path": "intake-beta/worker.mjs",
-      "decision": "extend",
-      "reason": "refuse()/boundedJSON()/reserve()/release()/UNSAFE_CHARS と quota 表を /api/trial でそのまま使う"
-    },
-    {
-      "path": "intake-beta/public/app.js",
-      "decision": "extend",
-      "reason": "既存の QR 作成・印刷・お客さま画面の処理は変えず、画面切替・見本QR・試用フォームを追記"
-    },
-    {
-      "path": "intake-beta/tests/worker.test.mjs",
-      "decision": "extend",
-      "reason": "既存の sqliteQuota(実SQLite) で /api/trial を試験"
-    },
-    {
-      "path": "intake-beta/tests/poster_browser.py",
-      "decision": "reuse",
-      "reason": "開始URLを /#create にしただけで、印刷1ページ・印刷の隔離の検査は同じ"
-    },
-    {
-      "path": "intake-beta/tests/lp_browser.py",
-      "decision": "extend",
-      "reason": "同じ隔離配信(CSP付き)で v2 の画像・AI表記・動き・動きを減らす設定の検査とFVのスクショを追加"
-    },
-    {
-      "path": "intake-beta/tools/capture_screens.py",
-      "decision": "reuse",
-      "reason": "record_demo.py は同じ隔離配信・CSP・架空例の /api/draft 応答を流用して録画する"
-    },
-    {
-      "path": "intake-beta/public/app.js",
-      "decision": "extend",
-      "reason": "既存の /api/draft 呼び出しを tidy() に切り出して「自分で書く」と「ひとこと足す」で共用し、編集欄・確認・コピー・Google・/api/event の流れはそのまま使う。旧来の単一チップ(data-tag)は話題×評価に置き換え"
-    },
-    {
-      "path": "intake-beta/tests/funnel_browser.py",
-      "decision": "extend",
-      "reason": "同じ隔離配信(CSP付き)とイベント検査のまま、お客さま画面の新しい流れ（話題→評価→候補→選択→編集→確認→Google）と多言語切替・/api/draft 障害時を検査"
-    },
-    {
-      "path": "intake-beta/tools/record_demo.py",
-      "decision": "extend",
-      "reason": "CDP screencast と字幕の重ね表示はそのまま、操作手順だけ新しい流れに差し替え"
-    },
-    {
-      "path": "intake-beta/public/compose.js",
-      "decision": "extend",
-      "reason": "話題×評価の組み立てはそのまま、細目は同じ評価語の別の文型(DETAIL_PHRASES)で話題ごとの1文にするだけ。normalize() で未知・重複の細目を拒否"
-    },
-    {
-      "path": "intake-beta/tests/compose.test.mjs",
-      "decision": "extend",
-      "reason": "decode()（文から話題と評価を読み戻す）を細目も読み戻すよう広げ、既存の(a)〜(f)と文型の骨格の検査を checkCase() に共通化して層化サンプルに適用"
-    },
-    {
-      "path": "intake-beta/worker.mjs",
-      "decision": "extend",
-      "reason": "/api/trial の保存を RETURNING id にして受付番号を得て、既存の ctx.waitUntil で通知。refuse()/validTrial()/quota はそのまま"
-    },
-    {
-      "path": "intake-beta/tests/lp_browser.py",
-      "decision": "extend",
-      "reason": "同じ隔離配信(CSP付き)と settle()/check_images()/試用フォームの検査はそのまま。v6 の検査は check_slides()/check_forbidden()/to_slide() を足しただけで、既存の決定文言・二重価格・AI表記・動きを減らす設定の検査は弱めていない（下部バーが2ボタンになったため #create のボタンを指定）"
-    },
-    {
-      "path": "intake-beta/tests/poster_browser.py",
-      "decision": "reuse",
-      "reason": "印刷時に隠す要素の一覧の .closing-cta（v6で締め節はFAQのスライド内に移動）を #lp 直下の #price と .lp-aside に差し替えただけ"
-    },
-    {
-      "path": "intake-beta/tools/record_demo.py",
-      "decision": "extend",
-      "reason": "同じ隔離配信・CSP・字幕/タップの重ね表示・CDP screencast・ffmpeg 変換を --clips で短いループにも使う（既存デモの録画処理はそのまま）"
-    },
-    {
-      "path": "intake-beta/public/app.js",
-      "decision": "extend",
-      "reason": "デモ動画の画面内だけ再生（IntersectionObserver・動きを減らす設定で無効）を video.lp-video 全部に広げただけ"
-    },
-    {
-      "path": "intake-beta/tests/lp_browser.py",
-      "decision": "extend",
-      "reason": "FORBID・check_images・決定文言・二重価格の検査はそのまま。FORBID の例外に .ico/.illus を足し、check_icons/check_videos/check_text_lines を追加"
-    },
-    {
-      "path": "intake-beta/worker.mjs",
-      "decision": "extend",
-      "reason": "/api/loop-event は refuse()/boundedJSON()/UNSAFE_CHARS/reserve()/release() と quota 表の上限・3日削除の型を /api/trial と同じ形で使う。サーバー側の失敗は既存の console.error/fallback の理由コードをそのまま loop_events に数える"
-    },
-    {
-      "path": "intake-beta/tests/worker.test.mjs",
-      "decision": "extend",
-      "reason": "既存の sqliteQuota(実SQLite)・invoke・trialEnv・withFetch・eventRequest で /api/loop-event と /api/loop-events を試験"
-    },
-    {
-      "path": "intake-beta/tests/funnel_browser.py",
-      "decision": "reuse",
-      "reason": "loop_browser.py は同じ隔離配信（ディスクから配信・worker と同じ CSP・外部遮断）の作りを使う"
-    },
-    {
-      "path": "intake-beta/public/app.js",
-      "decision": "reuse",
-      "reason": "変更なし。loop.js は app.js の前に読み、app.js が付ける body[data-view] と html[lang] を読むだけ"
-    },
-    {
-      "path": "intake-beta/public/compose.js",
-      "decision": "extend",
-      "reason": "話題・細目の表と文型・normalize() はそのまま、話題と細目を足し、EVIDENCE（表示に使わない出どころの印）と evidenceFor()/normalize() の公開を追加。worker は同じ normalize() を import して /api/pick-stat の許可リストに使う（表の二重持ちをしない）"
-    },
-    {
-      "path": "intake-beta/worker.mjs",
-      "decision": "extend",
-      "reason": "/api/pick-stat は refuse()/boundedJSON()/reserve()/release()/sha256hex()/utcDay()/exactKeys()/loopServerError() と quota 表の上限・3日削除の型をそのまま使う。上限の取り方は reserveAll() に、GET の門（トークン・since・締まった日）は operatorRead() に切り出して /api/loop-event・/api/loop-events と共用"
-    },
-    {
-      "path": "intake-beta/tests/worker.test.mjs",
-      "decision": "extend",
-      "reason": "既存の sqliteQuota(実SQLite)・trialEnv・invoke・TOKEN・loopRows・dayOf で /api/pick-stat と /api/pick-stats を試験（sqliteQuota に D1 の batch を足しただけ）"
-    },
-    {
-      "path": "intake-beta/tests/loop_browser.py",
-      "decision": "extend",
-      "reason": "同じ隔離配信（ディスクから配信・worker と同じ CSP・外部遮断）に /api/pick-stat の受けを足し、送る JSON と1セッション1回を検査"
-    },
-    {
-      "path": "intake-beta/worker.mjs",
-      "decision": "extend",
-      "reason": "refuse()/boundedJSON()/reserve()/reserveAll()/release()/UNSAFE_CHARS/maskSecrets()/operatorRead()/loopServerError() を新しい API で再利用し、/api/draft の AI 上限・期限の処理は aiReserve()/runAI() に切り出して /api/classify と共用"
-    },
-    {
-      "path": "intake-beta/public/compose.js",
-      "decision": "reuse",
-      "reason": "AI 分類の許可リスト（話題・評価・細目の id）と報告ページの話題名に compose の固定の表をそのまま使う（表は変えない）"
-    },
-    {
-      "path": "intake-beta/tests/funnel_browser.py",
-      "decision": "extend",
-      "reason": "同じ隔離配信（CSP 付き）で全話題必須・AI 分類・段階の送信を検査。report_browser.py も同じ作法"
-    },
-    {
-      "path": "intake-beta/tests/worker.test.mjs",
-      "decision": "extend",
-      "reason": "既存の sqliteQuota(実SQLite) に run() の meta.changes を足し、PRAGMA foreign_keys=ON で D1 の外部キー強制を再現して scheduled() を試験"
-    },
-    {
-      "path": "intake-beta/worker.mjs",
-      "decision": "extend",
-      "reason": "保存期間の削除は既存の D1 binding QUOTA と utcDay() をそのまま使い、店の最終利用日の更新は既存の saveStorePickStat の batch・saveEventDetail・ownerApi に1文ずつ足しただけ"
-    },
-    {
-      "path": "scripts/deploy_preflight.py",
-      "decision": "extend",
-      "reason": "既存の deploy_inputs（wrangler 設定の検査）に定時実行の有無の検査を1関数足すだけ。承認・receipt の仕組みは変えない"
-    }
-  ],
-  "changed_files": [
-    "intake-beta/worker.mjs",
-    "intake-beta/public/app.js",
-    "intake-beta/public/index.html",
-    "intake-beta/public/styles.css",
-    "intake-beta/public/privacy.html",
-    "intake-beta/tests/worker.test.mjs",
-    "intake-beta/tests/poster_kit.test.mjs",
-    "intake-beta/tests/funnel_browser.py",
-    "package.json",
-    ".quality/change.json",
-    "intake-beta/schema.sql",
-    "intake-beta/migrations/0001_trial_applications.sql",
-    "intake-beta/tests/lp_browser.py",
-    "intake-beta/tests/poster_browser.py",
-    "intake-beta/tools/capture_screens.py",
-    "intake-beta/public/img/screen-create.webp",
-    "intake-beta/public/img/screen-input.webp",
-    "intake-beta/public/img/screen-result.webp",
-    "intake-beta/public/img/scene-cafe-counter.webp",
-    "intake-beta/public/img/scene-table.webp",
-    "intake-beta/public/img/scene-salon.webp",
-    "intake-beta/public/img/scene-shop.webp",
-    "intake-beta/public/img/hero-cafe.webp",
-    "intake-beta/public/video/demo-customer-poster.webp",
-    "intake-beta/public/video/demo-customer.mp4",
-    "intake-beta/public/video/demo-customer.webm",
-    "intake-beta/tools/record_demo.py",
-    "intake-beta/public/compose.js",
-    "intake-beta/tests/compose.test.mjs",
-    "intake-beta/tools/build_icons.py",
-    "intake-beta/public/licenses.txt",
-    "intake-beta/public/img/worry-counter.webp",
-    "intake-beta/public/img/price-morning.webp",
-    "intake-beta/public/img/closing-cafe-card.webp",
-    "intake-beta/public/img/promise-interior.webp",
-    "intake-beta/public/video/step-store.mp4",
-    "intake-beta/public/video/step-store.webm",
-    "intake-beta/public/video/step-store-poster.webp",
-    "intake-beta/public/video/step-customer.mp4",
-    "intake-beta/public/video/step-customer.webm",
-    "intake-beta/public/video/step-customer-poster.webp",
-    "intake-beta/public/video/step-self.mp4",
-    "intake-beta/public/video/step-self.webm",
-    "intake-beta/public/video/step-self-poster.webp",
-    "intake-beta/public/video/poster-print.mp4",
-    "intake-beta/public/video/poster-print.webm",
-    "intake-beta/public/video/poster-print-poster.webp",
-    "intake-beta/public/loop.js",
-    "intake-beta/migrations/0002_loop_events.sql",
-    "intake-beta/tests/loop_browser.py",
-    "intake-beta/tests/loop_sample.mjs",
-    "intake-beta/tests/loop_adapter_check.py",
-    "intake-beta/migrations/0003_pick_stats.sql",
-    "intake-beta/migrations/0004_store_report.sql",
-    "intake-beta/public/report.html",
-    "intake-beta/public/report.js",
-    "intake-beta/tests/report_browser.py",
-    "intake-beta/migrations/0005_store_last_used.sql",
-    "scripts/deploy_preflight.py",
-    "scripts/test_deploy_preflight.py",
-    "intake-beta/wrangler.json",
-    ".github/workflows/quality.yml"
-  ],
-  "adoption_scope_note": "PR #12 (feature/intake-funnel-poster-i18n-025, f55589e) の上に積んだ隔離worktree。配備なし・本番D1未適用。材料は ~/tasks/reviews-lp/。"
+ "task_id": "hitokoto-review-nits-20260930",
+ "owner": "reviews-lp fix-nits (Claude実装・ローカルcommitのみ) → メインが本人確認のうえ push/PR",
+ "acceptance": [
+  "お客さま画面の選択件数（/api/pick-stat）の「1セッション1回」の sessionStorage キーに店ID(sid)を含める（hk-pick-stat:<sid>）。sid なしの旧QRは従来の hk-pick-stat 1つ。funnel_browser.py で A→A→B→旧QR→旧QR の送信が [A,B,なし] になることを確認",
+  "scripts/deploy_preflight.py の cron 検査: 'async scheduled(' の文字列一致をやめ、語として scheduled が出れば（async の有無・空白/改行・コメント・メソッド定義・プロパティ+function/アロー関数/名前つき関数・短縮プロパティ・引用符つきの鍵のどれでも）PURGE_CRON と triggers.crons を求める（fail-closed。scheduledTime 等の別の語は数えない）。main が読めない（OSError）ときは config_main_unreadable で拒否",
+  "報告トークン: SHA-256 で stores を引いたあと、取れた行の token_hash と計算したハッシュを tokenMatches（定数時間）で照合し、一致しなければ 404",
+  "運営の GET（/api/loop-events・/api/pick-stats・/api/funnel-stats）に quota の 'opday:<日付>' 行で1日 OPERATOR_CAPS.day 回の共通上限（429）。認証失敗・不正な since は数えない。3日で削除（RATE_KEY_PREFIXES にも追加）",
+  "/api/trial: 同じ4項目の申込を TRIAL_DEDUP_MS(10分)以内に再送したら1件にする。quota を予約する前に SELECT で確かめ、再送は {ok:true}・行なし・Slack なし・quota 不変（上限に達した送信元の再送も 200）。同時送信は INSERT ... SELECT ... WHERE NOT EXISTS の1文で1件にし、予約を返す",
+  "Slack 通知の受付番号が正の整数でないときは「（不明）」と書き、null/false/undefined を出さない",
+  "compose.js が読めないとき、お客さま画面は理由（4言語）を compose-status に出し、表を隠して「自分で書く」を開く（ボタンが無反応のまま残らない）",
+  "trtotal: 予約順が trip→trday→trtotal で、429 のときは trtotal を保持していない（解放漏れは起きない）ことを試験で固定",
+  "lp_browser.py: '#scope .report-mini' の複数一致で strict モードが落ちないよう all_inner_texts で全件を検査",
+  "既存の試験（worker/compose/poster_kit/funnel/lp/loop/report/poster/loop_adapter/preflight/approval）を維持。配備・wrangler・D1 書込・push はしない"
+ ],
+ "reuse": [
+  {
+   "path": "intake-beta/worker.mjs",
+   "decision": "extend",
+   "reason": "既存の reserve()/release()/tokenMatches()/operatorRead()/RATE_KEY_PREFIXES と quota 表をそのまま使う"
+  },
+  {
+   "path": "intake-beta/public/app.js",
+   "decision": "extend",
+   "reason": "既存の sendPickStat()/applyLang()/openWriteOwn()/announce() を使い、キーと compose.js 不在時の分岐だけ足す"
+  },
+  {
+   "path": "scripts/deploy_preflight.py",
+   "decision": "extend",
+   "reason": "既存の require_cron_for_scheduled() と Refuse をそのまま使い、検出と読めないときの扱いだけ変える"
+  },
+  {
+   "path": "intake-beta/tests/worker.test.mjs",
+   "decision": "extend",
+   "reason": "既存の sqliteQuota(実SQLite)・withFetch・newStore/report で試験を追加"
+  },
+  {
+   "path": "intake-beta/tests/funnel_browser.py",
+   "decision": "extend",
+   "reason": "既存の make()/route の偽 API で同じタブの複数店・compose.js 404 を試験"
+  },
+  {
+   "path": "intake-beta/tests/poster_kit.test.mjs",
+   "decision": "reuse",
+   "reason": "data-i18n の全キーが4言語すべてで文字列であることの既存の静的試験（applyLang の辞書キー検査の担保）"
+  }
+ ],
+ "changed_files": [
+  ".quality/change.json",
+  "intake-beta/worker.mjs",
+  "intake-beta/public/app.js",
+  "intake-beta/tests/worker.test.mjs",
+  "intake-beta/tests/funnel_browser.py",
+  "intake-beta/tests/lp_browser.py",
+  "scripts/deploy_preflight.py",
+  "scripts/test_deploy_preflight.py"
+ ],
+ "adoption_scope_note": "main 20ed68b（本番配備済み version 2ac01fe8）から切った隔離 worktree（fix/hitokoto-review-nits）。配備なし・本番D1未適用・push なし。審査原文は ai-runs/devin/runs/evidence/devin-ai14-r1..r4.json・devin-ai13-r1.json と ~/tasks/reviews-lp/codex-v2-r1..r5.log。"
 }

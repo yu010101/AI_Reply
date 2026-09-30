@@ -130,6 +130,43 @@ class ConfigDerivedInputs(unittest.TestCase):
         with d:
             self.assertEqual(m.deploy_inputs(root)[0], ['intake-beta/worker.mjs'])
 
+    def test_scheduled_detected_in_every_spelling(self):
+        # PR #14 Devin r3 nit: 'async scheduled(' の文字列一致だけだと、async なし・空白・プロパティ書きの scheduled を見落とし通してしまう
+        spellings = [
+            'export default {async scheduled (c,e,x){}, async fetch(){}}',
+            'export default {scheduled(c,e,x){ return 1 }, fetch(){}}',
+            'export default {async  scheduled\n(c,e,x){}, fetch(){}}',
+            'export default {scheduled: async function(c,e,x){}, fetch(){}}',
+            'export default {scheduled: function (c){}, fetch(){}}',
+            'export default {scheduled: async (c,e,x)=>{}, fetch(){}}',
+            'export default {scheduled:(c)=>{}, fetch(){}}',
+            'export default {scheduled: c=>{}, fetch(){}}',
+            'export default {"scheduled": async (c)=>{}, fetch(){}}',
+            # crosscheck r1 (Codex): 名前つき関数を渡す形・コメントを挟む形・短縮プロパティも見落とさない
+            'async function purge(c,e,x){}\nexport default {scheduled: purge, fetch(){}}',
+            'export default {scheduled /* cron */ (c,e,x){}, fetch(){}}',
+            'async function scheduled(c,e,x){}\nasync function fetch(){}\nexport default {fetch, scheduled}',
+        ]
+        for body in spellings:
+            d, root = self.make({'main': 'worker.mjs'}, {'intake-beta/worker.mjs': body + '\n'})
+            with d:
+                with self.assertRaises(m.Refuse, msg=body) as cm:
+                    m.deploy_inputs(root)
+                self.assertEqual(str(cm.exception), 'scheduled_without_purge_cron_decl', body)
+        # 似た名前（scheduledTime など）や scheduled の無い Worker には何も求めない
+        for body in ['export default {async fetch(r){ const t=r.scheduledTime; return t }}', 'export default {async fetch(){ const unscheduled=1 }}']:
+            d, root = self.make({'main': 'worker.mjs'}, {'intake-beta/worker.mjs': body + '\n'})
+            with d:
+                self.assertEqual(m.deploy_inputs(root)[0], ['intake-beta/worker.mjs'], body)
+
+    def test_unreadable_main_is_refused_not_skipped(self):
+        # PR #14 Devin r3 nit: main が読めない（OSError）ときに cron 検査を飛ばして通すと fail-open になる
+        d, root = self.make({'main': 'worker.mjs'}, {'intake-beta/worker.mjs/index.mjs': 'export default {async scheduled(){}}\n'})
+        with d:
+            with self.assertRaises(m.Refuse) as cm:
+                m.deploy_inputs(root)
+            self.assertEqual(str(cm.exception), 'config_main_unreadable')
+
     def test_repo_wrangler_config_carries_purge_cron(self):
         # リポジトリに入れた本番の wrangler 設定そのものが、Worker の PURGE_CRON と同じ定時実行を持つ（PR #14 Codex r3/r4 指摘）
         root = Path(__file__).resolve().parents[1]

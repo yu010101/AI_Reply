@@ -275,7 +275,9 @@ def main():
   for must,where in [(PRICE,'#faq-price'),(P1,'#faq-price'),(P2,'#faq-price'),(P4,'#trial details'),(KEEP,'#data'),(KEEP,'#trial details')]:assert must in pg.locator(where).text_content(),(where,must)
   vis_price=pg.locator('#price').inner_text().replace('\n','')
   for must in ['正式版（予定）','予定価格','変更する場合はこのページでお知らせします','2,980']:assert must in vis_price,('price slide must show',must)
-  assert not any(c.isdigit() for c in pg.locator('#scope .report-mini').inner_text()),('report mock-up must not show counts',pg.locator('#scope .report-mini').inner_text())
+  # every match is checked (all_inner_texts has no strict-mode single-match rule, so a second mock-up cannot crash or slip through)
+  minis=pg.locator('#scope .report-mini').all_inner_texts();assert minis,'report mock-up missing'
+  assert not any(c.isdigit() for t in minis for c in t),('report mock-up must not show counts',minis)
   assert '短い感想に、AIが句読点を整えます' not in body,'old FV lead left'
   html=pg.content();text=pg.evaluate('document.documentElement.textContent')
   for w in NO_WORDS:assert w not in html and w not in text,w

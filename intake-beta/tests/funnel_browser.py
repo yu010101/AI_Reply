@@ -43,6 +43,7 @@ def main():
      d=json.loads(r.request.post_data);res['draft_bodies'].append(d)
      if fake['draft_code']!=200:return r.fulfill(status=fake['draft_code'],content_type='application/json',body='{"error":"x"}')
      return ok({'draft':d['text']+'。' if fake['tidy'] else d['text'],'mode':'ai' if fake['tidy'] else 'fallback'})
+    if path=='/compose.js' and fake.get('no_compose'):return r.fulfill(status=404,body='')
     f=PUB/(path.lstrip('/') or 'index.html')
     if not f.is_file():return r.fulfill(status=404,body='')
     r.fulfill(status=200,body=f.read_bytes(),content_type=mimetypes.guess_type(f.name)[0] or 'application/octet-stream',headers={'content-security-policy':CSP})
@@ -142,6 +143,26 @@ def main():
   fake['store']=False;ctx,pg=make('ja-JP');pg.goto(BASE+'/#create');pg.wait_for_load_state('networkidle')
   pg.locator('#store-name').fill(STORE);pg.locator('#review-url').fill(GOOGLE);pg.locator('#store-form button').click();expect(pg.locator('#poster-actions')).to_be_visible()
   assert 's' not in parse_qs(urlparse(pg.locator('#share-url').input_value()).query);expect(pg.locator('#owner-copy')).to_be_hidden();expect(pg.locator('#owner-copy-none')).to_be_visible();ctx.close()
+  # --- pick counts are sent once per session *per store*: the sessionStorage key carries the sid (PR #14 Devin r1 #9 / r2).
+  # One tab (one sessionStorage) opens store A, A again, store B, an old QR (no s=) and the old QR again.
+  SID_B='QAsidB_0123456789abcde'
+  def compose_once(pg,url):
+   pg.goto(url);pg.wait_for_load_state('networkidle');n=rows(pg).count()
+   for i in range(n):rows(pg).nth(i).locator('.seg label').first.click()
+   pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible();pg.wait_for_timeout(200)
+  cq=lambda **extra:BASE+'/?'+urlencode({'store':STORE,'review':GOOGLE,'kind':'general',**extra})
+  ctx,pg=make('ja-JP');npick=len(res['pick_bodies'])
+  for url in [cq(s=SID),cq(s=SID),cq(s=SID_B),cq(),cq()]:compose_once(pg,url)
+  sids=[b.get('sid') for b in res['pick_bodies'][npick:]]
+  assert sids==[SID,SID_B,None],('one send per store per session; old QR once',sids)
+  res['pick_once_per_store']=sids;ctx.close()
+  # --- compose.js cannot be loaded: the customer is told why and the "write my own" path opens (PR #13 Devin #6)
+  fake['no_compose']=True;ctx,pg=make('ja-JP');pg.goto(cq());pg.wait_for_load_state('networkidle')
+  expect(pg.locator('#compose-status')).to_have_text('文章の候補を作る部分を読み込めませんでした。下の欄に、自分の言葉で書けます。')
+  expect(pg.locator('#write-own')).to_be_visible();expect(pg.locator('#compose-button')).to_be_hidden();expect(pg.locator('#topics')).to_be_hidden()
+  pg.locator('[data-lang="en"]').click();expect(pg.locator('#compose-status')).to_have_text('The draft builder could not be loaded. You can write in your own words below.')
+  fake['tidy']=False;pg.locator('#experience').fill('窓際でゆっくりできた');pg.locator('#draft-button').click();expect(pg.locator('#draft-result')).to_be_visible()
+  fake['no_compose']=False;ctx.close()
   # --- the minimum number of taps from the customer screen to Google (every topic answered, no details, no writing)
   kinds={'food':7,'beauty':6,'retail':5,'general':5}
   res['min_taps']={k:{'before_2bcf616(1 topic chip + its rating)':1+1+4+1,'after(all topics required)':n+1+4} for k,n in kinds.items()}
