@@ -100,10 +100,10 @@ let dailyRows=0;
 function reachUnit(weekly){$('weekly-part').hidden=!weekly;$('daily-part').hidden=weekly;$('daily-none').hidden=weekly||dailyRows>0;
   $('reach-weekly-btn').setAttribute('aria-pressed',String(weekly));$('reach-daily-btn').setAttribute('aria-pressed',String(!weekly));}
 $('reach-daily-btn').addEventListener('click',()=>reachUnit(false));$('reach-weekly-btn').addEventListener('click',()=>reachUnit(true));
-const fmt=iso=>{const d=new Date(iso);return isNaN(d)?'':d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});};
+const fmt=iso=>{if(typeof iso!=='string'||!iso)return '';const d=new Date(iso);return isNaN(d)?'':d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});};
 function renderRoute(s){
   // 審査 2: a consent to an older wording counts as off until the owner consents to the current one
-  $('route-state').textContent=s.route?'いまの設定：オン（'+fmt(s.consentAt)+' に同意）。「気になった」が1つでもあるお客さまには、Google への案内を出していません。':s.needsReconsent?'いまの設定：オフ（説明の文章が変わったため、以前の同意は使いません。続ける場合は、もう一度お読みのうえ同意してください）。':'いまの設定：オフ。すべてのお客さまに同じように Google への案内を出しています。';
+  $('route-state').textContent=s.route?'いまの設定：オン'+(fmt(s.consentAt)?'（'+fmt(s.consentAt)+' に同意）':'')+'。「気になった」が1つでもあるお客さまには、Google への案内を出していません。':s.needsReconsent?'いまの設定：オフ（説明の文章が変わったため、以前の同意は使いません。続ける場合は、もう一度お読みのうえ同意してください）。':'いまの設定：オフ。すべてのお客さまに同じように Google への案内を出しています。';
   $('route-open').classList.toggle('hidden',s.route);$('route-off').classList.toggle('hidden',!s.route);closeConsent();}
 function closeConsent(){$('route-consent').classList.add('hidden');$('route-open').setAttribute('aria-expanded','false');$('route-agree').checked=false;$('route-next').disabled=true;$('route-confirm').classList.add('hidden');}
 function settings(s){if(!s)return;renderRoute(s);$('link-line').value=s.line||'';$('link-instagram').value=s.instagram||'';$('settings-card').classList.remove('hidden');}
@@ -122,9 +122,10 @@ $('route-on').addEventListener('click',async()=>{if(!$('route-agree').checked)re
 $('route-off').addEventListener('click',async()=>{$('route-off').disabled=true;
   try{const s=await saveSettings({route:false},'route-status');if(s){renderRoute(s);say('route-status','振り分けをオフにしました。すべてのお客さまに Google への案内を出します（反映まで最大2分程度）。');}}
   catch{say('route-status','いま保存できませんでした。時間をおいて、もう一度お試しください。');}finally{$('route-off').disabled=false;}});
-$('links-form').addEventListener('submit',async e=>{e.preventDefault();say('links-status','保存しています…');
+// Devin r3b-6: one save at a time
+$('links-form').addEventListener('submit',async e=>{e.preventDefault();const btn=$('links-form').querySelector('button[type=submit]');if(btn.disabled)return;btn.disabled=true;say('links-status','保存しています…');
   try{const s=await saveSettings({line:$('link-line').value.trim(),instagram:$('link-instagram').value.trim()},'links-status');
     if(s){$('link-line').value=s.line;$('link-instagram').value=s.instagram;say('links-status',s.line||s.instagram?'保存しました。お客さまの画面のいちばん下にボタンが出ます（反映まで最大2分程度）。':'保存しました。ボタンは出ません（反映まで最大2分程度）。');}}
-  catch{say('links-status','いま保存できませんでした。時間をおいて、もう一度お試しください。');}});
+  catch{say('links-status','いま保存できませんでした。時間をおいて、もう一度お試しください。');}finally{btn.disabled=false;}});
 load();
 })();

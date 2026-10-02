@@ -971,3 +971,25 @@ test('wording r2: link warnings say the link can change settings; the last confi
   assert.ok(rep.includes('判定した数'),'held/passed are the server\'s judgments');assert.ok(rj.includes('反映まで最大2分程度'));
   for(const [f,txt] of [['report.html',rep],['privacy.html',privacy]])assert.ok(txt.includes('7日'),f+': the stored setting expires');
   assert.ok(app.includes("const CONSENT_VERSION='"+V+"'")&&rj.includes("const CONSENT_VERSION='"+V+"'"),'the pages use the worker\'s consent version');});
+
+// ---- PR #16 Devin r3（サーバー・画面3）----
+test('settings: partial saves never replace the rest (links keep routing on, routing keeps the links); a repeated "on" with the same version keeps the first consent time and writes no log row (Devin r3a / r3b-3)',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');const db=s.q.db;const t0=Date.now();
+  await saveSettings(s,{token:a.token,route:true,consent:V});const at=NOW_ISO();
+  let r=await saveSettings(s,{token:a.token,line:'https://lin.ee/AbC123x'});assert.deepEqual(r.body.settings,{route:true,consentAt:at,line:'https://lin.ee/AbC123x',instagram:'',needsReconsent:false},'saving a link keeps routing on');
+  r=await saveSettings(s,{token:a.token,instagram:'https://www.instagram.com/kissa/'});assert.equal(r.body.settings.line,'https://lin.ee/AbC123x');assert.equal(r.body.settings.route,true);
+  Date.now=()=>t0+3600000;r=await saveSettings(s,{token:a.token,route:true,consent:V});
+  assert.equal(r.body.settings.consentAt,at,'the consent time stays the first one');assert.equal(db.prepare("SELECT count(*) n FROM store_route_log WHERE action='on'").get().n,1,'no second "on" row');
+  r=await saveSettings(s,{token:a.token,route:false});assert.deepEqual([r.body.settings.line,r.body.settings.instagram],['https://lin.ee/AbC123x','https://www.instagram.com/kissa/'],'turning routing off keeps the links');
+  // a consent to an older version is renewed (time and log) by a fresh "on"
+  await saveSettings(s,{token:a.token,route:true,consent:V});db.prepare("UPDATE store_settings SET route_consent_version='2026-01-01'").run();Date.now=()=>t0+7200000;
+  r=await saveSettings(s,{token:a.token,route:true,consent:V});assert.equal(r.body.settings.consentAt,new Date(t0+7200000).toISOString().slice(0,19)+'Z');assert.equal(db.prepare("SELECT count(*) n FROM store_route_log WHERE action='on'").get().n,3);});
+test('store-config: a cross-site request is refused even when the answer is already in the edge cache (Devin r3a)',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');const store=new Map(),real=globalThis.caches;globalThis.caches={default:{async match(req){return store.get(req.url)?.clone();},async put(req,res){store.set(req.url,res);}}};
+  try{const get=site=>worker.fetch(new Request(origin+'/api/store-config?s='+a.sid,{headers:{'sec-fetch-site':site}}),s.env,{waitUntil(){}});
+    assert.equal((await get('same-origin')).status,200);assert.equal(store.size,1,'warm');assert.equal((await get('cross-site')).status,403);assert.equal((await get('same-site')).status,403,'the customer screen and the API share one origin');
+  }finally{if(real===undefined)delete globalThis.caches;else globalThis.caches=real;}});
+test('report assumptions are pinned: REPORT_DAYS is whole weeks; the first two STORE_CHILDREN have their own day-based steps (Devin r3a)',()=>{
+  assert.equal(M.REPORT_DAYS%7,0,'reportWeeks drops the remainder days otherwise');
+  assert.deepEqual(M.STORE_CHILDREN.slice(0,2),['store_picks','store_steps'],'purgePlan writes their idle-store steps by hand and the rest from slice(2)');
+  const names=M.purgePlan().steps.map(x=>x[0]);for(const tb of M.STORE_CHILDREN)assert.ok(names.includes(tb+'_idle_store'),tb);});

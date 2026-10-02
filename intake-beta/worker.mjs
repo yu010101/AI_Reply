@@ -376,6 +376,7 @@ const TABLES_0006=/no such table:? *(?:main\.)?(store_settings|store_route_log|s
 async function without0006(run,empty){try{return await run();}catch(e){if(TABLES_0006.test(String(e&&e.message)))return empty;throw e;}}
 export const DAILY_STEPS=['view','cands','copy','google'];
 // The report window cut into 7-day weeks, oldest first; the last week ends today (Devin r2a-3: derived from REPORT_DAYS, not hard-coded).
+// REPORT_DAYS must be whole weeks (28): remainder days would be left out of the weekly table (pinned by a test, Devin r3a).
 export function reportWeeks(today,days){const t=Date.parse(today+'T00:00:00Z'),n=Math.floor(days/7);
   return Array.from({length:n},(_,i)=>{const to=t-7*(n-1-i)*86400000;return {from:utcDay(to-6*86400000),to:utcDay(to)};});}
 export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
@@ -395,7 +396,9 @@ export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
     db.prepare('SELECT day, step, SUM(count) AS n FROM store_steps WHERE sid = ? AND day >= ? AND step IN ('+DAILY_STEPS.map(()=>'?').join(',')+') GROUP BY day, step').bind(sid,since,...DAILY_STEPS).all(),
     without0006(()=>db.prepare('SELECT outcome, SUM(count) AS n FROM store_route_counts WHERE sid = ? AND day >= ? GROUP BY outcome').bind(sid,since).all(),{results:[]}),
     without0006(()=>db.prepare("SELECT topic, rating, SUM(count) AS n FROM store_held_picks WHERE sid = ? AND day >= ? AND detail = '' GROUP BY topic, rating").bind(sid,since).all(),{results:[]})]);
-  const order=(topic,rating,detail)=>[Compose.topicsFor(kind).indexOf(topic),Compose.RATINGS.indexOf(rating),Compose.detailsFor(kind,topic).indexOf(detail)];
+  // a retired topic or detail (indexOf -1) sorts last, not first (Devin r3a)
+  const at=(list,x)=>{const i=list.indexOf(x);return i<0?1e9:i;};
+  const order=(topic,rating,detail)=>[at(Compose.topicsFor(kind),topic),at(Compose.RATINGS,rating),at(Compose.detailsFor(kind,topic),detail)];
   const cmp=(a,b)=>{const x=order(a.topic,a.rating,a.detail),y=order(b.topic,b.rating,b.detail);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2];};
   const detailRows=details.results.filter(r=>r.n>=REPORT_MIN&&Compose.detailsFor(kind,r.topic).includes(r.detail)).map(r=>({topic:r.topic,rating:r.rating,detail:r.detail,count:r.n})).sort(cmp);
   const days=[...new Set(daily.results.map(r=>r.day))].sort();
@@ -458,7 +461,8 @@ async function storeSettings(db,sid){
 }
 async function saveStoreSettings(db,sid,req,now=Date.now()){
   const cur=await storeSettings(db,sid);const at=new Date(now).toISOString().slice(0,19)+'Z';const st=[db.prepare('INSERT INTO store_settings (sid) VALUES (?) ON CONFLICT(sid) DO NOTHING').bind(sid)];
-  if(req.route===true){st.push(db.prepare('UPDATE store_settings SET route_low = 1, route_consent_at = ?, route_consent_version = ? WHERE sid = ?').bind(at,ROUTE_CONSENT_VERSION,sid),
+  // Devin r3a: a repeated "on" with the current version keeps the first consent time and writes no log row (like "off")
+  if(req.route===true&&!cur.route){st.push(db.prepare('UPDATE store_settings SET route_low = 1, route_consent_at = ?, route_consent_version = ? WHERE sid = ?').bind(at,ROUTE_CONSENT_VERSION,sid),
     db.prepare("INSERT INTO store_route_log (sid, at, action, consent_version) VALUES (?,?,'on',?)").bind(sid,at,ROUTE_CONSENT_VERSION));}
   if(req.route===false&&(cur.route||cur.needsReconsent)){st.push(db.prepare('UPDATE store_settings SET route_low = 0 WHERE sid = ?').bind(sid),
     db.prepare("INSERT INTO store_route_log (sid, at, action, consent_version) VALUES (?,?,'off',NULL)").bind(sid,at));}
@@ -477,10 +481,11 @@ async function storeConfig(request,env,ctx,url){
   // 審査 4: a public GET is not left open as no-store: answers are cached for STORE_CONFIG_MAX_AGE seconds in the browser and at the
   // Cloudflare edge (Cache API, keyed by the sid only), so repeat reads of one QR do not reach D1. A settings change shows within that time.
   const cache=globalThis.caches&&globalThis.caches.default,key=new Request(url.origin+'/api/store-config?s='+sid);
-  if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch{/* cache is best effort */}}
   // Devin r2a-1: a GET from the same origin carries no Origin header, so refuse() (POST) does not fit; a browser's Sec-Fetch-Site does.
-  // A cache miss reaches D1, so misses are counted per sender per day (quota 'scip:', the same 1-day hash of the IP as elsewhere, 3-day cleanup).
+  // Checked before the cache (Devin r3a). The customer screen and the API share one origin (reviews.radineer.asia), so same-site is refused too.
   const site=request.headers.get('sec-fetch-site');if(site&&!['same-origin','none'].includes(site))return json({error:'origin_not_allowed'},403);
+  if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch{/* cache is best effort */}}
+  // A cache miss reaches D1, so misses are counted per sender per day (quota 'scip:', the same 1-day hash of the IP as elsewhere, 3-day cleanup).
   const ip=request.headers.get('cf-connecting-ip');
   if(env.QUOTA&&env.QUOTA_SALT&&ip){try{const day=utcDay(Date.now());if(!await reserve(env.QUOTA,'scip:'+day+':'+await sha256hex(env.QUOTA_SALT+'config'+day+ip),STORE_CONFIG_CAPS.perSenderDay))return json({error:'rate_limited'},429);
       const p=env.QUOTA.prepare("DELETE FROM quota WHERE key LIKE 'scip:%' AND substr(key,6,10) < ?").bind(utcDay(Date.now()-3*86400000)).run();if(ctx&&ctx.waitUntil)ctx.waitUntil(p.catch(()=>{}));}
@@ -631,6 +636,7 @@ export function monthsBefore(day,n){
 }
 const IDLE_STORE="SELECT sid FROM stores WHERE COALESCE(last_used_day, created_day) < ?";
 // Every table that refers to stores (sid). An idle store's rows in each are removed first; the store goes once none is left.
+// Order matters: purgePlan writes the idle-store steps of the first two (store_picks, store_steps) by hand and the rest from slice(2) (pinned by a test).
 // 0006 (管理画面): store_held_picks・store_route_counts (13 months by day, like the other counts), store_settings・store_route_log (with the store).
 export const STORE_CHILDREN=['store_picks','store_steps','store_held_picks','store_route_counts','store_settings','store_route_log'];
 // 連打対策の行の種類（quota の key の接頭辞）。新しい上限を足したらここにも足す（試験で worker.mjs 内の LIKE '<種類>:%' と一致を確認）

@@ -57,7 +57,7 @@ function renderPick(){
     chips.append(...Compose.detailsFor(kind,id).map(d=>{const b=el('button',{type:'button',textContent:Compose.detailLabel(lang,d)});b.dataset.detail=d;b.setAttribute('aria-pressed',String((picks.get(id)||{details:[]}).details.includes(d)));
       b.addEventListener('click',()=>{const p=picks.get(id);if(!p)return;const on=!p.details.includes(d);p.details=on?[...p.details,d]:p.details.filter(x=>x!==d);b.setAttribute('aria-pressed',String(on));});return b;}));
     for(const r of Compose.RATINGS){const input=el('input',{type:'radio',name:'rate-'+id,value:r,checked:(picks.get(id)||{}).rating===r});
-      input.addEventListener('change',()=>{const p=picks.get(id);if(p){p.rating=r;p.by='me';p.quote='';}else picks.set(id,{rating:r,details:[],by:'me',quote:''});syncRow(row);syncCompose();announce('compose-status','');reach('rating');});
+      input.addEventListener('change',()=>{const p=picks.get(id);if(p){p.rating=r;p.by='me';p.quote='';}else picks.set(id,{rating:r,details:[],by:'me',quote:''});syncRow(row);syncCompose();announce('compose-status','');reach('rating');reopenAfterRating();});
       seg.append(el('label',{},[input,el('span',{textContent:t('rate_'+r)})]));}
     row.append(el('div',{className:'rate-head'},[el('span',{className:'rate-name'},[el('span',{textContent:name}),state]),seg]),from,detail);syncRow(row);return row;}));
   syncCompose();
@@ -106,6 +106,12 @@ function sendPickStat(){
 }
 function openWriteOwn(focus){$('write-own').classList.remove('hidden');$('write-own-toggle').setAttribute('aria-expanded','true');$('draft-result').classList.add('hidden');if(focus){$('write-own').scrollIntoView({behavior:smooth(),block:'start'});$('experience').focus({preventScroll:true});}}
 $('write-own-toggle').addEventListener('click',()=>openWriteOwn(true));$('classify-button').addEventListener('click',classifyText);
+// 独立審査 r3-1: with routing on, a changed rating voids the earlier judgment: the candidates and the draft (with its Google button) close,
+// routePassed goes back to false, and the customer presses 「文章の候補を見る」 again. Routing off: nothing changes (as before this feature).
+// The counts keep the judgment of the first press (sendPickStat runs once per screen and store).
+function reopenAfterRating(){if(!storeConfig.route||!routePassed)return;routePassed=false;
+  ['candidates','draft-result','write-own'].forEach(id=>$(id).classList.add('hidden'));$('write-own-toggle').setAttribute('aria-expanded','false');
+  document.querySelectorAll('input[name=cand]').forEach(r=>{r.checked=false;});$('confirm').checked=false;setConfirmed();}
 // Devin r2b-4: one press at a time (the button is disabled before waiting for the setting, so a second press cannot start another AI call)
 let composeBusy=false;
 $('compose-button').addEventListener('click',async()=>{
@@ -125,7 +131,8 @@ $('compose-button').addEventListener('click',async()=>{
   }finally{composeBusy=false;syncCompose();}
 });
 // Choosing a candidate fills the edit box right below (no scrolling, so arrow keys can move through the choices).
-$('candidates').addEventListener('change',e=>{if(e.target.name!=='cand')return;
+$('candidates').addEventListener('change',e=>{if(e.target.name!=='cand'||routeBlocks())return;  // 独立審査 r3-1: not after a changed rating
+
   if(e.target.value==='own'){openWriteOwn(false);return;}
   $('write-own').classList.add('hidden');$('write-own-toggle').setAttribute('aria-expanded','false');reach('cand');
   const note=t('composedMode')+(tidied.text?(lang==='ja'||lang==='zh'?'':' ')+t(tidied.mode==='ai'?'composedAi':'composedFallback'):'');
@@ -133,7 +140,11 @@ $('candidates').addEventListener('change',e=>{if(e.target.name!=='cand')return;
 // compose.js did not load (blocked, 404, network): the pick table cannot be built, so say why and open "write my own" instead of
 // leaving a button that never enables. Only the status line of the pick card stays.
 function composeUnavailable(){$('pick-card').querySelectorAll(':scope > :not(#compose-status)').forEach(e=>e.classList.add('hidden'));openWriteOwn(false);}
-function showCustomer(name,url){storeName=name;reviewUrl=url;openedAt=performance.now();document.body.dataset.view='customer';$('store-view').classList.add('hidden');$('customer-view').classList.remove('hidden');if(!Compose)composeUnavailable();document.querySelectorAll('.direct-google').forEach(a=>a.href=url);$('google-link').href=url;applyLang(pickLang());track('view');if(storeId){const last=readStoredConfig();if(last){storeConfig=last;applyStoreConfig();}setConfigPending(true);configReady=loadStoreConfig().finally(()=>setConfigPending(false));}}
+function showCustomer(name,url){storeName=name;reviewUrl=url;openedAt=performance.now();document.body.dataset.view='customer';$('store-view').classList.add('hidden');$('customer-view').classList.remove('hidden');if(!Compose)composeUnavailable();document.querySelectorAll('.direct-google').forEach(a=>a.href=url);$('google-link').href=url;applyLang(pickLang());track('view');if(storeId){
+  // Devin r3b-1: a fault here (a missing or changed element) must never stop the script: the listeners further down still get registered
+  try{const last=readStoredConfig();if(last){storeConfig=last;applyStoreConfig();}}catch{/* the fresh read below applies again */}
+  try{setConfigPending(true);}catch{/* buttons stay as they are */}
+  configReady=loadStoreConfig().finally(()=>{try{setConfigPending(false);}catch{/* as above */}});}}
 // 管理画面の「お店の設定」（2026-10-02 本人決定。新しいQR・s= のときだけ）: GET /api/store-config で、振り分け（route）と LINE・インスタのURLを読む。
 // 送るのは店ID だけ。振り分けがオフで URL も無い店では、この画面の DOM も送る内容も、この機能が入る前（main e4e1ebb）と同じ（dashboard_browser.py で照合）。
 // 本人決定 C: 読めた設定はこの端末の localStorage に店IDごとに残し（運営には送らない）、次に読めないとき（通信・サーバー・3秒）はそれを使う。
@@ -158,6 +169,9 @@ async function loadStoreConfig(){try{const res=await fetch('/api/store-config?s=
 // 振り分けオン: Google への案内は、全部の話題に答えて「評価が低い」（Compose.isLow）でないと分かったあとにだけ出す。答える前に Google へ進む
 // 2つの道（「選ばずに、自分で書く」と「文章を整えず、Googleで書く」）と、評価が分かる前に本文を AI に送る「書いた内容から選ぶ」（審査 1）は隠す。
 // LINE・インスタのボタンは評価と関係なく、全員に同じものを最初から出す。オフに戻ったら（新しく読んだ設定がオフ）、隠したものだけを戻す。
+// Devin r3b-2 (判断): a customer judged "not low" does not get these paths back. Restoring 「書いた内容から選ぶ」 would let the AI set ratings
+// without the change handler (so a changed rating would not reset routePassed), and the direct links would skip that check too. The passed
+// customer still reaches Google through the candidates (and 「自分で書く」 among them).
 let routeHidden=[];
 function applyStoreConfig(){
   if(storeConfig.route&&!routeHidden.length){

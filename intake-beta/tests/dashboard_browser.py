@@ -60,6 +60,7 @@ def main():
      return ok(CONFIG.get(sid,{'route':False,'line':'','instagram':''}))
     if path=='/compose.js' and fake.get('no_compose'):return r.fulfill(status=404,body='')
     if path=='/api/report':return ok(fake['report'])
+    if path=='/api/settings' and fake.get('settings_hold'):held_routes.append((r,'__settings__'));return
     if path=='/api/settings':
      d=json.loads(body);assert d['token']==TOKEN,d
      if fake['settings_status']!=200:return ok({'error':'invalid_url'},fake['settings_status'])
@@ -81,7 +82,9 @@ def main():
    ctx.route('**/*',route);pg=ctx.new_page();pg.on('pageerror',lambda e:res['page_errors'].append(str(e)));pg.add_init_script('window.__printed=0;window.print=()=>{window.__printed++;};');return ctx,pg,reqs
   def release():
    while held_routes:
-    r,sid=held_routes.pop(0);r.fulfill(status=200,content_type='application/json',body=json.dumps(CONFIG.get(sid,{'route':False,'line':'','instagram':'','consent':''})))
+    r,sid=held_routes.pop(0)
+    if sid=='__settings__':r.fulfill(status=200,content_type='application/json',body=json.dumps({'settings':fake['report']['settings']}));continue
+    r.fulfill(status=200,content_type='application/json',body=json.dumps(CONFIG.get(sid,{'route':False,'line':'','instagram':'','consent':''})))
   def shot(pg,name,full=True):path=str(out.with_suffix('.'+name+'.png'));pg.screenshot(path=path,full_page=full);res['shots'].append(path)
   report_url=BASE+'/report#'+urlencode({'t':TOKEN,'g':GOOGLE})
   # ---------- 1. dashboard: order and content ----------
@@ -128,8 +131,15 @@ def main():
   fake['settings_status']=400;pg.locator('#link-line').fill('https://evil.example/x');pg.locator('#links-form button').click();expect(pg.locator('#links-status')).to_contain_text('URLの形を確かめてください')
   fake['settings_status']=200;pg.locator('#link-line').fill(' '+LINE+' ');pg.locator('#link-instagram').fill(IG);pg.locator('#links-form button').click();expect(pg.locator('#links-status')).to_contain_text('保存しました')
   sent=[json.loads(q['body']) for q in reqs if q['url']=='/api/settings'];assert sent[-1]=={'token':TOKEN,'line':LINE,'instagram':IG},sent[-1]
+  # Devin r3b-6: the links form cannot be sent twice while a save is on its way
+  fake['settings_hold']=True;pg.locator('#links-form button').click();expect(pg.locator('#links-form button')).to_be_disabled()
+  pg.locator('#links-form button').click(force=True);fake['settings_hold']=False;n0=len([q for q in reqs if q['url']=='/api/settings']);release()
+  expect(pg.locator('#links-form button')).to_be_enabled();assert len([q for q in reqs if q['url']=='/api/settings'])==n0,'one request'
   for q in reqs:assert TOKEN not in q['url'],q['url']
   ctx.close()
+  # Devin r3b-5: an "on" without a consent time shows no empty brackets
+  fake['report']=dict(DASH,settings=dict(SETTINGS_OFF,route=True,consentAt=None));ctx,pg,_=make();pg.goto(report_url);pg.wait_for_load_state('networkidle')
+  expect(pg.locator('#route-state')).to_have_text('いまの設定：オン。「気になった」が1つでもあるお客さまには、Google への案内を出していません。');ctx.close()
   # a consent to an older wording: shown as off and asks for a fresh consent (審査 2)
   fake['report']=dict(DASH,settings=dict(SETTINGS_OFF,consentAt='2026-09-01T00:00:00Z',needsReconsent=True));ctx,pg,_=make();pg.goto(report_url);pg.wait_for_load_state('networkidle')
   expect(pg.locator('#route-state')).to_contain_text('以前の同意は使いません');expect(pg.locator('#route-open')).to_be_visible();ctx.close()
@@ -191,6 +201,28 @@ def main():
   pg.locator('#addition').fill('待ち時間が長かった');answer(pg,0);pg.evaluate("()=>{const b=document.getElementById('compose-button');b.click();b.click();}")
   release();fake['hold']=False;expect(pg.locator('#candidates')).to_be_visible();pg.wait_for_timeout(300)
   assert len([q for q in log if q['url']=='/api/draft'])==1,[q['url'] for q in log];ctx.close()
+  # Devin r3b-1: if applying the stored setting throws (a missing or changed element), the rest of the page still works for a store with
+  # routing off: the listeners below it are registered and the whole flow up to Google works
+  log=[];ctx,pg,_=make(log=log);pg.goto(BASE+'/privacy.html');pg.evaluate("v=>localStorage.setItem('hk-store-config:%s',v)"%SID_LINKS,json.dumps({'route':False,'line':LINE,'instagram':IG,'consent':'','savedAt':int(__import__('time').time()*1000)}))
+  pg.add_init_script("(()=>{const o=Node.prototype.insertBefore;let n=0;Node.prototype.insertBefore=function(a,b){if(a&&a.id==='store-links'&&n++===0)throw new Error('simulated DOM fault');return o.call(this,a,b);};})()")
+  before=len(res['page_errors']);pg.goto(share(SID_LINKS));pg.wait_for_load_state('networkidle')
+  answer(pg,1);pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible();pg.locator('#cand-options .cand').first.click();pg.locator('#confirm').check()
+  pg.locator('#copy-draft').click();expect(pg.locator('#copy-status')).not_to_be_empty();pg.locator('#google-link').click();pg.wait_for_timeout(300)
+  evs=[json.loads(q['body'])['event'] for q in log if q['url']=='/api/event'];assert 'copy' in evs and 'google' in evs,evs
+  assert len(res['page_errors'])==before,res['page_errors'][before:];expect(pg.locator('#store-links')).to_be_visible();ctx.close()
+  # 独立審査 r3-1: routing on, all "good" → candidates → one row changed to 「気になった」: the candidates and the draft (with its Google
+  # button) close, nothing leads to Google, and the customer presses 「文章の候補を見る」 again (then held). Counting stays with the first press.
+  log=[];ctx,pg,_=make(log=log);pg.goto(share(SID_ON));pg.wait_for_load_state('networkidle')
+  answer(pg,0);pg.locator('#compose-button').click();expect(pg.locator('#candidates')).to_be_visible()
+  pg.locator('#cand-options .cand').first.click();pg.locator('#confirm').check();expect(pg.locator('#google-link')).to_be_visible()
+  pg.locator('[name=rate-wait][value=concern]+span').click()
+  expect(pg.locator('#candidates')).to_be_hidden();expect(pg.locator('#draft-result')).to_be_hidden();expect(pg.locator('#google-link')).to_be_hidden()
+  # forced from script as well: pick a candidate, tick the confirm box, press Google — the page must still refuse
+  pg.evaluate("()=>{document.querySelector('#cand-options input').click();const c=document.getElementById('confirm');c.checked=true;c.dispatchEvent(new Event('change'));document.getElementById('google-link').click();}");pg.wait_for_timeout(300)
+  expect(pg.locator('#draft-result')).to_be_hidden()
+  assert not [q for q in log if q['url']=='/api/event' and json.loads(q['body'])['event'] in ('google','direct')] and len(ctx.pages)==1,'no Google after the rating changed'
+  expect(pg.locator('#compose-button')).to_be_enabled();pg.locator('#compose-button').click();expect(pg.locator('#held-result')).to_be_visible();expect(pg.locator('#google-link')).to_be_hidden()
+  assert len([q for q in log if q['url']=='/api/pick-stat'])==1,'counted once, at the first press';ctx.close()
   # Devin r2b B2: a stored setting is used only when it is for the current consent version and at most 7 days old
   def stored_case(value,expect_route):
    ctx,pg,_=make();pg.goto(BASE+'/privacy.html');pg.evaluate("v=>localStorage.setItem('hk-store-config:%s',v)"%SID_ON,value)
@@ -244,7 +276,9 @@ def main():
    cfg=[q for q in q1 if q['url'].startswith('/api/store-config')];assert len(cfg)==extra,(name,cfg)
    for q in cfg:assert q=={'method':'GET','url':'/api/store-config?s='+SID_OFF,'body':None},q
    rest=[q for q in q1 if not q['url'].startswith('/api/store-config')]
-   assert rest==q0,(name,[x for x in zip(q0,rest) if x[0]!=x[1]][:3],len(q0),len(rest))
+   key=lambda q:(q['url'],q['method'],q['body'] or '')
+   assert sorted(rest,key=key)==sorted(q0,key=key),(name,'same requests (any arrival order)',len(q0),len(rest))
+   for u in sorted({q['url'] for q in q0}):assert [q for q in rest if q['url']==u]==[q for q in q0 if q['url']==u],(name,'same order within',u)
    for (t0,h0,l0),(t1,h1,l1) in zip(s0,s1):assert (t0,l0)==(t1,l1) and h0==h1,(name,t0,next((i,h0[max(0,i-80):i+80],h1[max(0,i-80):i+80]) for i in range(min(len(h0),len(h1))) if h0[i]!=h1[i]) if h0!=h1 else None)
    assert len(s0)==len(s1)==9,(len(s0),len(s1))
    parity[name]={'snapshots':len(s1),'bytes_compared':sum(len(h) for _,h,_ in s1),'requests_compared':len(rest),'extra_store_config_gets':len(cfg)}
