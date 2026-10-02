@@ -18,11 +18,11 @@
 <h2 id="voice-h">お客さまの声</h2>
 <div id="report-few" class="hidden"><h3>まだ少ないため、表示していません</h3><p>このQRから文章の候補を見たお客さまが <span id="report-min">5</span> 件以上になると、話題と評価の件数を表示します。件数が少ないうちは、お客さまが特定されないよう数を出していません。</p></div>
 <div id="report-body" class="hidden">
-<p class="hint">お客さまが答えた話題と評価の件数です（<span id="report-range"></span>）。1つの欄が <span class="report-min-inline">5</span> 件未満のときは「5件未満」とだけ表示します。感想の文章は運営にも届いていません。</p>
+<p class="hint">お客さまが答えた話題と評価の件数です（<span id="report-range"></span>）。1つの欄が1〜<span class="report-min-inline">5</span> 件未満のときは「5件未満」とだけ表示します。「0」は、まだ1件もないことを表します。感想の文章は運営にも届いていません。</p>
 <table class="report-table"><thead><tr><th scope="col">話題</th><th scope="col">よかった</th><th scope="col">ふつう</th><th scope="col">気になった</th></tr></thead><tbody id="report-topics"></tbody></table>
 <div id="details-part" class="hidden"><h3>どこが？</h3><p class="hint">「どこが？」で選ばれた項目のうち、<span class="report-min-inline">5</span> 件以上のものだけを並べています。</p><ul id="report-details" class="report-details"></ul></div>
 <div id="held-part" class="hidden"><h3>お店にだけ届いた声</h3>
-<p class="hint">振り分けがオンのあいだに、「気になった」が多く、Google への案内を出さなかったお客さまの話題と評価です（件数だけ。文章はありません）。</p>
+<p class="hint">振り分けがオンのあいだに、「気になった」があり、Google への案内を出さなかったお客さまの話題と評価です（件数だけ。文章はありません）。この人数と話題は、上の表（すべてのお客さま）にも含まれています。同じ画面で答え直した場合も、最初に「文章の候補を見る」を押したときの判定で数えます。</p>
 <p id="held-count" class="held-count"></p>
 <table class="report-table"><thead><tr><th scope="col">話題</th><th scope="col">よかった</th><th scope="col">ふつう</th><th scope="col">気になった</th></tr></thead><tbody id="held-topics"></tbody></table></div>
 </div>
@@ -31,9 +31,11 @@
 <h2 id="reach-h">到達の数字</h2>
 <p class="hint">このQRからお客さま画面を開いた回数と、そこから各段階まで進んだ回数です（同じ画面では1回だけ数えます）。</p>
 <dl class="report-steps" id="report-steps"></dl>
-<h3>日ごとの推移</h3>
-<p class="hint">QRを開いた → 候補を見た → コピーした → Googleを開いた、の日ごとの件数です（世界標準時の日付）。5件未満の日は「5件未満」と表示します。</p>
-<div class="report-scroll"><table class="report-table" id="daily-table"><thead><tr><th scope="col">日付</th><th scope="col">開いた</th><th scope="col">候補</th><th scope="col">コピー</th><th scope="col">Google</th></tr></thead><tbody id="report-daily"></tbody></table></div>
+<h3>推移</h3>
+<div class="reach-switch" role="group" aria-label="推移の単位"><button id="reach-daily-btn" class="secondary" type="button" aria-pressed="true">日ごと</button><button id="reach-weekly-btn" class="secondary" type="button" aria-pressed="false">週ごと（直近4週）</button></div>
+<p class="hint">QRを開いた → 候補を見た → コピーした → Googleを開いた、の件数です（世界標準時の日付）。1〜4件は「5件未満」、まだ無いときは「0」と表示します。</p>
+<div class="report-scroll" id="weekly-part" hidden><table class="report-table" id="weekly-table"><thead><tr><th scope="col">週</th><th scope="col">開いた</th><th scope="col">候補</th><th scope="col">コピー</th><th scope="col">Google</th></tr></thead><tbody id="report-weekly"></tbody></table></div>
+<div class="report-scroll" id="daily-part"><table class="report-table" id="daily-table"><thead><tr><th scope="col">日付</th><th scope="col">開いた</th><th scope="col">候補</th><th scope="col">コピー</th><th scope="col">Google</th></tr></thead><tbody id="report-daily"></tbody></table></div>
 <p id="daily-none" class="hint hidden">この期間の記録はまだありません。</p>
 </section>
 <section id="effect-card" class="card hidden">
@@ -65,13 +67,15 @@
 <p class="hint">初めはオフです。オフのあいだは、どのお客さまにも同じように Google への案内を出します。</p>
 <button id="route-open" class="secondary hidden" type="button" aria-controls="route-consent" aria-expanded="false">振り分けをオンにする…</button>
 <div id="route-consent" class="route-consent hidden">
-<p><strong>オンにすると：</strong>お客さまの画面で、話題の半分より多くに「気になった」が選ばれたとき（飲食店は7つのうち4つ以上、美容室は6つのうち4つ以上、ショップ・その他は5つのうち3つ以上）、Google の口コミ画面への案内を出しません。そのお客さまが選んだ話題と評価は、この画面の「お店にだけ届いた声」に件数で出ます（文章は届きません）。お店の LINE・インスタのボタンは、評価に関係なく、すべてのお客さまに同じように出ます。</p>
+<p><strong>オンにすると：</strong>お客さまの画面で、話題のうち「気になった」が1つでもあるとき、Google の口コミ画面への案内を出しません。オンのあいだは、回答の前に Google へ進む道（「選ばずに、自分で書く」「文章を整えず、Googleで書く」）と、書いた内容を AI が読み取る「書いた内容から選ぶ」も出しません。そのお客さまが選んだ話題と評価は、この画面の「お店にだけ届いた声」に件数で出ます（文章は届きません）。お店の LINE・インスタのボタンは、評価に関係なく、すべてのお客さまに同じように出ます。</p>
 <p><strong>Google の口コミのポリシー（原文）</strong></p>
 <blockquote class="policy-quote" lang="en">We do not allow merchants to: … Discourage or prohibit negative reviews, or selectively solicit positive reviews from customers</blockquote>
 <p class="hint">Google の日本語版のページでは、次のように書かれています。</p>
 <blockquote class="policy-quote">販売者が次の行為を行うことは禁止されています。… 顧客からの否定的なクチコミの投稿を妨げたり禁止したり、肯定的なクチコミを選択的に募ったりする行為。</blockquote>
 <blockquote class="policy-quote">評価の操作には、インセンティブ付きのクチコミや偏ったクチコミが含まれます。これらは禁止されており、マップから削除されます。</blockquote>
 <p class="hint">出典：Google「禁止および制限されているコンテンツ」<a href="https://support.google.com/contributionpolicy/answer/7400114?hl=en" target="_blank" rel="noopener noreferrer">英語 ↗</a>・<a href="https://support.google.com/contributionpolicy/answer/7400114?hl=ja" target="_blank" rel="noopener noreferrer">日本語 ↗</a>（2026年10月2日に確認）</p>
+<p><strong>完全には防げません。</strong>お客さまが共有リンク（QR）にある Google の口コミのURLを直接開けば、この設定がオンでも口コミは書けます。</p>
+<p>お客さまの端末がこの設定を読み込めないとき（通信の不具合など）は、その端末で最後に読み込めた設定を使います。オンの設定を一度読み込んだ端末では、読み込めないあいだも振り分けます。一度も読み込めていない端末では、振り分けはオフとして扱います。</p>
 <p class="route-warn"><strong>この設定をオンにすると、Google のポリシーに反するとみなされ、口コミの削除やビジネスプロフィールの制限を受けるおそれがあります。</strong>オンにするかどうかは、お店のご判断です。運営は、この設定が Google に認められるとはお約束できません。</p>
 <label class="check"><input id="route-agree" type="checkbox"><span>上の Google のポリシーと、口コミの削除やビジネスプロフィールの制限のおそれがあることを読み、理解しました。</span></label>
 <button id="route-next" class="secondary" type="button" disabled>確認へ進む</button>

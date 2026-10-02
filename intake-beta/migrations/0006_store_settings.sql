@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS store_settings (
   route_low INTEGER NOT NULL DEFAULT 0 CHECK (route_low IN (0, 1)),
   route_consent_at TEXT CHECK (route_consent_at IS NULL OR route_consent_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'),
   route_consent_version TEXT CHECK (route_consent_version IS NULL OR length(route_consent_version) BETWEEN 1 AND 20),
-  line_url TEXT NOT NULL DEFAULT '' CHECK (length(line_url) <= 200 AND (line_url = '' OR line_url GLOB 'https://*')),
+  line_url TEXT NOT NULL DEFAULT '' CHECK (length(line_url) <= 200 AND (line_url = '' OR line_url GLOB 'https://lin.ee/*' OR line_url GLOB 'https://line.me/R/ti/p/@*')),
   instagram_url TEXT NOT NULL DEFAULT '' CHECK (length(instagram_url) <= 200 AND (instagram_url = '' OR instagram_url GLOB 'https://www.instagram.com/*')),
   CHECK (route_low = 0 OR (route_consent_at IS NOT NULL AND route_consent_version IS NOT NULL))
 );

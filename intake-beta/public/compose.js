@@ -169,9 +169,9 @@ function compose(lang,kind,picks,addition){
   return STYLES.map(style=>{const body=composeOne(L,kind,norm,style);return {style,text:extra?body+SEP[L]+extra:body};});
 }
 // 振り分け（2026-10-02 本人決定。店主が管理画面で Google のポリシーとおそれを読んで同意し、オンにした店だけで使う）の「評価が低い」:
-// 「気になった」が、その業種の話題の数の半分より多い（飲食 7話題中4以上・美容 6中4以上・小売/その他 5中3以上）。本人確認待ちの案。
+// 話題のうち「気になった」が1つでもある（業種によらず。2026-10-02 本人決定）。
 // お客さま画面（app.js）と worker（件数）の両方がこの1つの関数で判定する。picks は compose() と同じ検査を通す（不正は例外）。
-function isLow(kind,picks){const n=normalize(kind,picks).filter(p=>p.rating==='concern').length;return n*2>TOPICS[kindOf(kind)].length;}
+function isLow(kind,picks){return normalize(kind,picks).some(p=>p.rating==='concern');}
 const api={RATINGS,STYLES,TOPICS,DETAILS,LANGS,MAX_TOPICS,topicsFor,label,detailsFor,detailLabel,evidenceFor,normalize,compose,isLow};
 if(typeof module==='object'&&module&&module.exports)module.exports=api;else root.HitokotoCompose=Object.freeze(api);
 })(typeof globalThis!=='undefined'?globalThis:this);

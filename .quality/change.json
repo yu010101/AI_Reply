@@ -1,16 +1,22 @@
 {
- "task_id": "hitokoto-owner-dashboard-20261002",
- "owner": "reviews-lp owner-dashboard（Claude実装・ブランチ/PRまで）→ メインが審査のうえ merge・D1 0006 適用・配備",
+ "task_id": "hitokoto-owner-dashboard-20261002-r2",
+ "owner": "reviews-lp owner-dashboard r2（本人決定 A/B/C と審査の指摘の修正・同じブランチに追加 commit）→ メインが審査のうえ merge・D1 0006 適用・配備",
  "acceptance": [
   "店主の管理画面（report.html/report.js を育てる）: 最初に「お客さまの声」（話題×よかった/ふつう/気になった・「どこが？」の5件以上・お店にだけ届いた声）、その下に到達の数字（段階と view/cands/copy/google の日ごとの推移）・効果・札・お店の設定。認証は既存の報告トークン（POST 本文・rpip 上限共有）",
   "振り分け: 既定オフ。POST /api/settings {token, route:true, consent:ROUTE_CONSENT_VERSION} のときだけオン（同意なしは 400 consent_required、版違いは 400）。同意の日時・版を store_settings と store_route_log に記録。オフは同意不要・状態が変わるときだけ記録。画面は Google のポリシー原文（英語・日本語版）と口コミ削除・ビジネスプロフィール制限のおそれを示し、チェック＋確認の2段でだけ送る",
-  "評価が低い = 「気になった」が業種の話題数の半分より多い（compose.js isLow。本人確認待ちの案）。お客さま画面と worker が同じ関数で判定",
+  "評価が低い = 話題のうち「気になった」が1つでもある（2026-10-02 本人決定 A。compose.js isLow）。お客さま画面と worker が同じ関数で判定",
   "お客さま画面（振り分けオン）: 低い評価は候補・コピー・Google への案内を出さずお礼だけ（AI にも送らない）。オンの店では回答前の Google への2つの道を隠す。件数は /api/pick-stat の同じ本文から worker が store_route_counts（held/passed）と store_held_picks に数える",
   "振り分けオフの店: 顧客向け API の応答と D1 の行が main e4e1ebb と1バイト一致（worker.test.mjs、サーバー自身の失敗記録の版ラベルとそこから作る指紋だけ除く）、お客さま画面の #customer-view の outerHTML 9時点とリクエスト本文が e4e1ebb と一致（dashboard_browser.py。差は新しいQRの GET /api/store-config 1回だけ）",
   "LINE・インスタ: 許可したホスト・形だけ（lin.ee/<code>・line.me/R/ti/p/@<id>・www.instagram.com/<user>/）を正規形で保存、それ以外は 400 invalid_url。お客さま画面の最後に、評価と関係なく全員に同じボタン（最初から表示・特典の文言なし・新しいタブ・noopener noreferrer）。CSP は不変",
   "LP・店主向け説明・privacy から「振り分けない」の約束を外し、「ポリシーに沿う／準拠」とは書かない。設定の存在と口コミ削除・制限のおそれを FAQ に明記",
   "migrations/0006_store_settings.sql（4表を足すだけ・本番未適用）と schema.sql が一致。保存期間: store_held_picks・store_route_counts は13か月、4表ともお店の登録（最後に使われてから1年）と一緒に子を先に消す。privacy・LP の保存期間と一致",
-  "既存の試験（worker/compose/poster_kit/funnel/lp/loop/report/poster/preflight/approval）を維持。配備・wrangler・D1 書込・merge はしない"
+  "既存の試験（worker/compose/poster_kit/funnel/lp/loop/report/poster/preflight/approval）を維持。配備・wrangler・D1 書込・merge はしない",
+  "本人決定 B: 到達の推移を「日ごと／週ごと（直近4週）」で切り替え。/api/report に weekly（4週・古い順）。5件未満の規則は両方。0 は 0（まだ無い）、1〜4 は null（5件未満）で区別（審査 Devin M7）",
+  "本人決定 C: お客さま画面は最後に読めた store-config を店IDごとに localStorage に残し（try/catch）、読めないとき（失敗・3秒）はそれを使う。オンを読んだ端末は障害時も振り分け、一度も読めていない端末はオフ。compose.js 無し＋オンは Google への道も AI の道も出さず理由を表示",
+  "審査 1: 振り分けオンでは「書いた内容から選ぶ」（/api/classify）を出さない。審査 2: 同意の版が ROUTE_CONSENT_VERSION と違う店は設定・store-config・件数のすべてでオフ扱い（needsReconsent:true）",
+  "審査 3: 同意文に「完全には防げない（共有リンクの Google の URL を直接開けば書ける）」を明記。審査 4: /api/store-config は Cache-Control public, max-age=60 とエッジの Cache API（失敗は no-store・キャッシュしない）",
+  "審査 5: 0006 未適用でも /api/report と /api/store-config は「設定なし」で動く（no such table のときだけ）。0006 を worker より先に適用する手順を PR 本文と ~/tasks/reviews-lp/DEPLOY-NEXT.md に必須条件として記載。審査 6: DB の CHECK で line_url も lin.ee / line.me/R/ti/p/@ に限定",
+  "審査 7・8: お店にだけ届いた声が全体の表にも含まれること、振り分けの件数は最初に「文章の候補を見る」を押したときの判定で数えること（答え直しても数え直さない）を管理画面・LP の FAQ・privacy・コードのコメントに記載"
  ],
  "reuse": [
   {

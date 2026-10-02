@@ -261,13 +261,13 @@ async function saveStorePickStat(db,day,stat){
 // 振り分け（管理画面の設定。既定オフ・同意制）: only a store whose routing is on (store_settings.route_low = 1, issued for the same kind)
 // gets a held/passed count, and only a held customer's picks go to store_held_picks. The decision is Compose.isLow, the same function the
 // customer screen uses to hide the Google guidance. Every statement is conditional in SQL, so a store with routing off gets no row.
-const ROUTE_ON='WHERE EXISTS (SELECT 1 FROM store_settings st JOIN stores s ON s.sid = st.sid WHERE st.sid = ? AND st.route_low = 1 AND s.kind = ?)';
+const ROUTE_ON='WHERE EXISTS (SELECT 1 FROM store_settings st JOIN stores s ON s.sid = st.sid WHERE st.sid = ? AND st.route_low = 1 AND st.route_consent_version = ? AND s.kind = ?)';
 async function saveStoreRoute(db,day,stat){
   const held=Compose.isLow(stat.kind,stat.picks);
   const count='INSERT INTO store_route_counts (sid, day, outcome, count) SELECT ?,?,?,1 '+ROUTE_ON+' ON CONFLICT(sid, day, outcome) DO UPDATE SET count=count+1 WHERE count < ?';
   const pick='INSERT INTO store_held_picks (sid, day, topic, rating, detail, count) SELECT ?,?,?,?,?,1 '+ROUTE_ON+' ON CONFLICT(sid, day, topic, rating, detail) DO UPDATE SET count=count+1 WHERE count < ?';
-  await db.batch([db.prepare(count).bind(stat.sid,day,held?'held':'passed',stat.sid,stat.kind,STORE_CAPS.row),
-    ...(held?pickStatRows(stat).map(([kind,topic,rating,detail])=>db.prepare(pick).bind(stat.sid,day,topic,rating,detail,stat.sid,kind,STORE_CAPS.row)):[])]);
+  await db.batch([db.prepare(count).bind(stat.sid,day,held?'held':'passed',stat.sid,ROUTE_CONSENT_VERSION,stat.kind,STORE_CAPS.row),
+    ...(held?pickStatRows(stat).map(([kind,topic,rating,detail])=>db.prepare(pick).bind(stat.sid,day,topic,rating,detail,stat.sid,ROUTE_CONSENT_VERSION,kind,STORE_CAPS.row)):[])]);
 }
 async function pickStats(request,env,url,ctx){
   const gate=await operatorRead(request,env,url,ctx);if(gate instanceof Response)return gate;const {since,closed}=gate;
@@ -368,6 +368,10 @@ async function storeFor(db,token){
 //   route:     {held, passed} while the store routes or has routed in the window (null otherwise), and held_topics: the held customers'
 //              topic × rating counts (the 「お店にだけ届いた声」), with the same small-count rule.
 // `settings` (routing and links) is added by the caller, also when there are not enough counts yet.
+// 審査 5: if the worker is deployed before migrations/0006 (the order in the PR and DEPLOY-NEXT.md is 0006 first), the reads of the 0006
+// tables answer as "nothing set / no counts" instead of failing the whole owner page. Only "no such table" is tolerated; other errors throw.
+// Takes a function so an error thrown at prepare() (local SQLite) and one at execution (D1) are handled the same way.
+async function without0006(run,empty){try{return await run();}catch(e){if(/no such table/i.test(String(e&&e.message)))return empty;throw e;}}
 export const DAILY_STEPS=['view','cands','copy','google'];
 export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
   const since=utcDay(now-(REPORT_DAYS-1)*86400000);
@@ -377,21 +381,25 @@ export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
   const stepN=Object.fromEntries(steps.results.map(r=>[r.step,r.n]));const responses=stepN.picks||0;
   const base={kind,since,days:REPORT_DAYS,min:REPORT_MIN};
   if(responses<REPORT_MIN)return {...base,enough:false};
-  const shown=n=>n>=REPORT_MIN?n:null;
+  // 0 is shown as 0 (「まだ0件」), 1..REPORT_MIN-1 as null (「5件未満」), the rest as is (審査 Devin M7: the owner can tell the two apart)
+  const shown=n=>n===0||n>=REPORT_MIN?n:null;
   const table=rows=>Compose.topicsFor(kind).map(topic=>{const row={topic};for(const r of Compose.RATINGS)row[r]=shown(rows.filter(x=>x.topic===topic&&x.rating===r).reduce((a,x)=>a+x.n,0));return row;});
   const [details,daily,route,held]=await Promise.all([
     db.prepare("SELECT topic, rating, detail, SUM(count) AS n FROM store_picks WHERE sid = ? AND day >= ? AND detail != '' GROUP BY topic, rating, detail").bind(sid,since).all(),
     db.prepare('SELECT day, step, SUM(count) AS n FROM store_steps WHERE sid = ? AND day >= ? AND step IN ('+DAILY_STEPS.map(()=>'?').join(',')+') GROUP BY day, step').bind(sid,since,...DAILY_STEPS).all(),
-    db.prepare('SELECT outcome, SUM(count) AS n FROM store_route_counts WHERE sid = ? AND day >= ? GROUP BY outcome').bind(sid,since).all(),
-    db.prepare("SELECT topic, rating, SUM(count) AS n FROM store_held_picks WHERE sid = ? AND day >= ? AND detail = '' GROUP BY topic, rating").bind(sid,since).all()]);
+    without0006(()=>db.prepare('SELECT outcome, SUM(count) AS n FROM store_route_counts WHERE sid = ? AND day >= ? GROUP BY outcome').bind(sid,since).all(),{results:[]}),
+    without0006(()=>db.prepare("SELECT topic, rating, SUM(count) AS n FROM store_held_picks WHERE sid = ? AND day >= ? AND detail = '' GROUP BY topic, rating").bind(sid,since).all(),{results:[]})]);
   const order=(topic,rating,detail)=>[Compose.topicsFor(kind).indexOf(topic),Compose.RATINGS.indexOf(rating),Compose.detailsFor(kind,topic).indexOf(detail)];
   const cmp=(a,b)=>{const x=order(a.topic,a.rating,a.detail),y=order(b.topic,b.rating,b.detail);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2];};
   const detailRows=details.results.filter(r=>r.n>=REPORT_MIN&&Compose.detailsFor(kind,r.topic).includes(r.detail)).map(r=>({topic:r.topic,rating:r.rating,detail:r.detail,count:r.n})).sort(cmp);
   const days=[...new Set(daily.results.map(r=>r.day))].sort();
   const dailyRows=days.map(day=>Object.fromEntries([['day',day],...DAILY_STEPS.map(step=>[step,shown(daily.results.filter(r=>r.day===day&&r.step===step).reduce((a,r)=>a+r.n,0))])]));
+  // 本人決定 B: the same four stages in the last 4 weeks (7 days each; the last week ends today), oldest first, same small-count rule
+  const weekly=[0,1,2,3].map(i=>{const from=utcDay(Date.parse(since+'T00:00:00Z')+7*i*86400000),to=utcDay(Date.parse(from+'T00:00:00Z')+6*86400000);
+    return Object.fromEntries([['from',from],['to',to],...DAILY_STEPS.map(step=>[step,shown(daily.results.filter(r=>r.step===step&&r.day>=from&&r.day<=to).reduce((a,r)=>a+r.n,0))])]);});
   const routed=routeOn||route.results.length>0;const outcome=o=>shown(route.results.filter(r=>r.outcome===o).reduce((a,r)=>a+r.n,0));
   return {...base,enough:true,responses,topics:table(picks.results),steps:REPORT_STEPS.map(step=>({step,count:shown(stepN[step]||0)})),
-    details:detailRows,daily:dailyRows,route:routed?{held:outcome('held'),passed:outcome('passed')}:null,held_topics:routed?table(held.results):null};
+    details:detailRows,daily:dailyRows,weekly,route:routed?{held:outcome('held'),passed:outcome('passed')}:null,held_topics:routed?table(held.results):null};
 }
 // ---- 管理画面の「お店の設定」: 振り分け（既定オフ・同意制）と LINE・インスタ ----
 // ROUTE_CONSENT_VERSION: the dated version of the consent wording shown on report.html (Google's policy, quoted as published on 2026-10-02,
@@ -401,6 +409,7 @@ export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
 // LINE / Instagram: only these shapes, stored in one canonical form ('' = none). Query and fragment are dropped (share links add igsh=, utm_…).
 //   LINE: https://lin.ee/<code> or https://line.me/R/ti/p/@<id> (also %40<id>). Instagram: https://www.instagram.com/<user>/ (or instagram.com).
 export const ROUTE_CONSENT_VERSION='2026-10-02';
+export const STORE_CONFIG_MAX_AGE=60;
 export const STORE_LINK_MAX=200;
 const IG_RESERVED=new Set(['p','reel','reels','tv','explore','accounts','stories','direct','about','developer','legal','web','challenge','privacy','emails','session']);
 export function validStoreLink(kind,raw){
@@ -431,16 +440,20 @@ export function validSettings(data){
   for(const k of ['line','instagram'])if(k in data){if(typeof data[k]!=='string')return {error:'invalid_input'};const v=validStoreLink(k,data[k]);if(v===null)return {error:'invalid_url'};out[k]=v;}
   return out;
 }
-const NO_SETTINGS={route:false,consentAt:null,line:'',instagram:''};
+const NO_SETTINGS={route:false,consentAt:null,line:'',instagram:'',needsReconsent:false};
+// 審査 2: a consent given to another wording version (ROUTE_CONSENT_VERSION changed since) counts as off — on the owner page
+// (needsReconsent:true asks for a fresh consent), on the customer screen and in the counts (ROUTE_ON checks the version too).
 async function storeSettings(db,sid){
-  const row=await db.prepare('SELECT route_low, route_consent_at, line_url, instagram_url FROM store_settings WHERE sid = ?').bind(sid).first();
-  return row?{route:row.route_low===1,consentAt:row.route_consent_at||null,line:row.line_url||'',instagram:row.instagram_url||''}:{...NO_SETTINGS};
+  const row=await without0006(()=>db.prepare('SELECT route_low, route_consent_at, route_consent_version, line_url, instagram_url FROM store_settings WHERE sid = ?').bind(sid).first(),null);
+  if(!row)return {...NO_SETTINGS};
+  const current=row.route_consent_version===ROUTE_CONSENT_VERSION;
+  return {route:row.route_low===1&&current,consentAt:row.route_consent_at||null,line:row.line_url||'',instagram:row.instagram_url||'',needsReconsent:row.route_low===1&&!current};
 }
 async function saveStoreSettings(db,sid,req,now=Date.now()){
   const cur=await storeSettings(db,sid);const at=new Date(now).toISOString().slice(0,19)+'Z';const st=[db.prepare('INSERT INTO store_settings (sid) VALUES (?) ON CONFLICT(sid) DO NOTHING').bind(sid)];
   if(req.route===true){st.push(db.prepare('UPDATE store_settings SET route_low = 1, route_consent_at = ?, route_consent_version = ? WHERE sid = ?').bind(at,ROUTE_CONSENT_VERSION,sid),
     db.prepare("INSERT INTO store_route_log (sid, at, action, consent_version) VALUES (?,?,'on',?)").bind(sid,at,ROUTE_CONSENT_VERSION));}
-  if(req.route===false&&cur.route){st.push(db.prepare('UPDATE store_settings SET route_low = 0 WHERE sid = ?').bind(sid),
+  if(req.route===false&&(cur.route||cur.needsReconsent)){st.push(db.prepare('UPDATE store_settings SET route_low = 0 WHERE sid = ?').bind(sid),
     db.prepare("INSERT INTO store_route_log (sid, at, action, consent_version) VALUES (?,?,'off',NULL)").bind(sid,at));}
   if('line' in req)st.push(db.prepare('UPDATE store_settings SET line_url = ? WHERE sid = ?').bind(req.line,sid));
   if('instagram' in req)st.push(db.prepare('UPDATE store_settings SET instagram_url = ? WHERE sid = ?').bind(req.instagram,sid));
@@ -454,8 +467,14 @@ async function storeConfig(request,env,ctx,url){
   if(request.method!=='GET')return json({error:'method_not_allowed'},405);
   const keys=[...url.searchParams.keys()];const sid=url.searchParams.get('s');
   if(keys.length!==1||keys[0]!=='s'||!SID_RX.test(sid||''))return json({error:'invalid_input'},400);
-  if(!env.QUOTA)return json({route:false,line:'',instagram:''});
-  try{const s=await storeSettings(env.QUOTA,sid);return json({route:s.route,line:s.line,instagram:s.instagram});}
+  // 審査 4: a public GET is not left open as no-store: answers are cached for STORE_CONFIG_MAX_AGE seconds in the browser and at the
+  // Cloudflare edge (Cache API, keyed by the sid only), so repeat reads of one QR do not reach D1. A settings change shows within that time.
+  const cache=globalThis.caches&&globalThis.caches.default,key=new Request(url.origin+'/api/store-config?s='+sid);
+  if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch{/* cache is best effort */}}
+  const answer=s=>{const r=new Response(JSON.stringify({route:s.route,line:s.line,instagram:s.instagram}),{status:200,headers:{...headers,'cache-control':'public, max-age='+STORE_CONFIG_MAX_AGE}});
+    if(cache)try{const p=cache.put(key,r.clone());if(ctx&&ctx.waitUntil)ctx.waitUntil(p.catch(()=>{}));}catch{/* best effort */}return r;};
+  if(!env.QUOTA)return answer(NO_SETTINGS);
+  try{return answer(await storeSettings(env.QUOTA,sid));}
   catch(e){console.error('store_config_error',String((e&&e.name)||'Error').slice(0,40));loopServerError(env,ctx,'api-store','store_config_error',e);return json({error:'unavailable'},503);}
 }
 async function ownerApi(request,env,ctx,url,route){

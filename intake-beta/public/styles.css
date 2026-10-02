@@ -373,6 +373,8 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 .route-confirm{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 .route-confirm button{margin:0 12px 0 0}
 #settings-card form{margin-top:6px}
+.reach-switch{display:flex;gap:8px;margin:4px 0 8px}
+.reach-switch button[aria-pressed=true]{background:var(--accent-tint);border-color:var(--accent)}
 /* お客さま画面: お店の LINE・インスタ（評価と関係なく全員に同じ）と、振り分けで Google への案内を出さないときのお礼 */
 .store-link-row{display:flex;flex-wrap:wrap;gap:10px}
 .store-link-row a{flex:1 1 200px;text-align:center}

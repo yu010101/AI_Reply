@@ -232,19 +232,15 @@ test('examples read naturally (fixed snapshots)',()=>{
   assert.equal(ex.length,1,'one LP example');assert.equal(ex[0][1].replace(/<[^>]+>/g,''),C.compose('ja','food',d)[1].text,'LP example drifted from compose.js');
 });
 
-// 振り分け（2026-10-02 本人決定・店主が同意してオンにした店だけ）: 「評価が低い」= 「気になった」が、その業種の話題の数の半分より多い。
-// 案（本人確認待ち）: 飲食 7話題 → 4以上 / 美容 6 → 4以上 / 小売・その他 5 → 3以上。境界の両側を全業種で数え上げて固定する（期待値は compose.js から作らない）。
-test('isLow: "concern" on more than half of the kind\'s topics, the boundary on both sides for every kind; ratings other than concern never count',()=>{
-  const NEED={food:4,beauty:4,retail:3,general:3};
-  assert.deepEqual(Object.keys(NEED).sort(),Object.keys(C.TOPICS).sort());
-  for(const [kind,need] of Object.entries(NEED)){const ids=C.topicsFor(kind);
-    for(let k=0;k<=ids.length;k++){
-      // the first k topics are 気になった, the rest alternate よかった/ふつう; order of the list must not matter
-      const picks=ids.map((topic,i)=>({topic,rating:i<k?'concern':(i%2?'ok':'good')}));
-      assert.equal(C.isLow(kind,picks),k>=need,kind+' concern='+k);assert.equal(C.isLow(kind,[...picks].reverse()),k>=need,kind+' reversed');
-      assert.equal(C.isLow(kind,picks.map(p=>({...p,details:[]}))),k>=need,'details do not change the answer');}
-    // all ok / all good are never low; a concern only on the details never counts (details inherit the topic rating)
-    assert.equal(C.isLow(kind,ids.map(topic=>({topic,rating:'ok'}))),false);assert.equal(C.isLow(kind,ids.map(topic=>({topic,rating:'good'}))),false);}
-  // the same checks as compose(): unknown topics or ratings are refused, not counted as "not low"
+// 振り分け（2026-10-02 本人決定・店主が同意してオンにした店だけ）: 「評価が低い」= 話題のうち「気になった」が1つでもある（業種によらず）。
+// 全業種・全話題で、その話題だけ「気になった」・残りは よかった/ふつう を数え上げる（期待値は compose.js から作らない）。
+test('isLow: one "concern" on any topic is low, in every kind; no concern is never low; details and order do not matter; bad picks are refused',()=>{
+  assert.deepEqual(Object.keys(C.TOPICS).sort(),['beauty','food','general','retail']);
+  for(const kind of Object.keys(C.TOPICS)){const ids=C.topicsFor(kind);
+    for(const rest of ['good','ok'])assert.equal(C.isLow(kind,ids.map(topic=>({topic,rating:rest}))),false,kind+' all '+rest);
+    assert.equal(C.isLow(kind,ids.map((topic,i)=>({topic,rating:i%2?'ok':'good'}))),false,kind+' mixed, no concern');
+    for(const c of ids){const picks=ids.map((topic,i)=>({topic,rating:topic===c?'concern':(i%2?'ok':'good'),details:topic===c?C.detailsFor(kind,topic).slice(0,1):[]}));
+      assert.equal(C.isLow(kind,picks),true,kind+' concern on '+c);assert.equal(C.isLow(kind,[...picks].reverse()),true,kind+' reversed');}
+    assert.equal(C.isLow(kind,ids.map(topic=>({topic,rating:'concern'}))),true);}
   assert.throws(()=>C.isLow('food',[{topic:'dish',rating:'bad'}]));assert.throws(()=>C.isLow('food',[]));
 });

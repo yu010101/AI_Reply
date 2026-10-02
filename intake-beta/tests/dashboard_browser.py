@@ -22,13 +22,14 @@ SID_OFF='QAsidOFF_0123456789abc';SID_ON='QAsidON_0123456789abcd';SID_LINKS='QAsi
 LINE='https://lin.ee/QAfict1';IG='https://www.instagram.com/qa_fictional_store/'
 CONFIG={SID_OFF:{'route':False,'line':'','instagram':''},SID_ON:{'route':True,'line':LINE,'instagram':IG},SID_LINKS:{'route':False,'line':LINE,'instagram':IG}}
 FOOD=['dish','drink','service','ambience','wait','price','location']
-SETTINGS_OFF={'route':False,'consentAt':None,'line':'','instagram':''}
+SETTINGS_OFF={'route':False,'consentAt':None,'line':'','instagram':'','needsReconsent':False}
 DASH={'kind':'food','since':'2026-09-05','days':28,'min':5,'enough':True,'responses':12,
  'topics':[{'topic':'dish','good':8,'ok':None,'concern':None},{'topic':'drink','good':None,'ok':6,'concern':None},{'topic':'service','good':7,'ok':None,'concern':None},{'topic':'ambience','good':None,'ok':None,'concern':None},
   {'topic':'wait','good':None,'ok':None,'concern':7},{'topic':'price','good':None,'ok':5,'concern':None},{'topic':'location','good':None,'ok':None,'concern':5}],
  'steps':[{'step':s,'count':c} for s,c in [('view',30),('classify',None),('rating',16),('rated',13),('cands',12),('cand',10),('confirm',9),('copy',8),('google',6)]],
  'details':[{'topic':'dish','rating':'good','detail':'taste','count':6},{'topic':'wait','rating':'concern','detail':'serving','count':5}],
- 'daily':[{'day':'2026-10-01','view':None,'cands':None,'copy':None,'google':None},{'day':'2026-10-02','view':9,'cands':6,'copy':5,'google':None}],
+ 'daily':[{'day':'2026-10-01','view':None,'cands':0,'copy':0,'google':None},{'day':'2026-10-02','view':9,'cands':6,'copy':5,'google':0}],
+ 'weekly':[{'from':'2026-09-05','to':'2026-09-11','view':0,'cands':0,'copy':0,'google':0},{'from':'2026-09-12','to':'2026-09-18','view':0,'cands':0,'copy':0,'google':0},{'from':'2026-09-19','to':'2026-09-25','view':None,'cands':0,'copy':0,'google':0},{'from':'2026-09-26','to':'2026-10-02','view':13,'cands':6,'copy':5,'google':None}],
  'route':{'held':5,'passed':None},'held_topics':[{'topic':t,'good':None,'ok':None,'concern':5 if t=='wait' else None} for t in FOOD],'settings':SETTINGS_OFF}
 FEW={'kind':'food','since':'2026-09-05','days':28,'min':5,'enough':False,'settings':SETTINGS_OFF}
 def git_file(rel):
@@ -54,8 +55,9 @@ def main():
     if path.startswith('/api/'):reqs.append({'method':r.request.method,'url':url[len(BASE):],'body':body})
     if path=='/api/store-config':
      sid=url.split('s=')[1] if 's=' in url else ''
-     if sid==SID_FAIL:return ok({'error':'unavailable'},503)
+     if sid==SID_FAIL or (fake.get('config_fail') and sid==SID_ON):return ok({'error':'unavailable'},503)
      return ok(CONFIG.get(sid,{'route':False,'line':'','instagram':''}))
+    if path=='/compose.js' and fake.get('no_compose'):return r.fulfill(status=404,body='')
     if path=='/api/report':return ok(fake['report'])
     if path=='/api/settings':
      d=json.loads(body);assert d['token']==TOKEN,d
@@ -89,7 +91,12 @@ def main():
   expect(pg.locator('#held-part')).to_be_visible();expect(pg.locator('#held-count')).to_have_text('Google への案内を出さなかった：5 ／ 出した：5件未満')
   held=pg.locator('#held-topics tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))');assert held[4]==['待ち時間','5件未満','5件未満','5'] and held[0]==['料理','5件未満','5件未満','5件未満'],held
   daily=pg.locator('#report-daily tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))')
-  assert daily==[['10/02','9','6','5','5件未満'],['10/01','5件未満','5件未満','5件未満','5件未満']],daily
+  assert daily==[['10/02','9','6','5','0'],['10/01','5件未満','0','0','5件未満']],daily  # 0 = none yet, 5件未満 = 1..4
+  expect(pg.locator('#daily-part')).to_be_visible();expect(pg.locator('#weekly-part')).to_be_hidden()
+  pg.locator('#reach-weekly-btn').click();expect(pg.locator('#weekly-part')).to_be_visible();expect(pg.locator('#daily-part')).to_be_hidden();assert pg.locator('#reach-weekly-btn').get_attribute('aria-pressed')=='true'
+  weekly=pg.locator('#report-weekly tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))')
+  assert weekly==[['09/26〜10/02','13','6','5','5件未満'],['09/19〜09/25','5件未満','0','0','0'],['09/12〜09/18','0','0','0','0'],['09/05〜09/11','0','0','0','0']],weekly
+  shot(pg,'dashboard_weekly_390',full=False);pg.locator('#reach-weekly-btn').scroll_into_view_if_needed();shot(pg,'dashboard_weekly_390',full=False);pg.locator('#reach-daily-btn').click();expect(pg.locator('#daily-part')).to_be_visible();res['dashboard_weekly']=weekly
   steps=pg.locator('#report-steps dt').all_text_contents();assert steps[0]=='画面を開いた' and steps[-1]=='Googleを開いた',steps
   expect(pg.locator('#route-state')).to_contain_text('いまの設定：オフ');expect(pg.locator('#route-open')).to_be_visible();expect(pg.locator('#route-off')).to_be_hidden();expect(pg.locator('#route-consent')).to_be_hidden()
   assert pg.evaluate('document.documentElement.scrollWidth<=innerWidth'),'mobile overflow (dashboard)'
@@ -98,7 +105,7 @@ def main():
   n=len([q for q in reqs if q['url']=='/api/settings'])
   pg.locator('#route-open').click();expect(pg.locator('#route-consent')).to_be_visible();assert pg.locator('#route-open').get_attribute('aria-expanded')=='true'
   consent=pg.locator('#route-consent').text_content()
-  for must in ['Discourage or prohibit negative reviews, or selectively solicit positive reviews from customers','顧客からの否定的なクチコミの投稿を妨げたり禁止したり、肯定的なクチコミを選択的に募ったりする行為。','口コミの削除やビジネスプロフィールの制限を受けるおそれ','7つのうち4つ以上']:
+  for must in ['Discourage or prohibit negative reviews, or selectively solicit positive reviews from customers','顧客からの否定的なクチコミの投稿を妨げたり禁止したり、肯定的なクチコミを選択的に募ったりする行為。','口コミの削除やビジネスプロフィールの制限を受けるおそれ','「気になった」が1つでもあるとき','完全には防げません','最後に読み込めた設定']:
    assert must in consent,must
   assert pg.locator('#route-consent a[href="https://support.google.com/contributionpolicy/answer/7400114?hl=en"]').count()==1
   expect(pg.locator('#route-next')).to_be_disabled();expect(pg.locator('#route-confirm')).to_be_hidden()
@@ -119,6 +126,9 @@ def main():
   sent=[json.loads(q['body']) for q in reqs if q['url']=='/api/settings'];assert sent[-1]=={'token':TOKEN,'line':LINE,'instagram':IG},sent[-1]
   for q in reqs:assert TOKEN not in q['url'],q['url']
   ctx.close()
+  # a consent to an older wording: shown as off and asks for a fresh consent (審査 2)
+  fake['report']=dict(DASH,settings=dict(SETTINGS_OFF,consentAt='2026-09-01T00:00:00Z',needsReconsent=True));ctx,pg,_=make();pg.goto(report_url);pg.wait_for_load_state('networkidle')
+  expect(pg.locator('#route-state')).to_contain_text('以前の同意は使いません');expect(pg.locator('#route-open')).to_be_visible();ctx.close()
   # not enough yet: the voice card says so, the settings are still there, the numbers are not
   fake['report']=FEW;ctx,pg,_=make();pg.goto(report_url);pg.wait_for_load_state('networkidle')
   expect(pg.locator('#report-few')).to_be_visible();expect(pg.locator('#report-body')).to_be_hidden();expect(pg.locator('#reach-card')).to_be_hidden();expect(pg.locator('#settings-card')).to_be_visible()
@@ -128,15 +138,17 @@ def main():
   def answer(pg,concern):
    for i,t in enumerate(FOOD):pg.locator('[name=rate-%s][value=%s]+span'%(t,'concern' if i<concern else 'good')).click()
   links_html={}
-  for case,sid,concern in [('on_low',SID_ON,4),('on_ok',SID_ON,3),('off_links_low',SID_LINKS,7)]:
+  for case,sid,concern in [('on_low',SID_ON,1),('on_ok',SID_ON,0),('off_links_low',SID_LINKS,7)]:
    log=[];ctx,pg,_=make(log=log);pg.goto(share(sid));pg.wait_for_load_state('networkidle')
    expect(pg.locator('#store-links')).to_be_visible()  # from the start, before any answer
    links_html[case+'_start']=pg.locator('#store-links').evaluate('e=>e.outerHTML')
    assert pg.locator('#store-link-line').get_attribute('href')==LINE and pg.locator('#store-link-instagram').get_attribute('href')==IG
    for sel in ('#store-link-line','#store-link-instagram'):assert pg.locator(sel).get_attribute('rel')=='noopener noreferrer' and pg.locator(sel).get_attribute('target')=='_blank'
    assert pg.evaluate("[...document.querySelectorAll('#customer-view > *')].at(-2).id")=='store-links','the links sit at the end of the customer screen (before the feedback form)'
-   if sid==SID_ON:expect(pg.locator('#write-own-toggle')).to_be_hidden()
-   else:expect(pg.locator('#write-own-toggle')).to_be_visible()
+   if sid==SID_ON:
+    expect(pg.locator('#write-own-toggle')).to_be_hidden();expect(pg.locator('#classify-button')).to_be_hidden()  # 審査 1: no AI reading before the rating is known
+    assert 'AI' not in pg.locator('#addition-part').inner_text(),pg.locator('#addition-part').inner_text()
+   else:expect(pg.locator('#write-own-toggle')).to_be_visible();expect(pg.locator('#classify-button')).to_be_visible()
    pg.locator('#addition').fill('待ち時間が長かった');answer(pg,concern);pg.locator('#compose-button').click()
    if case=='on_low':
     expect(pg.locator('#held-result')).to_be_visible();expect(pg.locator('#held-result')).to_contain_text('ご回答ありがとうございました')
@@ -155,8 +167,23 @@ def main():
    ctx.close()
   assert len(set(links_html.values()))==1,('the same buttons for everyone, whatever the rating',links_html)
   res['links_html']=links_html['on_low_start']
-  # a failing store-config: routing off, no buttons (the screen as before)
+  # a failing store-config on a phone that never read it: routing off, no buttons (the screen as before)
   ctx,pg,_=make();pg.goto(share(SID_FAIL));pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_visible();assert pg.locator('#store-links').count()==0;ctx.close()
+  # 本人決定 C: the last setting this phone read (per sid, localStorage) is used while store-config fails or is slow
+  ctx,pg,_=make();pg.goto(share(SID_ON));pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_hidden()
+  stored=pg.evaluate("localStorage.getItem('hk-store-config:%s')"%SID_ON);assert json.loads(stored)=={'route':True,'line':LINE,'instagram':IG},stored
+  fake['config_fail']=True
+  pg.reload();pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_hidden();expect(pg.locator('#classify-button')).to_be_hidden();expect(pg.locator('#store-links')).to_be_visible()
+  answer(pg,1);pg.locator('#compose-button').click();expect(pg.locator('#held-result')).to_be_visible();expect(pg.locator('#google-link')).to_be_hidden()
+  # compose.js missing with a known "on": no Google guidance and no AI path at all, and the screen says why
+  fake['no_compose']=True;pg.reload();pg.wait_for_load_state('networkidle')
+  expect(pg.locator('#compose-status')).to_have_text('いまは画面の一部を読み込めませんでした。時間をおいて、もう一度開いてください。')
+  expect(pg.locator('#write-own')).to_be_hidden();assert pg.locator('a[href^="https://g.page"]:visible').count()==0;fake['no_compose']=False
+  # localStorage blocked: the page still works (routing off when nothing could be read)
+  fake['config_fail']=False;CONFIG[SID_ON]['route']=False;pg.reload();pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_visible();expect(pg.locator('#classify-button')).to_be_visible()
+  assert json.loads(pg.evaluate("localStorage.getItem('hk-store-config:%s')"%SID_ON))['route'] is False,'a fresh "off" replaces the stored "on"';CONFIG[SID_ON]['route']=True;ctx.close()
+  ctx,pg,_=make();pg.add_init_script("Object.defineProperty(window,'localStorage',{get(){throw new DOMException('blocked','SecurityError');}})");fake['config_fail']=True
+  pg.goto(share(SID_ON));pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_visible();fake['config_fail']=False;ctx.close()
   # ---------- 5. routing off: byte-for-byte the screen of main e4e1ebb ----------
   def run(source,url):
    log=[];ctx,pg,_=make(source,log=log);snaps=[]

@@ -60,6 +60,9 @@ function show(r){
     const daily=Array.isArray(r.daily)?[...r.daily].reverse():[];
     $('report-daily').replaceChildren(...daily.map(d=>{const tr=document.createElement('tr');const th=document.createElement('th');th.scope='row';th.textContent=d.day.slice(5).replace('-','/');tr.append(th,...['view','cands','copy','google'].map(k=>td(cell(d[k]))));return tr;}));
     $('daily-table').classList.toggle('hidden',!daily.length);$('daily-none').classList.toggle('hidden',Boolean(daily.length));
+    // 本人決定 B: 週ごと（直近4週、新しい週が上）。日ごと／週ごとはボタンで切り替える（初めは日ごと）
+    const weekly=Array.isArray(r.weekly)?[...r.weekly].reverse():[];const md=d=>d.slice(5).replace('-','/');
+    $('report-weekly').replaceChildren(...weekly.map(w=>{const tr=document.createElement('tr');const th=document.createElement('th');th.scope='row';th.textContent=md(w.from)+'〜'+md(w.to);tr.append(th,...['view','cands','copy','google'].map(k=>td(cell(w[k]))));return tr;}));
     $('reach-card').classList.remove('hidden');
   }
   // topics with more 「気になった」 first (hidden counts count as 0), then the screen order
@@ -92,9 +95,13 @@ $('notice-print').addEventListener('click',()=>window.print());
 // 振り分け: 既定オフ。オンにできるのは、ポリシーの原文とおそれを示した欄を開き、チェックを入れ、確認の段でもう一度押したときだけ。
 // 送るのは {token, route:true, consent:CONSENT_VERSION}（オフは {token, route:false}）。同意の日時はサーバーが記録する。
 // LINE・インスタ: {token, line, instagram}。許可した形でないURLはサーバーが 400 で断る。
+function reachUnit(weekly){$('weekly-part').hidden=!weekly;$('daily-part').hidden=weekly;$('daily-none').hidden=weekly;
+  $('reach-weekly-btn').setAttribute('aria-pressed',String(weekly));$('reach-daily-btn').setAttribute('aria-pressed',String(!weekly));}
+$('reach-daily-btn').addEventListener('click',()=>reachUnit(false));$('reach-weekly-btn').addEventListener('click',()=>reachUnit(true));
 const fmt=iso=>{const d=new Date(iso);return isNaN(d)?'':d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});};
 function renderRoute(s){
-  $('route-state').textContent=s.route?'いまの設定：オン（'+fmt(s.consentAt)+' に同意）。「気になった」が多いお客さまには、Google への案内を出していません。':'いまの設定：オフ。すべてのお客さまに同じように Google への案内を出しています。';
+  // 審査 2: a consent to an older wording counts as off until the owner consents to the current one
+  $('route-state').textContent=s.route?'いまの設定：オン（'+fmt(s.consentAt)+' に同意）。「気になった」が1つでもあるお客さまには、Google への案内を出していません。':s.needsReconsent?'いまの設定：オフ（説明の文章が変わったため、以前の同意は使いません。続ける場合は、もう一度お読みのうえ同意してください）。':'いまの設定：オフ。すべてのお客さまに同じように Google への案内を出しています。';
   $('route-open').classList.toggle('hidden',s.route);$('route-off').classList.toggle('hidden',!s.route);closeConsent();}
 function closeConsent(){$('route-consent').classList.add('hidden');$('route-open').setAttribute('aria-expanded','false');$('route-agree').checked=false;$('route-next').disabled=true;$('route-confirm').classList.add('hidden');}
 function settings(s){if(!s)return;renderRoute(s);$('link-line').value=s.line||'';$('link-instagram').value=s.instagram||'';$('settings-card').classList.remove('hidden');}
