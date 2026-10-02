@@ -266,8 +266,9 @@ async function saveStoreRoute(db,day,stat){
   const held=Compose.isLow(stat.kind,stat.picks);
   const count='INSERT INTO store_route_counts (sid, day, outcome, count) SELECT ?,?,?,1 '+ROUTE_ON+' ON CONFLICT(sid, day, outcome) DO UPDATE SET count=count+1 WHERE count < ?';
   const pick='INSERT INTO store_held_picks (sid, day, topic, rating, detail, count) SELECT ?,?,?,?,?,1 '+ROUTE_ON+' ON CONFLICT(sid, day, topic, rating, detail) DO UPDATE SET count=count+1 WHERE count < ?';
-  await db.batch([db.prepare(count).bind(stat.sid,day,held?'held':'passed',stat.sid,ROUTE_CONSENT_VERSION,stat.kind,STORE_CAPS.row),
-    ...(held?pickStatRows(stat).map(([kind,topic,rating,detail])=>db.prepare(pick).bind(stat.sid,day,topic,rating,detail,stat.sid,ROUTE_CONSENT_VERSION,kind,STORE_CAPS.row)):[])]);
+  // Devin r2a-6: every statement checks the store against stat.kind (the same as the count). Devin r2a-2: before 0006 is applied, nothing to do.
+  await without0006(()=>db.batch([db.prepare(count).bind(stat.sid,day,held?'held':'passed',stat.sid,ROUTE_CONSENT_VERSION,stat.kind,STORE_CAPS.row),
+    ...(held?pickStatRows(stat).map(([,topic,rating,detail])=>db.prepare(pick).bind(stat.sid,day,topic,rating,detail,stat.sid,ROUTE_CONSENT_VERSION,stat.kind,STORE_CAPS.row)):[])]),null);
 }
 async function pickStats(request,env,url,ctx){
   const gate=await operatorRead(request,env,url,ctx);if(gate instanceof Response)return gate;const {since,closed}=gate;
@@ -371,8 +372,12 @@ async function storeFor(db,token){
 // 審査 5: if the worker is deployed before migrations/0006 (the order in the PR and DEPLOY-NEXT.md is 0006 first), the reads of the 0006
 // tables answer as "nothing set / no counts" instead of failing the whole owner page. Only "no such table" is tolerated; other errors throw.
 // Takes a function so an error thrown at prepare() (local SQLite) and one at execution (D1) are handled the same way.
-async function without0006(run,empty){try{return await run();}catch(e){if(/no such table/i.test(String(e&&e.message)))return empty;throw e;}}
+const TABLES_0006=/no such table:? *(?:main\.)?(store_settings|store_route_log|store_route_counts|store_held_picks)\b/i;  // 独立審査 r2-3: only these
+async function without0006(run,empty){try{return await run();}catch(e){if(TABLES_0006.test(String(e&&e.message)))return empty;throw e;}}
 export const DAILY_STEPS=['view','cands','copy','google'];
+// The report window cut into 7-day weeks, oldest first; the last week ends today (Devin r2a-3: derived from REPORT_DAYS, not hard-coded).
+export function reportWeeks(today,days){const t=Date.parse(today+'T00:00:00Z'),n=Math.floor(days/7);
+  return Array.from({length:n},(_,i)=>{const to=t-7*(n-1-i)*86400000;return {from:utcDay(to-6*86400000),to:utcDay(to)};});}
 export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
   const since=utcDay(now-(REPORT_DAYS-1)*86400000);
   const [picks,steps]=await Promise.all([
@@ -381,9 +386,10 @@ export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
   const stepN=Object.fromEntries(steps.results.map(r=>[r.step,r.n]));const responses=stepN.picks||0;
   const base={kind,since,days:REPORT_DAYS,min:REPORT_MIN};
   if(responses<REPORT_MIN)return {...base,enough:false};
-  // 0 is shown as 0 (「まだ0件」), 1..REPORT_MIN-1 as null (「5件未満」), the rest as is (審査 Devin M7: the owner can tell the two apart)
-  const shown=n=>n===0||n>=REPORT_MIN?n:null;
-  const table=rows=>Compose.topicsFor(kind).map(topic=>{const row={topic};for(const r of Compose.RATINGS)row[r]=shown(rows.filter(x=>x.topic===topic&&x.rating===r).reduce((a,x)=>a+x.n,0));return row;});
+  // Totals (stages, days, weeks, held/passed): 0 is shown as 0 (「まだ0件」), 1..REPORT_MIN-1 as null (「5件未満」) — Devin r1 M7.
+  // Per-topic cells (topics, held_topics) keep the older promise: anything under REPORT_MIN, 0 included, is null (独立審査 r2-5).
+  const shown=n=>n===0||n>=REPORT_MIN?n:null,cellShown=n=>n>=REPORT_MIN?n:null;
+  const table=rows=>Compose.topicsFor(kind).map(topic=>{const row={topic};for(const r of Compose.RATINGS)row[r]=cellShown(rows.filter(x=>x.topic===topic&&x.rating===r).reduce((a,x)=>a+x.n,0));return row;});
   const [details,daily,route,held]=await Promise.all([
     db.prepare("SELECT topic, rating, detail, SUM(count) AS n FROM store_picks WHERE sid = ? AND day >= ? AND detail != '' GROUP BY topic, rating, detail").bind(sid,since).all(),
     db.prepare('SELECT day, step, SUM(count) AS n FROM store_steps WHERE sid = ? AND day >= ? AND step IN ('+DAILY_STEPS.map(()=>'?').join(',')+') GROUP BY day, step').bind(sid,since,...DAILY_STEPS).all(),
@@ -395,7 +401,7 @@ export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
   const days=[...new Set(daily.results.map(r=>r.day))].sort();
   const dailyRows=days.map(day=>Object.fromEntries([['day',day],...DAILY_STEPS.map(step=>[step,shown(daily.results.filter(r=>r.day===day&&r.step===step).reduce((a,r)=>a+r.n,0))])]));
   // 本人決定 B: the same four stages in the last 4 weeks (7 days each; the last week ends today), oldest first, same small-count rule
-  const weekly=[0,1,2,3].map(i=>{const from=utcDay(Date.parse(since+'T00:00:00Z')+7*i*86400000),to=utcDay(Date.parse(from+'T00:00:00Z')+6*86400000);
+  const weekly=reportWeeks(utcDay(now),REPORT_DAYS).map(({from,to})=>{
     return Object.fromEntries([['from',from],['to',to],...DAILY_STEPS.map(step=>[step,shown(daily.results.filter(r=>r.step===step&&r.day>=from&&r.day<=to).reduce((a,r)=>a+r.n,0))])]);});
   const routed=routeOn||route.results.length>0;const outcome=o=>shown(route.results.filter(r=>r.outcome===o).reduce((a,r)=>a+r.n,0));
   return {...base,enough:true,responses,topics:table(picks.results),steps:REPORT_STEPS.map(step=>({step,count:shown(stepN[step]||0)})),
@@ -408,8 +414,9 @@ export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
 //   in store_route_log; off: needs no consent, logged once (a repeated off writes nothing). The last consent stays on record after off.
 // LINE / Instagram: only these shapes, stored in one canonical form ('' = none). Query and fragment are dropped (share links add igsh=, utm_…).
 //   LINE: https://lin.ee/<code> or https://line.me/R/ti/p/@<id> (also %40<id>). Instagram: https://www.instagram.com/<user>/ (or instagram.com).
-export const ROUTE_CONSENT_VERSION='2026-10-02';
+export const ROUTE_CONSENT_VERSION='2026-10-02b';  // r2: 「完全には防げない」と端末に残る設定（7日）を同意文に足したため版を上げた（独立審査 r2-4）
 export const STORE_CONFIG_MAX_AGE=60;
+export const STORE_CONFIG_CAPS={perSenderDay:300};
 export const STORE_LINK_MAX=200;
 const IG_RESERVED=new Set(['p','reel','reels','tv','explore','accounts','stories','direct','about','developer','legal','web','challenge','privacy','emails','session']);
 export function validStoreLink(kind,raw){
@@ -423,7 +430,7 @@ export function validStoreLink(kind,raw){
     if(h==='lin.ee'){const m=/^\/([A-Za-z0-9_-]{1,40})\/?$/.exec(u.pathname);if(m)out='https://lin.ee/'+m[1];}
     else if(h==='line.me'){const m=/^\/R\/ti\/p\/(?:@|%40)([A-Za-z0-9._-]{1,40})\/?$/.exec(u.pathname);if(m)out='https://line.me/R/ti/p/@'+m[1];}
   }else if(h==='www.instagram.com'||h==='instagram.com'){
-    const m=/^\/([A-Za-z0-9._]{1,30})\/?$/.exec(u.pathname);if(m&&!IG_RESERVED.has(m[1].toLowerCase()))out='https://www.instagram.com/'+m[1]+'/';
+    const m=/^\/((?=[A-Za-z0-9._]*[A-Za-z0-9])[A-Za-z0-9._]{1,30})\/?$/.exec(u.pathname);if(m&&!IG_RESERVED.has(m[1].toLowerCase()))out='https://www.instagram.com/'+m[1]+'/';
   }
   return out&&out.length<=STORE_LINK_MAX?out:null;
 }
@@ -471,7 +478,15 @@ async function storeConfig(request,env,ctx,url){
   // Cloudflare edge (Cache API, keyed by the sid only), so repeat reads of one QR do not reach D1. A settings change shows within that time.
   const cache=globalThis.caches&&globalThis.caches.default,key=new Request(url.origin+'/api/store-config?s='+sid);
   if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch{/* cache is best effort */}}
-  const answer=s=>{const r=new Response(JSON.stringify({route:s.route,line:s.line,instagram:s.instagram}),{status:200,headers:{...headers,'cache-control':'public, max-age='+STORE_CONFIG_MAX_AGE}});
+  // Devin r2a-1: a GET from the same origin carries no Origin header, so refuse() (POST) does not fit; a browser's Sec-Fetch-Site does.
+  // A cache miss reaches D1, so misses are counted per sender per day (quota 'scip:', the same 1-day hash of the IP as elsewhere, 3-day cleanup).
+  const site=request.headers.get('sec-fetch-site');if(site&&!['same-origin','none'].includes(site))return json({error:'origin_not_allowed'},403);
+  const ip=request.headers.get('cf-connecting-ip');
+  if(env.QUOTA&&env.QUOTA_SALT&&ip){try{const day=utcDay(Date.now());if(!await reserve(env.QUOTA,'scip:'+day+':'+await sha256hex(env.QUOTA_SALT+'config'+day+ip),STORE_CONFIG_CAPS.perSenderDay))return json({error:'rate_limited'},429);
+      const p=env.QUOTA.prepare("DELETE FROM quota WHERE key LIKE 'scip:%' AND substr(key,6,10) < ?").bind(utcDay(Date.now()-3*86400000)).run();if(ctx&&ctx.waitUntil)ctx.waitUntil(p.catch(()=>{}));}
+    catch(e){console.error('store_config_error',String((e&&e.name)||'Error').slice(0,40));return json({error:'unavailable'},503);}}
+  // Devin r2b B2: the consent version rides along (only when routing is on), so a phone can drop a stored setting of another version.
+  const answer=s=>{const r=new Response(JSON.stringify({route:s.route,line:s.line,instagram:s.instagram,consent:s.route?ROUTE_CONSENT_VERSION:''}),{status:200,headers:{...headers,'cache-control':'public, max-age='+STORE_CONFIG_MAX_AGE}});
     if(cache)try{const p=cache.put(key,r.clone());if(ctx&&ctx.waitUntil)ctx.waitUntil(p.catch(()=>{}));}catch{/* best effort */}return r;};
   if(!env.QUOTA)return answer(NO_SETTINGS);
   try{return answer(await storeSettings(env.QUOTA,sid));}
@@ -502,7 +517,10 @@ async function ownerApi(request,env,ctx,url,route){
     // (and is counted in loop_events) instead of a silent miss that would let the store expire while it is being read.
     await env.QUOTA.prepare(STORE_TOUCH_SQL).bind(g.day,store.sid,g.day).run();
     if(route==='report'){const s=await storeSettings(env.QUOTA,store.sid);return json({...await storeReport(env.QUOTA,store.sid,store.kind,Date.now(),s.route),settings:s});}
-    if(route==='settings')return json({settings:await saveStoreSettings(env.QUOTA,store.sid,settings)});
+    if(route==='settings'){const saved=await saveStoreSettings(env.QUOTA,store.sid,settings);
+      // 独立審査 r2-2: drop this data center's cached store-config for the sid (other data centers and browsers follow within STORE_CONFIG_MAX_AGE)
+      try{const cache=globalThis.caches&&globalThis.caches.default;if(cache){const p=cache.delete(new Request(url.origin+'/api/store-config?s='+store.sid));if(ctx&&ctx.waitUntil)ctx.waitUntil(p.catch(()=>{}));else await p.catch(()=>{});}}catch{/* best effort */}
+      return json({settings:saved});}
     const notice=validNotice(data,store.kind);if(notice.error)return json({error:notice.error},400);
     return json(notice);
   }catch(e){
@@ -616,7 +634,7 @@ const IDLE_STORE="SELECT sid FROM stores WHERE COALESCE(last_used_day, created_d
 // 0006 (管理画面): store_held_picks・store_route_counts (13 months by day, like the other counts), store_settings・store_route_log (with the store).
 export const STORE_CHILDREN=['store_picks','store_steps','store_held_picks','store_route_counts','store_settings','store_route_log'];
 // 連打対策の行の種類（quota の key の接頭辞）。新しい上限を足したらここにも足す（試験で worker.mjs 内の LIKE '<種類>:%' と一致を確認）
-export const RATE_KEY_PREFIXES=['ip','day','trip','trday','lfip','lpip','lpday','psip','psday','rpip','seip','stip','stday','opday'];
+export const RATE_KEY_PREFIXES=['ip','day','trip','trday','lfip','lpip','lpday','psip','psday','rpip','seip','stip','stday','opday','scip'];
 export const RATE_KEEP_DAYS=3;
 const byDay=(table,extra='')=>'DELETE FROM '+table+' WHERE rowid IN (SELECT rowid FROM '+table+' WHERE day < ?'+extra+' LIMIT ?)';
 // [ログの名前, SQL, 期限]。順番に意味がある: 店の子の行 → 店。

@@ -1,6 +1,6 @@
 {
- "task_id": "hitokoto-owner-dashboard-20261002-r2",
- "owner": "reviews-lp owner-dashboard r2（本人決定 A/B/C と審査の指摘の修正・同じブランチに追加 commit）→ メインが審査のうえ merge・D1 0006 適用・配備",
+ "task_id": "hitokoto-owner-dashboard-20261002-r3",
+ "owner": "reviews-lp owner-dashboard r3（PR #16 r2 審査: Devin r2a/r2b・独立審査 r2 の修正・同じブランチに追加 commit）→ メインが審査のうえ merge・D1 0006 適用・配備",
  "acceptance": [
   "店主の管理画面（report.html/report.js を育てる）: 最初に「お客さまの声」（話題×よかった/ふつう/気になった・「どこが？」の5件以上・お店にだけ届いた声）、その下に到達の数字（段階と view/cands/copy/google の日ごとの推移）・効果・札・お店の設定。認証は既存の報告トークン（POST 本文・rpip 上限共有）",
   "振り分け: 既定オフ。POST /api/settings {token, route:true, consent:ROUTE_CONSENT_VERSION} のときだけオン（同意なしは 400 consent_required、版違いは 400）。同意の日時・版を store_settings と store_route_log に記録。オフは同意不要・状態が変わるときだけ記録。画面は Google のポリシー原文（英語・日本語版）と口コミ削除・ビジネスプロフィール制限のおそれを示し、チェック＋確認の2段でだけ送る",
@@ -16,7 +16,12 @@
   "審査 1: 振り分けオンでは「書いた内容から選ぶ」（/api/classify）を出さない。審査 2: 同意の版が ROUTE_CONSENT_VERSION と違う店は設定・store-config・件数のすべてでオフ扱い（needsReconsent:true）",
   "審査 3: 同意文に「完全には防げない（共有リンクの Google の URL を直接開けば書ける）」を明記。審査 4: /api/store-config は Cache-Control public, max-age=60 とエッジの Cache API（失敗は no-store・キャッシュしない）",
   "審査 5: 0006 未適用でも /api/report と /api/store-config は「設定なし」で動く（no such table のときだけ）。0006 を worker より先に適用する手順を PR 本文と ~/tasks/reviews-lp/DEPLOY-NEXT.md に必須条件として記載。審査 6: DB の CHECK で line_url も lin.ee / line.me/R/ti/p/@ に限定",
-  "審査 7・8: お店にだけ届いた声が全体の表にも含まれること、振り分けの件数は最初に「文章の候補を見る」を押したときの判定で数えること（答え直しても数え直さない）を管理画面・LP の FAQ・privacy・コードのコメントに記載"
+  "審査 7・8: お店にだけ届いた声が全体の表にも含まれること、振り分けの件数は最初に「文章の候補を見る」を押したときの判定で数えること（答え直しても数え直さない）を管理画面・LP の FAQ・privacy・コードのコメントに記載",
+  "Devin r2b B1: s= 付きの画面は store-config を読むまで「自分で書く」「書いた内容から選ぶ」「整える」のボタンを無効にし、各処理でも configReady 後に route を確認（AI 送信・Google への案内を保留）。オン適用時は開いていた #write-own・#draft-result も閉じる",
+  "Devin r2b B2: store-config は route がオンのとき consent（同意の版）を返す。端末の保存設定は savedAt 付きで、版が CONSENT_VERSION と一致し保存から7日以内（未来時刻は不可）のときだけ使う。同意文・privacy に7日を記載",
+  "Devin r2b 3〜7: LINE/インスタのボタンを設定反映ごとに作り直す／候補ボタンは待つ前に無効化（二重送信なし）／記録なしの文は日ごとの行数で制御／報告用リンクの説明を「件数を見たり設定を変えたりできる」に／最終確認文を「1つでもある」に",
+  "Devin r2a: store-config は Sec-Fetch-Site が別サイトなら 403、キャッシュが外れたときだけ送信元ごと1日300回（quota scip:、3日で削除）／saveStoreRoute も without0006／週は REPORT_DAYS から導出（reportWeeks）／インスタのユーザー名に英数字1文字以上／held/passed は「判定した数」と明記／held_picks の kind 照合を stat.kind に",
+  "独立審査 r2: 設定の保存でそのデータセンターの store-config キャッシュを消し、画面に「反映まで最大2分程度」／without0006 は0006の4表の名前だけ許す／同意文の変更に合わせ ROUTE_CONSENT_VERSION を 2026-10-02b に／話題ごとの欄（全体・お店にだけ届いた声）は0件も「5件未満」に戻し、段階・日・週・判定数の合計だけ0を区別"
  ],
  "reuse": [
   {

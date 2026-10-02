@@ -429,8 +429,8 @@ test('report: fewer than REPORT_MIN candidate views shows nothing but "not enoug
   await pick('Z'.repeat(22),[W],'198.51.100.70');  // never issued: nothing stored
   r=(await report(s,a.token)).body;assert.equal(r.enough,true);assert.equal(r.responses,REPORT_MIN);
   const row=id=>r.topics.find(x=>x.topic===id);
-  assert.deepEqual(row('wait'),{topic:'wait',good:0,ok:0,concern:REPORT_MIN});assert.deepEqual(row('dish'),{topic:'dish',good:null,ok:0,concern:0},'4 of 5 is under the minimum: hidden; none is 0 (審査 Devin M7: 「まだ0件」と「5件未満」を区別)');
-  assert.deepEqual(row('price'),{topic:'price',good:0,ok:0,concern:0},'another store never leaks in');
+  assert.deepEqual(row('wait'),{topic:'wait',good:null,ok:null,concern:REPORT_MIN});assert.deepEqual(row('dish'),{topic:'dish',good:null,ok:null,concern:null},'4 of 5 and 0 are both hidden in the per-topic cells (独立審査 r2-5: 5件未満は出さない約束を優先)');
+  assert.deepEqual(row('price'),{topic:'price',good:null,ok:null,concern:null},'another store never leaks in');
   assert.deepEqual(r.topics.map(x=>x.topic),['dish','drink','service','ambience','wait','price','location']);
   assert.deepEqual(r.steps.map(x=>x.step),REPORT_STEPS);
   assert.equal(s.q.db.prepare("SELECT count(*) n FROM store_picks WHERE sid='"+'Z'.repeat(22)+"'").get().n,0);
@@ -707,7 +707,7 @@ async function storeConfig(env,query,method='GET'){const pending=[];const r=awai
 const NOW_ISO=()=>new Date(Date.now()).toISOString().slice(0,19)+'Z';
 const allFood=k=>CMP.topicsFor('food').map((topic,i)=>({topic,rating:i<k?'concern':'good',details:i===0?[CMP.detailsFor('food',topic)[0]]:[]}));
 test('settings: routing is off by default; turning it on needs consent to the current wording (anything else is 400 and stores nothing); on and off are logged with the time',async(t)=>{const s=await trialEnv(t);if(!s)return;
-  assert.match(String(V),/^\d{4}-\d{2}-\d{2}$/,'the consent wording has a dated version');
+  assert.equal(V,'2026-10-02b','the consent wording changed in r2 (完全には防げない・端末の保存設定), so its version was raised (独立審査 r2-4)');
   const a=await newStore(s,'food');const db=s.q.db;
   assert.deepEqual((await report(s,a.token)).body.settings,{route:false,consentAt:null,line:'',instagram:'',needsReconsent:false},'off by default');
   for(const body of [{token:a.token,route:true},{token:a.token,route:true,consent:'2026-01-01'},{token:a.token,route:true,consent:true},{token:a.token,route:true,consent:''},{token:a.token,route:'yes',consent:V},{token:a.token,route:1,consent:V},{token:a.token,consent:V}]){
@@ -757,12 +757,12 @@ test('settings: LINE and Instagram links: only the allowed hosts and shapes, sto
   r=await saveSettings(s,{token:a.token,line:''});assert.deepEqual(r.body.settings,{route:false,consentAt:null,line:'',instagram:'https://www.instagram.com/kissa_komorebi/',needsReconsent:false},'"" clears one link and keeps the other');
   assert.equal(s.q.db.prepare('SELECT count(*) n FROM store_route_log').get().n,0,'links never touch the routing log');});
 test('store-config: the customer screen reads only route on/off and the two links; an unknown sid reads like a store with nothing set; GET only; never the consent time or the token',async(t)=>{const s=await trialEnv(t);if(!s)return;
-  const a=await newStore(s,'food'),b=await newStore(s,'food');const NONE='{"route":false,"line":"","instagram":""}';
+  const a=await newStore(s,'food'),b=await newStore(s,'food');const NONE='{"route":false,"line":"","instagram":"","consent":""}';
   let c=await storeConfig(s.env,'?s='+a.sid);assert.equal(c.status,200);assert.equal(c.text,NONE);assert.equal(c.headers.get('cache-control'),'public, max-age=60');
   assert.equal((await storeConfig(s.env,'?s='+'Z'.repeat(22))).text,NONE,'an unknown sid is not told apart');
   await saveSettings(s,{token:a.token,route:true,consent:V,line:'https://lin.ee/AbC123x'});
-  c=await storeConfig(s.env,'?s='+a.sid);assert.equal(c.text,'{"route":true,"line":"https://lin.ee/AbC123x","instagram":""}');
-  assert.ok(!c.text.includes(a.token)&&!/\d{4}-\d{2}-\d{2}/.test(c.text),'no token and no consent time');
+  c=await storeConfig(s.env,'?s='+a.sid);assert.equal(c.text,'{"route":true,"line":"https://lin.ee/AbC123x","instagram":"","consent":"'+V+'"}','the consent version rides along so the phone can drop a stored setting of another version (Devin r2b B2)');
+  assert.ok(!c.text.includes(a.token)&&!/\d{4}-\d{2}-\d{2}T/.test(c.text),'no token and no consent time');
   assert.equal((await storeConfig(s.env,'?s='+b.sid)).text,NONE,'another store is not affected');
   for(const q of ['','?s=short','?s='+a.token,'?s='+a.sid+'x','?s='+a.sid+'&x=1','?s='+a.sid+'&s='+b.sid])assert.equal((await storeConfig(s.env,q)).status,400,q);
   assert.equal((await storeConfig(s.env,'?s='+a.sid,'POST')).status,405);
@@ -814,7 +814,7 @@ test('report (管理画面): the voice first — "どこが" at or above the min
   assert.deepEqual(r.weekly,[0,1,2,3].map(i=>({from:wk(i),to:dayOf(Date.parse(wk(i)+'T00:00:00Z')+6*86400000),...(i===3?{view:13,cands:6,copy:5,google:null}:{view:0,cands:0,copy:0,google:0})})));
   assert.deepEqual(r.route,{held:5,passed:null});  // passed 3: under the minimum
   const hrow=id=>r.held_topics.find(x=>x.topic===id);assert.deepEqual(r.held_topics.map(x=>x.topic),CMP.topicsFor('food'));
-  assert.deepEqual(hrow('wait'),{topic:'wait',good:0,ok:0,concern:5});assert.deepEqual(hrow('price'),{topic:'price',good:0,ok:0,concern:null},'4 is under the minimum');
+  assert.deepEqual(hrow('wait'),{topic:'wait',good:null,ok:null,concern:5});assert.deepEqual(hrow('price'),{topic:'price',good:null,ok:null,concern:null},'4 and 0 are both under the minimum in the per-topic cells');
   assert.deepEqual(r.settings,{route:false,consentAt:null,line:'',instagram:'',needsReconsent:false});
   // a store that never routed: no held part at all; once routing is on the part is there even with no counts yet
   db.exec("DELETE FROM store_route_counts WHERE sid='"+b.sid+"'");db.exec("DELETE FROM store_held_picks WHERE sid='"+b.sid+"'");
@@ -900,7 +900,7 @@ test('settings: a consent given to another wording version counts as off everywh
   db.prepare("UPDATE store_settings SET route_consent_version = '2026-01-01'").run();
   const at=NOW_ISO();
   assert.deepEqual((await report(s,a.token)).body.settings,{route:false,consentAt:at,line:'https://lin.ee/AbC123x',instagram:'',needsReconsent:true});
-  assert.equal((await storeConfig(s.env,'?s='+a.sid)).text,'{"route":false,"line":"https://lin.ee/AbC123x","instagram":""}');
+  assert.equal((await storeConfig(s.env,'?s='+a.sid)).text,'{"route":false,"line":"https://lin.ee/AbC123x","instagram":"","consent":""}');
   assert.equal((await invoke(apiReq('/api/pick-stat',{kind:'food',picks:allFood(7),sid:a.sid},'198.51.100.30'),s.env)).status,200);
   assert.equal(db.prepare('SELECT count(*) n FROM store_route_counts').get().n,0,'an old consent never routes');assert.equal(db.prepare('SELECT count(*) n FROM store_held_picks').get().n,0);
   // turning it off from that state needs no consent; a fresh consent turns it on again with the current version
@@ -912,7 +912,7 @@ test('store-config: a short public cache (max-age 60) and the edge cache take th
   const store=new Map(),realCaches=globalThis.caches;globalThis.caches={default:{async match(req){return store.get(req.url)?.clone();},async put(req,res){store.set(req.url,res);}}};
   try{let reads=0;const prep=s.q.prepare.bind(s.q);s.q.prepare=sql=>{if(sql.includes('FROM store_settings'))reads++;return prep(sql);};
     await storeConfig(s.env,'?s='+a.sid);await storeConfig(s.env,'?s='+a.sid);c=await storeConfig(s.env,'?s='+a.sid);
-    assert.equal(reads,1,'one D1 read, the rest from the edge cache');assert.equal(c.text,'{"route":false,"line":"","instagram":""}');
+    assert.equal(reads,1,'one D1 read, the rest from the edge cache');assert.equal(c.text,'{"route":false,"line":"","instagram":"","consent":""}');
     s.q.prepare=sql=>sql.includes('FROM store_settings')?{bind(){return {async first(){throw new TypeError('D1_ERROR');}};}}:prep(sql);
     const b=await newStore(s,'food');const f=await storeConfig(s.env,'?s='+b.sid);assert.equal(f.status,503);assert.equal(f.headers.get('cache-control'),'no-store');assert.ok(!store.has(origin+'/api/store-config?s='+b.sid),'a 503 is not cached');
   }finally{if(realCaches===undefined)delete globalThis.caches;else globalThis.caches=realCaches;}});
@@ -921,7 +921,7 @@ test('without migration 0006 (worker deployed first by mistake) the report still
   for(let i=0;i<5;i++)assert.equal((await invoke(apiReq('/api/pick-stat',{kind:'food',picks:allFood(1),sid:a.sid},'198.51.100.4'+i),s.env)).status,200);
   const r=await report(s,a.token);assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.enough,true);assert.equal(r.body.route,null);
   assert.deepEqual(r.body.settings,{route:false,consentAt:null,line:'',instagram:'',needsReconsent:false});
-  const c=await storeConfig(s.env,'?s='+a.sid);assert.equal(c.status,200);assert.equal(c.text,'{"route":false,"line":"","instagram":""}');
+  const c=await storeConfig(s.env,'?s='+a.sid);assert.equal(c.status,200);assert.equal(c.text,'{"route":false,"line":"","instagram":"","consent":""}');
   assert.equal((await saveSettings(s,{token:a.token,line:'https://lin.ee/AbC123x'})).status,503,'saving needs the table');});
 test('DB CHECK: line_url is limited to the LINE hosts like instagram_url (審査 6)',async(t)=>{let mod;try{mod=await import('node:sqlite');}catch{return t.skip('node:sqlite unavailable');}
   const db=new mod.DatabaseSync(':memory:');db.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));const S="'"+'A'.repeat(22)+"'";
@@ -937,3 +937,37 @@ test('wording follows the 2026-10-02 decisions: "low" = one concern; routing can
   assert.ok(rep.includes('最初に「文章の候補を見る」を押したときの判定で数えます')&&lp.includes('最初に「文章の候補を見る」を押したときの判定で数えます'),'審査 8: counted at the first press');
   for(const [f,txt] of [['report.html',rep],['privacy.html',privacy]])assert.ok(txt.includes('最後に読み込めた設定'),f+': 本人決定 C');
   assert.ok(rep.includes('id="reach-daily-btn"')&&rep.includes('id="reach-weekly-btn"'),'本人決定 B: daily / weekly switch');});
+
+// ---- PR #16 r2 審査（Devin r2a サーバー・独立審査 r2）----
+test('store-config: a cross-site fetch is refused; a cache miss is counted per sender per day (cheap guard against random sids); the rows are purged after 3 days (Devin r2a-1)',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');
+  const get=(sid,ip,site)=>worker.fetch(new Request(origin+'/api/store-config?s='+sid,{headers:{'cf-connecting-ip':ip,...(site?{'sec-fetch-site':site}:{})}}),s.env,{waitUntil(){}});
+  assert.equal((await get(a.sid,'198.51.100.200','cross-site')).status,403);assert.equal((await get(a.sid,'198.51.100.200','same-origin')).status,200);
+  const codes=[];for(let i=0;i<M.STORE_CONFIG_CAPS.perSenderDay+1;i++)codes.push((await get('Z'.repeat(21)+String.fromCharCode(65+(i%26)),'198.51.100.201','same-origin')).status);
+  assert.deepEqual([...new Set(codes.slice(0,-1))],[200]);assert.equal(codes.at(-1),429);
+  assert.equal((await get(a.sid,'198.51.100.202')).status,200,'another sender is not affected');
+  assert.ok(M.RATE_KEY_PREFIXES.includes('scip'));assert.ok(!allRows(s.q).includes('198.51.100.201'),'no IP is stored');});
+test('settings: a save removes this data center\'s cached store-config for the sid, so "off" shows quickly (独立審査 r2-2)',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');const deleted=[],real=globalThis.caches;globalThis.caches={default:{async match(){return undefined;},async put(){},async delete(req){deleted.push(req.url);return true;}}};
+  try{await saveSettings(s,{token:a.token,route:true,consent:V});await saveSettings(s,{token:a.token,route:false});}finally{if(real===undefined)delete globalThis.caches;else globalThis.caches=real;}
+  assert.deepEqual(deleted,[origin+'/api/store-config?s='+a.sid,origin+'/api/store-config?s='+a.sid]);});
+test('without0006 tolerates only the four 0006 tables; another missing table still fails; a pick on a worker without 0006 logs nothing (Devin r2a-2, 独立審査 r2-3)',async(t)=>{const s=await trialEnv(t);if(!s)return;
+  const a=await newStore(s,'food');for(const tb of ['store_held_picks','store_route_counts','store_route_log','store_settings'])s.q.db.exec('DROP TABLE '+tb);
+  assert.equal((await invoke(apiReq('/api/pick-stat',{kind:'food',picks:allFood(1),sid:a.sid},'198.51.100.210'),s.env)).status,200);
+  assert.equal(s.q.db.prepare("SELECT count(*) n FROM loop_events WHERE error_type LIKE 'pick_route_error%'").get().n,0,'no error noise before 0006 is applied');
+  // a guarded read that fails for another table (e.g. stores) is a real failure, not "no settings"
+  const prep=s.q.prepare.bind(s.q);s.q.prepare=sql=>sql.includes('FROM store_settings')?{bind(){return {async first(){throw new Error('D1_ERROR: no such table: stores: SQLITE_ERROR');}};}}:prep(sql);
+  assert.equal((await report(s,a.token)).status,503,'only the four 0006 tables are tolerated');s.q.prepare=prep;
+  s.q.db.exec('DROP TABLE store_steps');assert.equal((await report(s,a.token)).status,503,'a missing older table is a real failure');});
+test('instagram user names need at least one letter or digit (Devin r2a-4); the report weeks follow REPORT_DAYS (Devin r2a-3)',()=>{
+  for(const bad of ['https://www.instagram.com/.../','https://www.instagram.com/_/','https://www.instagram.com/._/'])assert.equal(M.validStoreLink('instagram',bad),null,bad);
+  assert.equal(M.validStoreLink('instagram','https://www.instagram.com/a_/'),'https://www.instagram.com/a_/');
+  const today='2026-09-25';for(const days of [28,21,14]){const w=M.reportWeeks(today,days);assert.equal(w.length,days/7);assert.equal(w.at(-1).to,today,'the last week ends today');
+    assert.equal(w[0].from,dayOf(Date.parse(today+'T00:00:00Z')-(days-1)*86400000),'the first week starts with the window');}});
+test('wording r2: link warnings say the link can change settings; the last confirmation says "one concern"; held/passed are judgments; a save takes up to about 2 minutes to show; the stored setting lasts 7 days',()=>{
+  const read=f=>readFileSync(new URL('../public/'+f,import.meta.url),'utf8');const lp=read('index.html'),rep=read('report.html'),rj=read('report.js'),privacy=read('privacy.html'),app=read('app.js');
+  for(const [f,txt] of [['index.html',lp],['report.html',rep]])assert.ok(txt.includes('件数を見たり、お店の設定（振り分け・LINE・インスタ）を変えたりできます'),f);
+  assert.ok(rep.includes('「気になった」が1つでもあるお客さまには、Google への案内が出なくなります')&&!rep.includes('「気になった」が多いお客さま'));
+  assert.ok(rep.includes('判定した数'),'held/passed are the server\'s judgments');assert.ok(rj.includes('反映まで最大2分程度'));
+  for(const [f,txt] of [['report.html',rep],['privacy.html',privacy]])assert.ok(txt.includes('7日'),f+': the stored setting expires');
+  assert.ok(app.includes("const CONSENT_VERSION='"+V+"'")&&rj.includes("const CONSENT_VERSION='"+V+"'"),'the pages use the worker\'s consent version');});

@@ -17,10 +17,10 @@ from playwright.sync_api import sync_playwright,expect
 R=Path(__file__).resolve().parents[1];PUB=R/'public';BASELINE='e4e1ebb'
 BASE='https://hitokoto.example';GOOGLE='https://g.page/r/qa-fictional-store/review';STORE='QA用の架空店舗'
 CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-TOKEN='QAtoken_'+'x'*35;CONSENT='2026-10-02'
-SID_OFF='QAsidOFF_0123456789abc';SID_ON='QAsidON_0123456789abcd';SID_LINKS='QAsidLNK_0123456789abc';SID_FAIL='QAsidFAIL_0123456789ab'
+TOKEN='QAtoken_'+'x'*35;CONSENT='2026-10-02b'
+SID_OFF='QAsidOFF_0123456789abc';SID_ON='QAsidON_0123456789abcd';SID_LINKS='QAsidLNK_0123456789abc';SID_FAIL='QAsidFAIL_0123456789ab';SID_LNK2='QAsidLNK2_0123456789ab'
 LINE='https://lin.ee/QAfict1';IG='https://www.instagram.com/qa_fictional_store/'
-CONFIG={SID_OFF:{'route':False,'line':'','instagram':''},SID_ON:{'route':True,'line':LINE,'instagram':IG},SID_LINKS:{'route':False,'line':LINE,'instagram':IG}}
+CONFIG={SID_OFF:{'route':False,'line':'','instagram':'','consent':''},SID_ON:{'route':True,'line':LINE,'instagram':IG,'consent':CONSENT},SID_LINKS:{'route':False,'line':LINE,'instagram':IG,'consent':''},SID_LNK2:{'route':False,'line':'','instagram':IG,'consent':''}}
 FOOD=['dish','drink','service','ambience','wait','price','location']
 SETTINGS_OFF={'route':False,'consentAt':None,'line':'','instagram':'','needsReconsent':False}
 DASH={'kind':'food','since':'2026-09-05','days':28,'min':5,'enough':True,'responses':12,
@@ -39,7 +39,7 @@ def main():
  ap=argparse.ArgumentParser();ap.add_argument('--out',required=True);a=ap.parse_args();out=Path(a.out);out.parent.mkdir(parents=True,exist_ok=True)
  assert CSP in (R/'worker.mjs').read_text(),'test CSP drifted from worker.mjs'
  assert ("ROUTE_CONSENT_VERSION='"+CONSENT+"'") in (R/'worker.mjs').read_text(),'consent version drifted from worker.mjs'
- res={'blocked_external':[],'page_errors':[],'shots':[]};fake={'report':DASH,'settings_status':200}
+ res={'blocked_external':[],'page_errors':[],'shots':[]};fake={'report':DASH,'settings_status':200};held_routes=[]
  with sync_playwright() as p:
   b=p.chromium.launch(headless=True)
   def make(source='new',width=390,log=None):
@@ -55,6 +55,7 @@ def main():
     if path.startswith('/api/'):reqs.append({'method':r.request.method,'url':url[len(BASE):],'body':body})
     if path=='/api/store-config':
      sid=url.split('s=')[1] if 's=' in url else ''
+     if fake.get('hold'):held_routes.append((r,sid));return  # answered later by release()
      if sid==SID_FAIL or (fake.get('config_fail') and sid==SID_ON):return ok({'error':'unavailable'},503)
      return ok(CONFIG.get(sid,{'route':False,'line':'','instagram':''}))
     if path=='/compose.js' and fake.get('no_compose'):return r.fulfill(status=404,body='')
@@ -78,6 +79,9 @@ def main():
      data=f.read_bytes()
     r.fulfill(status=200,body=data,content_type=mimetypes.guess_type(rel)[0] or 'application/octet-stream',headers={'content-security-policy':CSP,'referrer-policy':'no-referrer'})
    ctx.route('**/*',route);pg=ctx.new_page();pg.on('pageerror',lambda e:res['page_errors'].append(str(e)));pg.add_init_script('window.__printed=0;window.print=()=>{window.__printed++;};');return ctx,pg,reqs
+  def release():
+   while held_routes:
+    r,sid=held_routes.pop(0);r.fulfill(status=200,content_type='application/json',body=json.dumps(CONFIG.get(sid,{'route':False,'line':'','instagram':'','consent':''})))
   def shot(pg,name,full=True):path=str(out.with_suffix('.'+name+'.png'));pg.screenshot(path=path,full_page=full);res['shots'].append(path)
   report_url=BASE+'/report#'+urlencode({'t':TOKEN,'g':GOOGLE})
   # ---------- 1. dashboard: order and content ----------
@@ -88,7 +92,7 @@ def main():
   rows=pg.locator('#report-topics tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))')
   assert rows[0]==['料理','8','5件未満','5件未満'] and rows[4]==['待ち時間','5件未満','5件未満','7'],rows
   assert pg.locator('#report-details li').all_text_contents()==['料理（よかった）：味 6件','待ち時間（気になった）：注文から出てくるまで 5件']
-  expect(pg.locator('#held-part')).to_be_visible();expect(pg.locator('#held-count')).to_have_text('Google への案内を出さなかった：5 ／ 出した：5件未満')
+  expect(pg.locator('#held-part')).to_be_visible();expect(pg.locator('#held-count')).to_have_text('判定した数　Google への案内を出さなかった：5 ／ 出した：5件未満')
   held=pg.locator('#held-topics tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))');assert held[4]==['待ち時間','5件未満','5件未満','5'] and held[0]==['料理','5件未満','5件未満','5件未満'],held
   daily=pg.locator('#report-daily tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))')
   assert daily==[['10/02','9','6','5','0'],['10/01','5件未満','0','0','5件未満']],daily  # 0 = none yet, 5件未満 = 1..4
@@ -96,7 +100,7 @@ def main():
   pg.locator('#reach-weekly-btn').click();expect(pg.locator('#weekly-part')).to_be_visible();expect(pg.locator('#daily-part')).to_be_hidden();assert pg.locator('#reach-weekly-btn').get_attribute('aria-pressed')=='true'
   weekly=pg.locator('#report-weekly tr').evaluate_all('rs=>rs.map(r=>[...r.children].map(c=>c.textContent))')
   assert weekly==[['09/26〜10/02','13','6','5','5件未満'],['09/19〜09/25','5件未満','0','0','0'],['09/12〜09/18','0','0','0','0'],['09/05〜09/11','0','0','0','0']],weekly
-  shot(pg,'dashboard_weekly_390',full=False);pg.locator('#reach-weekly-btn').scroll_into_view_if_needed();shot(pg,'dashboard_weekly_390',full=False);pg.locator('#reach-daily-btn').click();expect(pg.locator('#daily-part')).to_be_visible();res['dashboard_weekly']=weekly
+  shot(pg,'dashboard_weekly_390',full=False);pg.locator('#reach-weekly-btn').scroll_into_view_if_needed();shot(pg,'dashboard_weekly_390',full=False);pg.locator('#reach-daily-btn').click();expect(pg.locator('#daily-part')).to_be_visible();expect(pg.locator('#daily-none')).to_be_hidden();res['dashboard_weekly']=weekly  # Devin r2b-5
   steps=pg.locator('#report-steps dt').all_text_contents();assert steps[0]=='画面を開いた' and steps[-1]=='Googleを開いた',steps
   expect(pg.locator('#route-state')).to_contain_text('いまの設定：オフ');expect(pg.locator('#route-open')).to_be_visible();expect(pg.locator('#route-off')).to_be_hidden();expect(pg.locator('#route-consent')).to_be_hidden()
   assert pg.evaluate('document.documentElement.scrollWidth<=innerWidth'),'mobile overflow (dashboard)'
@@ -115,7 +119,7 @@ def main():
   expect(pg.locator('#route-consent')).to_be_hidden();expect(pg.locator('#route-status')).to_have_text('オンにしませんでした。')
   assert len([q for q in reqs if q['url']=='/api/settings'])==n,'cancel sends nothing'
   pg.locator('#route-open').click();assert not pg.locator('#route-agree').is_checked(),'the box starts unticked again';pg.locator('#route-agree').check();pg.locator('#route-next').click();pg.locator('#route-on').click()
-  expect(pg.locator('#route-status')).to_have_text('振り分けをオンにしました。')
+  expect(pg.locator('#route-status')).to_have_text('振り分けをオンにしました。お客さまの画面に反映されるまで最大2分程度かかります。')
   sent=[json.loads(q['body']) for q in reqs if q['url']=='/api/settings'];assert sent==[{'token':TOKEN,'route':True,'consent':CONSENT}],sent
   expect(pg.locator('#route-state')).to_contain_text('いまの設定：オン（2026/10/02 12:04 に同意）');expect(pg.locator('#route-off')).to_be_visible();expect(pg.locator('#route-open')).to_be_hidden()
   pg.locator('#route-off').click();expect(pg.locator('#route-state')).to_contain_text('いまの設定：オフ')
@@ -169,9 +173,42 @@ def main():
   res['links_html']=links_html['on_low_start']
   # a failing store-config on a phone that never read it: routing off, no buttons (the screen as before)
   ctx,pg,_=make();pg.goto(share(SID_FAIL));pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_visible();assert pg.locator('#store-links').count()==0;ctx.close()
+  # ---------- Devin r2b B1: until the setting is read, no AI call and no Google guidance from the screen ----------
+  log=[];fake['hold']=True;ctx,pg,_=make(log=log);pg.goto(share(SID_ON));pg.wait_for_selector('#customer-view:not(.hidden)')
+  for sel in ('#write-own-toggle','#classify-button','#draft-button'):expect(pg.locator(sel)).to_be_disabled()
+  pg.evaluate("()=>{document.getElementById('experience').value='待ち時間が長かった';document.getElementById('draft-form').requestSubmit();document.getElementById('addition').value='待ち時間が長かった';classifyText();document.querySelector('.direct-google').click();}")
+  pg.wait_for_timeout(300);release();expect(pg.locator('#write-own-toggle')).to_be_hidden();pg.wait_for_timeout(300)
+  assert not [q for q in log if q['url'] in ('/api/draft','/api/classify')],('nothing went to the AI before the setting was known',log)
+  assert not [q for q in log if q['url']=='/api/event' and json.loads(q['body'])['event']=='direct'] and len(ctx.pages)==1,'no Google from the direct link while pending'
+  expect(pg.locator('#write-own')).to_be_hidden();expect(pg.locator('#draft-result')).to_be_hidden();ctx.close()
+  # the same with write-own opened and a draft made before a slow "on" arrives (a phone that read nothing before): hidden once it arrives
+  log=[];fake['hold']=False;ctx,pg,_=make(log=log);pg.goto(share(SID_LINKS));pg.wait_for_load_state('networkidle')
+  pg.evaluate("()=>{const t=document.getElementById('write-own');t.classList.remove('hidden');document.getElementById('draft-result').classList.remove('hidden');}")
+  fake['hold']=True;pg.evaluate("()=>{storeConfig={route:true,line:'',instagram:''};applyStoreConfig();}")
+  expect(pg.locator('#write-own')).to_be_hidden();expect(pg.locator('#draft-result')).to_be_hidden();expect(pg.locator('#google-link')).to_be_hidden();fake['hold']=False;release();ctx.close()
+  # Devin r2b-4: two quick presses while the setting is still loading make one AI call
+  log=[];fake['hold']=True;ctx,pg,_=make(log=log);pg.goto(share(SID_LINKS));pg.wait_for_selector('#customer-view:not(.hidden)')
+  pg.locator('#addition').fill('待ち時間が長かった');answer(pg,0);pg.evaluate("()=>{const b=document.getElementById('compose-button');b.click();b.click();}")
+  release();fake['hold']=False;expect(pg.locator('#candidates')).to_be_visible();pg.wait_for_timeout(300)
+  assert len([q for q in log if q['url']=='/api/draft'])==1,[q['url'] for q in log];ctx.close()
+  # Devin r2b B2: a stored setting is used only when it is for the current consent version and at most 7 days old
+  def stored_case(value,expect_route):
+   ctx,pg,_=make();pg.goto(BASE+'/privacy.html');pg.evaluate("v=>localStorage.setItem('hk-store-config:%s',v)"%SID_ON,value)
+   fake['config_fail']=True;pg.goto(share(SID_ON));pg.wait_for_load_state('networkidle')
+   (expect(pg.locator('#write-own-toggle')).to_be_hidden if expect_route else expect(pg.locator('#write-own-toggle')).to_be_visible)();fake['config_fail']=False;ctx.close()
+  now=pg_now=None
+  import time;ms=int(time.time()*1000)
+  stored_case(json.dumps({'route':True,'line':LINE,'instagram':IG,'consent':CONSENT,'savedAt':ms-6*86400000}),True)
+  stored_case(json.dumps({'route':True,'line':LINE,'instagram':IG,'consent':'2026-10-02','savedAt':ms}),False)
+  stored_case(json.dumps({'route':True,'line':LINE,'instagram':IG,'consent':CONSENT,'savedAt':ms-8*86400000}),False)
+  stored_case(json.dumps({'route':True,'line':LINE,'instagram':IG,'consent':CONSENT}),False)
+  stored_case(json.dumps({'route':True,'line':LINE,'instagram':IG,'consent':CONSENT,'savedAt':ms+86400000}),False)
+  # Devin r2b-3: buttons follow the latest setting (a stored LINE link that was removed disappears; a new Instagram link appears)
+  ctx,pg,_=make();pg.goto(BASE+'/privacy.html');pg.evaluate("v=>localStorage.setItem('hk-store-config:%s',v)"%SID_LNK2,json.dumps({'route':False,'line':LINE,'instagram':'','consent':'','savedAt':ms}))
+  pg.goto(share(SID_LNK2));pg.wait_for_load_state('networkidle');assert pg.locator('#store-link-line').count()==0 and pg.locator('#store-link-instagram').count()==1 and pg.locator('#store-links').count()==1;ctx.close()
   # 本人決定 C: the last setting this phone read (per sid, localStorage) is used while store-config fails or is slow
   ctx,pg,_=make();pg.goto(share(SID_ON));pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_hidden()
-  stored=pg.evaluate("localStorage.getItem('hk-store-config:%s')"%SID_ON);assert json.loads(stored)=={'route':True,'line':LINE,'instagram':IG},stored
+  stored=json.loads(pg.evaluate("localStorage.getItem('hk-store-config:%s')"%SID_ON));assert {k:stored[k] for k in ('route','line','instagram','consent')}=={'route':True,'line':LINE,'instagram':IG,'consent':CONSENT} and abs(stored['savedAt']-int(__import__('time').time()*1000))<120000,stored
   fake['config_fail']=True
   pg.reload();pg.wait_for_load_state('networkidle');expect(pg.locator('#write-own-toggle')).to_be_hidden();expect(pg.locator('#classify-button')).to_be_hidden();expect(pg.locator('#store-links')).to_be_visible()
   answer(pg,1);pg.locator('#compose-button').click();expect(pg.locator('#held-result')).to_be_visible();expect(pg.locator('#google-link')).to_be_hidden()

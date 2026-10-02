@@ -10,7 +10,7 @@ const Compose=window.HitokotoCompose;
 // #t=<token>&g=<Google review link>（古い形 #<token> も読む）
 const frag=new URLSearchParams(location.hash.slice(1));const token=frag.get('t')||(location.hash.length===44?location.hash.slice(1):'');let kind='general';
 // the version of the consent wording on report.html (worker.mjs ROUTE_CONSENT_VERSION; any other value is refused there)
-const CONSENT_VERSION='2026-10-02';
+const CONSENT_VERSION='2026-10-02b';
 const RATING_LABELS={good:'よかった',ok:'ふつう',concern:'気になった'};
 const STEP_LABELS={view:'画面を開いた',classify:'書いた内容から選んだ（AI）',rating:'自分で評価を選んだ',rated:'全部の話題に答えた',cands:'文章の候補を見た',cand:'候補を選んだ',confirm:'内容を確認した',copy:'感想をコピーした',google:'Googleを開いた'};
 // 効果の欄 D: the store's Google page from the review link the owner entered (only the shapes #create accepts); otherwise Google Maps in general.
@@ -51,7 +51,7 @@ function show(r){
     $('details-part').classList.toggle('hidden',!details.length);
     // お店にだけ届いた声: only while the store routes or has routed in the window
     if(r.route&&Array.isArray(r.held_topics)){
-      $('held-count').replaceChildren('Google への案内を出さなかった：',cell(r.route.held),' ／ 出した：',cell(r.route.passed));
+      $('held-count').replaceChildren('判定した数　Google への案内を出さなかった：',cell(r.route.held),' ／ 出した：',cell(r.route.passed));
       $('held-topics').replaceChildren(...topicRows(r.kind,r.held_topics));$('held-part').classList.remove('hidden');}
     $('report-body').classList.remove('hidden');
     $('report-steps').replaceChildren(...r.steps.flatMap(s=>[Object.assign(document.createElement('dt'),{textContent:STEP_LABELS[s.step]||s.step}),Object.assign(document.createElement('dd'),{textContent:''})]));
@@ -59,7 +59,7 @@ function show(r){
     // 日ごとの推移: newest first
     const daily=Array.isArray(r.daily)?[...r.daily].reverse():[];
     $('report-daily').replaceChildren(...daily.map(d=>{const tr=document.createElement('tr');const th=document.createElement('th');th.scope='row';th.textContent=d.day.slice(5).replace('-','/');tr.append(th,...['view','cands','copy','google'].map(k=>td(cell(d[k]))));return tr;}));
-    $('daily-table').classList.toggle('hidden',!daily.length);$('daily-none').classList.toggle('hidden',Boolean(daily.length));
+    dailyRows=daily.length;$('daily-table').classList.toggle('hidden',!daily.length);$('daily-none').hidden=Boolean(daily.length);
     // 本人決定 B: 週ごと（直近4週、新しい週が上）。日ごと／週ごとはボタンで切り替える（初めは日ごと）
     const weekly=Array.isArray(r.weekly)?[...r.weekly].reverse():[];const md=d=>d.slice(5).replace('-','/');
     $('report-weekly').replaceChildren(...weekly.map(w=>{const tr=document.createElement('tr');const th=document.createElement('th');th.scope='row';th.textContent=md(w.from)+'〜'+md(w.to);tr.append(th,...['view','cands','copy','google'].map(k=>td(cell(w[k]))));return tr;}));
@@ -95,7 +95,9 @@ $('notice-print').addEventListener('click',()=>window.print());
 // 振り分け: 既定オフ。オンにできるのは、ポリシーの原文とおそれを示した欄を開き、チェックを入れ、確認の段でもう一度押したときだけ。
 // 送るのは {token, route:true, consent:CONSENT_VERSION}（オフは {token, route:false}）。同意の日時はサーバーが記録する。
 // LINE・インスタ: {token, line, instagram}。許可した形でないURLはサーバーが 400 で断る。
-function reachUnit(weekly){$('weekly-part').hidden=!weekly;$('daily-part').hidden=weekly;$('daily-none').hidden=weekly;
+// Devin r2b-5: the "no records" line follows the daily rows, not only the switch
+let dailyRows=0;
+function reachUnit(weekly){$('weekly-part').hidden=!weekly;$('daily-part').hidden=weekly;$('daily-none').hidden=weekly||dailyRows>0;
   $('reach-weekly-btn').setAttribute('aria-pressed',String(weekly));$('reach-daily-btn').setAttribute('aria-pressed',String(!weekly));}
 $('reach-daily-btn').addEventListener('click',()=>reachUnit(false));$('reach-weekly-btn').addEventListener('click',()=>reachUnit(true));
 const fmt=iso=>{const d=new Date(iso);return isNaN(d)?'':d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});};
@@ -115,14 +117,14 @@ $('route-agree').addEventListener('change',()=>{$('route-next').disabled=!$('rou
 $('route-next').addEventListener('click',()=>{if(!$('route-agree').checked)return;$('route-confirm').classList.remove('hidden');$('route-confirm-text').focus();});
 $('route-cancel').addEventListener('click',()=>{closeConsent();say('route-status','オンにしませんでした。');});
 $('route-on').addEventListener('click',async()=>{if(!$('route-agree').checked)return;$('route-on').disabled=true;
-  try{const s=await saveSettings({route:true,consent:CONSENT_VERSION},'route-status');if(s){renderRoute(s);say('route-status','振り分けをオンにしました。');}}
+  try{const s=await saveSettings({route:true,consent:CONSENT_VERSION},'route-status');if(s){renderRoute(s);say('route-status','振り分けをオンにしました。お客さまの画面に反映されるまで最大2分程度かかります。');}}
   catch{say('route-status','いま保存できませんでした。時間をおいて、もう一度お試しください。');}finally{$('route-on').disabled=false;}});
 $('route-off').addEventListener('click',async()=>{$('route-off').disabled=true;
-  try{const s=await saveSettings({route:false},'route-status');if(s){renderRoute(s);say('route-status','振り分けをオフにしました。すべてのお客さまに Google への案内を出します。');}}
+  try{const s=await saveSettings({route:false},'route-status');if(s){renderRoute(s);say('route-status','振り分けをオフにしました。すべてのお客さまに Google への案内を出します（反映まで最大2分程度）。');}}
   catch{say('route-status','いま保存できませんでした。時間をおいて、もう一度お試しください。');}finally{$('route-off').disabled=false;}});
 $('links-form').addEventListener('submit',async e=>{e.preventDefault();say('links-status','保存しています…');
   try{const s=await saveSettings({line:$('link-line').value.trim(),instagram:$('link-instagram').value.trim()},'links-status');
-    if(s){$('link-line').value=s.line;$('link-instagram').value=s.instagram;say('links-status',s.line||s.instagram?'保存しました。お客さまの画面のいちばん下にボタンが出ます。':'保存しました。ボタンは出ません。');}}
+    if(s){$('link-line').value=s.line;$('link-instagram').value=s.instagram;say('links-status',s.line||s.instagram?'保存しました。お客さまの画面のいちばん下にボタンが出ます（反映まで最大2分程度）。':'保存しました。ボタンは出ません（反映まで最大2分程度）。');}}
   catch{say('links-status','いま保存できませんでした。時間をおいて、もう一度お試しください。');}});
 load();
 })();

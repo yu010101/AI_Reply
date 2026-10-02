@@ -73,7 +73,8 @@ function syncRow(row){const id=row.dataset.topic,p=picks.get(id);
 function missingTopics(){return Compose.topicsFor(kind).filter(id=>!picks.has(id));}
 function syncCompose(){const left=missingTopics().length;$('compose-button').disabled=left>0;$('compose-need').textContent=left?t('needAll')(left)+t('needTopic'):'';$('compose-need').classList.toggle('hidden',!left);if(!left)reach('rated');}
 // /api/classify: AI reads the free text and suggests topic × rating × details. Only rows not set by hand are filled. Without AI nothing changes.
-async function classifyText(){const text=$('addition').value.trim();if(!text){announce('classify-status',t('needInput'));return;}
+async function classifyText(){await configReady;if(storeConfig.route)return;  // Devin r2b B1 / 審査 1: never read the text with AI while routing is on
+  const text=$('addition').value.trim();if(!text){announce('classify-status',t('needInput'));return;}
   $('classify-button').disabled=true;announce('classify-status',t('classifying'));let data=null;
   try{const res=await fetch('/api/classify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:Object.hasOwn(Compose.TOPICS,kind)?kind:'general',text}),signal:AbortSignal.timeout(15000)});if(res.ok)data=await res.json();}catch{data=null;}
   finally{$('classify-button').disabled=false;}
@@ -105,17 +106,23 @@ function sendPickStat(){
 }
 function openWriteOwn(focus){$('write-own').classList.remove('hidden');$('write-own-toggle').setAttribute('aria-expanded','true');$('draft-result').classList.add('hidden');if(focus){$('write-own').scrollIntoView({behavior:smooth(),block:'start'});$('experience').focus({preventScroll:true});}}
 $('write-own-toggle').addEventListener('click',()=>openWriteOwn(true));$('classify-button').addEventListener('click',classifyText);
+// Devin r2b-4: one press at a time (the button is disabled before waiting for the setting, so a second press cannot start another AI call)
+let composeBusy=false;
 $('compose-button').addEventListener('click',async()=>{
-  if(missingTopics().length)return;
+  if(missingTopics().length||composeBusy)return;
+  composeBusy=true;$('compose-button').disabled=true;
+  try{
   await configReady;
   const add=$('addition').value.trim();track('draft');
   if(storeConfig.route&&Compose.isLow(kind,[...picks].map(([topic,p])=>({topic,rating:p.rating,details:p.details})))){showHeld();return;}
+  routePassed=storeConfig.route;
   if($('held-result'))$('held-result').classList.add('hidden');
-  if(add){$('compose-button').disabled=true;announce('compose-status',t('composing'));try{const r=await tidy(add);tidied={text:r.draft,mode:r.mode};}finally{syncCompose();}}else tidied={text:'',mode:''};
+  if(add){announce('compose-status',t('composing'));const r=await tidy(add);tidied={text:r.draft,mode:r.mode};}else tidied={text:'',mode:''};
   if(!renderCandidates())return;
   sendPickStat();reach('cands');
   $('draft-result').classList.add('hidden');$('candidates').classList.remove('hidden');announce('compose-status',t('candReady'));
   $('candidates').scrollIntoView({behavior:smooth(),block:'start'});$('cand-title').focus({preventScroll:true});
+  }finally{composeBusy=false;syncCompose();}
 });
 // Choosing a candidate fills the edit box right below (no scrolling, so arrow keys can move through the choices).
 $('candidates').addEventListener('change',e=>{if(e.target.name!=='cand')return;
@@ -126,19 +133,28 @@ $('candidates').addEventListener('change',e=>{if(e.target.name!=='cand')return;
 // compose.js did not load (blocked, 404, network): the pick table cannot be built, so say why and open "write my own" instead of
 // leaving a button that never enables. Only the status line of the pick card stays.
 function composeUnavailable(){$('pick-card').querySelectorAll(':scope > :not(#compose-status)').forEach(e=>e.classList.add('hidden'));openWriteOwn(false);}
-function showCustomer(name,url){storeName=name;reviewUrl=url;openedAt=performance.now();document.body.dataset.view='customer';$('store-view').classList.add('hidden');$('customer-view').classList.remove('hidden');if(!Compose)composeUnavailable();document.querySelectorAll('.direct-google').forEach(a=>a.href=url);$('google-link').href=url;applyLang(pickLang());track('view');if(storeId){const last=readStoredConfig();if(last){storeConfig=last;applyStoreConfig();}configReady=loadStoreConfig();}}
+function showCustomer(name,url){storeName=name;reviewUrl=url;openedAt=performance.now();document.body.dataset.view='customer';$('store-view').classList.add('hidden');$('customer-view').classList.remove('hidden');if(!Compose)composeUnavailable();document.querySelectorAll('.direct-google').forEach(a=>a.href=url);$('google-link').href=url;applyLang(pickLang());track('view');if(storeId){const last=readStoredConfig();if(last){storeConfig=last;applyStoreConfig();}setConfigPending(true);configReady=loadStoreConfig().finally(()=>setConfigPending(false));}}
 // 管理画面の「お店の設定」（2026-10-02 本人決定。新しいQR・s= のときだけ）: GET /api/store-config で、振り分け（route）と LINE・インスタのURLを読む。
 // 送るのは店ID だけ。振り分けがオフで URL も無い店では、この画面の DOM も送る内容も、この機能が入る前（main e4e1ebb）と同じ（dashboard_browser.py で照合）。
 // 本人決定 C: 読めた設定はこの端末の localStorage に店IDごとに残し（運営には送らない）、次に読めないとき（通信・サーバー・3秒）はそれを使う。
 // オンを一度読んだ端末では、読めないあいだも振り分ける側。一度も読めていない端末だけオフ側（同意していない店では振り分けが起きないように）。
 // compose.js が無いときにオンなら、評価を判定できないので Google への案内も AI の道も出さず、理由だけを出す。
-let storeConfig={route:false,line:'',instagram:''};let configReady=Promise.resolve();
+// Devin r2b B1: until the setting is known (s= screens only), the paths that send text to the AI or lead to Google are held:
+// their buttons are disabled while loading, and every handler checks the setting again after configReady (routePassed = this customer
+// was judged "not low" while routing is on). Devin r2b B2: a stored setting is used only for the current consent version and for 7 days.
+const CONSENT_VERSION='2026-10-02b';const CONFIG_TTL_MS=7*86400000;
+let storeConfig={route:false,line:'',instagram:''};let configReady=Promise.resolve();let configPending=false;let routePassed=false;
+function setConfigPending(on){configPending=on;['write-own-toggle','classify-button','draft-button'].forEach(id=>{$(id).disabled=on;});}
+const routeBlocks=()=>configPending||(storeConfig.route&&!routePassed);
 const LINK_OK={line:/^https:\/\/(?:lin\.ee\/[A-Za-z0-9_-]{1,40}|line\.me\/R\/ti\/p\/@[A-Za-z0-9._-]{1,40})$/,instagram:/^https:\/\/www\.instagram\.com\/[A-Za-z0-9._]{1,30}\/$/};
 const CONFIG_KEY=()=>'hk-store-config:'+storeId;
-function cleanConfig(d){return d&&typeof d==='object'?{route:d.route===true,line:typeof d.line==='string'&&LINK_OK.line.test(d.line)?d.line:'',instagram:typeof d.instagram==='string'&&LINK_OK.instagram.test(d.instagram)?d.instagram:''}:null;}
-function readStoredConfig(){try{return cleanConfig(JSON.parse(window.localStorage.getItem(CONFIG_KEY())||'null'));}catch{return null;}}
+// "on" counts only with the consent version this page was written for (an older consent is off, like on the server).
+function cleanConfig(d){return d&&typeof d==='object'?{route:d.route===true&&d.consent===CONSENT_VERSION,line:typeof d.line==='string'&&LINK_OK.line.test(d.line)?d.line:'',instagram:typeof d.instagram==='string'&&LINK_OK.instagram.test(d.instagram)?d.instagram:''}:null;}
+// a stored setting without a time, from the future, older than 7 days or for another consent version is not used (routing off when unknown)
+function readStoredConfig(){try{const o=JSON.parse(window.localStorage.getItem(CONFIG_KEY())||'null');const age=o&&typeof o.savedAt==='number'?Date.now()-o.savedAt:NaN;
+  return age>=-60000&&age<=CONFIG_TTL_MS?cleanConfig(o):null;}catch{return null;}}
 async function loadStoreConfig(){try{const res=await fetch('/api/store-config?s='+encodeURIComponent(storeId),{signal:AbortSignal.timeout(3000)});if(!res.ok)return;const d=cleanConfig(await res.json());if(!d)return;
-  storeConfig=d;try{window.localStorage.setItem(CONFIG_KEY(),JSON.stringify(d));}catch{/* storage blocked */}applyStoreConfig();}catch{/* keep the last known setting, or off */}}
+  storeConfig=d;try{window.localStorage.setItem(CONFIG_KEY(),JSON.stringify({...d,consent:d.route?CONSENT_VERSION:'',savedAt:Date.now()}));}catch{/* storage blocked */}applyStoreConfig();}catch{/* keep the last known setting, or off */}}
 // 振り分けオン: Google への案内は、全部の話題に答えて「評価が低い」（Compose.isLow）でないと分かったあとにだけ出す。答える前に Google へ進む
 // 2つの道（「選ばずに、自分で書く」と「文章を整えず、Googleで書く」）と、評価が分かる前に本文を AI に送る「書いた内容から選ぶ」（審査 1）は隠す。
 // LINE・インスタのボタンは評価と関係なく、全員に同じものを最初から出す。オフに戻ったら（新しく読んだ設定がオフ）、隠したものだけを戻す。
@@ -147,21 +163,25 @@ function applyStoreConfig(){
   if(storeConfig.route&&!routeHidden.length){
     routeHidden=[$('write-own-toggle'),$('classify-button'),$('classify-status'),...document.querySelectorAll('.direct-google')].filter(e=>!e.classList.contains('hidden'));routeHidden.forEach(e=>e.classList.add('hidden'));
     const note=$('addition-part').querySelector('[data-i18n="addNote"]');if(note){note.dataset.i18n='addNoteRoute';note.textContent=t('addNoteRoute');}
-    if(!Compose){$('write-own').classList.add('hidden');$('draft-result').classList.add('hidden');announce('compose-status',t('routeUnavailable'));}}
+    if(!Compose)announce('compose-status',t('routeUnavailable'));}
+  // Devin r2b B1: anything opened before "on" was known (write-own, a draft with its Google button) is closed; a customer judged "not low"
+  // keeps the screen they reached
+  if(storeConfig.route&&!routePassed){$('write-own').classList.add('hidden');$('write-own-toggle').setAttribute('aria-expanded','false');$('draft-result').classList.add('hidden');}
   else if(!storeConfig.route&&routeHidden.length){routeHidden.forEach(e=>e.classList.remove('hidden'));routeHidden=[];
     const note=$('addition-part').querySelector('[data-i18n="addNoteRoute"]');if(note){note.dataset.i18n='addNote';note.textContent=t('addNote');}
     if(!Compose)composeUnavailable();}
-  if(storeConfig.line||storeConfig.instagram)renderStoreLinks();else if($('store-links'))$('store-links').remove();
+  renderStoreLinks();
 }
 function i18nEl(tag,key,props){const e=el(tag,{...props,textContent:t(key)});e.dataset.i18n=key;return e;}
-function renderStoreLinks(){if($('store-links'))return;
+// Devin r2b-3: rebuilt on every setting applied, so a removed link disappears and a new one appears.
+function renderStoreLinks(){if($('store-links'))$('store-links').remove();if(!storeConfig.line&&!storeConfig.instagram)return;
   const links=[['line','snsLine'],['instagram','snsInstagram']].filter(([k])=>storeConfig[k]).map(([k,key])=>{const a=el('a',{className:'secondary store-link',href:storeConfig[k],target:'_blank',rel:'noopener noreferrer'},[i18nEl('span',key),' ↗']);a.id='store-link-'+k;return a;});
   const box=el('section',{className:'card store-links'},[i18nEl('h2','snsTitle',{id:'store-links-title'}),el('div',{className:'store-link-row'},links)]);box.id='store-links';box.setAttribute('aria-labelledby','store-links-title');
   $('customer-view').insertBefore(box,$('customer-fb'));}
 // 振り分けオンで「評価が低い」: Google への案内（候補・コピー・Googleを開く）を出さず、お礼だけを出す。件数（held/passed）は sendPickStat の
 // 「1つの画面・1店で1回」に従い、最初に「文章の候補を見る」を押したときの判定で決まる（答え直しても数え直さない。意図どおり・審査 8）。選んだ話題と評価は /api/pick-stat で
 // いつもと同じ形で送り、worker が同じ判定で「お店にだけ届いた声」として数える。書いた文章は AI にも送らない（保存もしない）。
-function showHeld(){sendPickStat();
+function showHeld(){sendPickStat();routePassed=false;
   let box=$('held-result');if(!box){box=el('section',{className:'card held-result'},[i18nEl('h2','heldTitle',{id:'held-title',tabIndex:-1}),i18nEl('p','heldNote')]);box.id='held-result';box.setAttribute('aria-labelledby','held-title');$('customer-view').insertBefore(box,$('store-links')||$('customer-fb'));}
   box.classList.remove('hidden');$('candidates').classList.add('hidden');$('draft-result').classList.add('hidden');$('write-own').classList.add('hidden');announce('compose-status','');
   box.scrollIntoView({behavior:smooth(),block:'start'});$('held-title').focus({preventScroll:true});}
@@ -190,10 +210,10 @@ function printAs(what){document.body.dataset.print=what;window.print();}
 window.addEventListener('afterprint',()=>{delete document.body.dataset.print;});
 $('print-qr').addEventListener('click',()=>printAs('poster'));$('print-owner').addEventListener('click',()=>printAs('owner'));
 $('copy-report').addEventListener('click',()=>copy($('report-url').value,'owner-copy-status'));
-$('draft-form').addEventListener('submit',async e=>{e.preventDefault();const text=$('experience').value.trim();if(!text){announce('draft-status',t('needInput'));return;}track('draft');$('draft-button').disabled=true;announce('draft-status',t('working'));let draft,mode;try{({draft,mode}=await tidy(text));}finally{$('draft-button').disabled=false;} showResult(draft,t(mode==='ai'?'aiMode':'fallbackMode'));announce('draft-status',t('done'));$('draft-result').scrollIntoView({behavior:smooth()});});
+$('draft-form').addEventListener('submit',async e=>{e.preventDefault();await configReady;if(routeBlocks())return;const text=$('experience').value.trim();if(!text){announce('draft-status',t('needInput'));return;}track('draft');$('draft-button').disabled=true;announce('draft-status',t('working'));let draft,mode;try{({draft,mode}=await tidy(text));}finally{$('draft-button').disabled=false;} showResult(draft,t(mode==='ai'?'aiMode':'fallbackMode'));announce('draft-status',t('done'));$('draft-result').scrollIntoView({behavior:smooth()});});
 function setConfirmed(){const ok=$('confirm').checked&&Boolean($('draft-text').value.trim());$('copy-draft').disabled=!ok;$('google-link').classList.toggle('disabled',!ok);$('google-link').setAttribute('aria-disabled',String(!ok));$('google-link').tabIndex=ok?0:-1;}
-$('confirm').addEventListener('change',()=>{setConfirmed();if($('confirm').checked)reach('confirm');});$('draft-text').addEventListener('input',()=>{$('confirm').checked=false;setConfirmed();});$('copy-draft').addEventListener('click',()=>{track('copy');copy($('draft-text').value,'copy-status',{copied:t('copied'),copyFail:t('copyFail')});});$('google-link').addEventListener('click',e=>{if($('google-link').getAttribute('aria-disabled')==='true'){e.preventDefault();return;}track('google');});
-document.querySelectorAll('.direct-google').forEach(a=>a.addEventListener('click',()=>track('direct')));
+$('confirm').addEventListener('change',()=>{setConfirmed();if($('confirm').checked)reach('confirm');});$('draft-text').addEventListener('input',()=>{$('confirm').checked=false;setConfirmed();});$('copy-draft').addEventListener('click',()=>{track('copy');copy($('draft-text').value,'copy-status',{copied:t('copied'),copyFail:t('copyFail')});});$('google-link').addEventListener('click',e=>{if($('google-link').getAttribute('aria-disabled')==='true'||routeBlocks()){e.preventDefault();return;}track('google');});
+document.querySelectorAll('.direct-google').forEach(a=>a.addEventListener('click',e=>{if(routeBlocks()){e.preventDefault();return;}track('direct');}));
 
 // LP redesign: the page has three views on one URL. '#create' = QR作成画面, a customer share link = お客さま画面, anything else = LP.
 // No events are sent from the LP or the create view (the funnel counts only the customer screen).
