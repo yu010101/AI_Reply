@@ -4,24 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>お店の声の報告 — ひとことβ</title>
+<title>お店の管理画面 — ひとことβ</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="site-header report-screen"><div class="wrap header-inner"><a class="logo" href="/">ひとこと<span class="logo-beta">β</span></a></div></header>
 <main class="report-page">
 <div class="report-screen">
-<h1>お店の声の報告</h1>
-<p class="hint">このページは店主控えの「報告用リンク」から開いたお店の方だけのページです。リンクを知っている人は誰でも見られるので、共有しないでください。<a href="privacy.html#store-report">データの扱い</a></p>
+<h1>お店の管理画面</h1>
+<p class="hint">このページは店主控えの「報告用リンク」から開いたお店の方だけのページです。リンクを知っている人は誰でも、件数を見たり、お店の設定（振り分け・LINE・インスタ）を変えたりできます。共有しないでください。<a href="privacy.html#store-report">データの扱い</a></p>
 <p id="report-status" class="hint" role="status" aria-live="polite">読み込んでいます…</p>
-<section id="report-few" class="card hidden"><h2>まだ少ないため、表示していません</h2><p>このQRから文章の候補を見たお客さまが <span id="report-min">5</span> 件以上になると、話題と評価の件数を表示します。件数が少ないうちは、お客さまが特定されないよう数を出していません。</p></section>
-<section id="report-body" class="card hidden">
-<h2>話題と評価（<span id="report-range"></span>）</h2>
-<p class="hint">お客さまが答えた話題と評価の件数です。1つの欄が <span class="report-min-inline">5</span> 件未満のときは「5件未満」とだけ表示します。感想の文章は運営にも届いていません。</p>
+<section id="voice-card" class="card hidden" aria-labelledby="voice-h">
+<h2 id="voice-h">お客さまの声</h2>
+<div id="report-few" class="hidden"><h3>まだ少ないため、表示していません</h3><p>このQRから文章の候補を見たお客さまが <span id="report-min">5</span> 件以上になると、話題と評価の件数を表示します。件数が少ないうちは、お客さまが特定されないよう数を出していません。</p></div>
+<div id="report-body" class="hidden">
+<p class="hint">お客さまが答えた話題と評価の件数です（<span id="report-range"></span>）。1つの欄が <span class="report-min-inline">5</span> 件未満（0件を含む）のときは「5件未満」とだけ表示します。感想の文章は運営にも届いていません。</p>
 <table class="report-table"><thead><tr><th scope="col">話題</th><th scope="col">よかった</th><th scope="col">ふつう</th><th scope="col">気になった</th></tr></thead><tbody id="report-topics"></tbody></table>
-<h2>どこまで進んだか</h2>
+<div id="details-part" class="hidden"><h3>どこが？</h3><p class="hint">「どこが？」で選ばれた項目のうち、<span class="report-min-inline">5</span> 件以上のものだけを並べています。</p><ul id="report-details" class="report-details"></ul></div>
+<div id="held-part" class="hidden"><h3>お店にだけ届いた声</h3>
+<p class="hint">振り分けがオンのあいだに、「気になった」があり、Google への案内を出さなかったお客さまの話題と評価です（件数だけ。文章はありません）。この人数と話題は、上の表（すべてのお客さま）にも含まれています。「出さなかった／出した」は、選ばれた評価をサーバーが同じ規則で判定した数で、お客さまの画面に実際に何が表示されたかの記録ではありません。同じ画面で答え直した場合も、最初に「文章の候補を見る」を押したときの判定で数えます。</p>
+<p id="held-count" class="held-count"></p>
+<table class="report-table"><thead><tr><th scope="col">話題</th><th scope="col">よかった</th><th scope="col">ふつう</th><th scope="col">気になった</th></tr></thead><tbody id="held-topics"></tbody></table></div>
+</div>
+</section>
+<section id="reach-card" class="card hidden" aria-labelledby="reach-h">
+<h2 id="reach-h">到達の数字</h2>
 <p class="hint">このQRからお客さま画面を開いた回数と、そこから各段階まで進んだ回数です（同じ画面では1回だけ数えます）。</p>
 <dl class="report-steps" id="report-steps"></dl>
+<h3>推移</h3>
+<div class="reach-switch" role="group" aria-label="推移の単位"><button id="reach-daily-btn" class="secondary" type="button" aria-pressed="true">日ごと</button><button id="reach-weekly-btn" class="secondary" type="button" aria-pressed="false">週ごと（直近4週）</button></div>
+<p class="hint">QRを開いた → 候補を見た → コピーした → Googleを開いた、の件数です（世界標準時の日付）。1〜4件は「5件未満」、まだ無いときは「0」と表示します。</p>
+<div class="report-scroll" id="weekly-part" hidden><table class="report-table" id="weekly-table"><thead><tr><th scope="col">週</th><th scope="col">開いた</th><th scope="col">候補</th><th scope="col">コピー</th><th scope="col">Google</th></tr></thead><tbody id="report-weekly"></tbody></table></div>
+<div class="report-scroll" id="daily-part"><table class="report-table" id="daily-table"><thead><tr><th scope="col">日付</th><th scope="col">開いた</th><th scope="col">候補</th><th scope="col">コピー</th><th scope="col">Google</th></tr></thead><tbody id="report-daily"></tbody></table></div>
+<p id="daily-none" class="hint" hidden>この期間の記録はまだありません。</p>
 </section>
 <section id="effect-card" class="card hidden">
 <h2>効果を自分で確かめる</h2>
@@ -44,6 +59,42 @@
 <p id="notice-status" class="hint" role="status" aria-live="polite"></p>
 </form>
 <button id="notice-print" class="secondary hidden" type="button">札を印刷する</button>
+</section>
+<section id="settings-card" class="card hidden" aria-labelledby="settings-h">
+<h2 id="settings-h">お店の設定</h2>
+<h3 id="route-h">振り分け（評価が低いお客さまに Google への案内を出さない）</h3>
+<p id="route-state" class="route-state"></p>
+<p class="hint">初めはオフです。オフのあいだは、どのお客さまにも同じように Google への案内を出します。</p>
+<button id="route-open" class="secondary hidden" type="button" aria-controls="route-consent" aria-expanded="false">振り分けをオンにする…</button>
+<div id="route-consent" class="route-consent hidden">
+<p><strong>オンにすると：</strong>お客さまの画面で、話題のうち「気になった」が1つでもあるとき、Google の口コミ画面への案内を出しません。オンのあいだは、回答の前に Google へ進む道（「選ばずに、自分で書く」「文章を整えず、Googleで書く」）と、書いた内容を AI が読み取る「書いた内容から選ぶ」も出しません。そのお客さまが選んだ話題と評価は、この画面の「お店にだけ届いた声」に件数で出ます（文章は届きません）。お店の LINE・インスタのボタンは、評価に関係なく、すべてのお客さまに同じように出ます。</p>
+<p><strong>Google の口コミのポリシー（原文）</strong></p>
+<blockquote class="policy-quote" lang="en">We do not allow merchants to: … Discourage or prohibit negative reviews, or selectively solicit positive reviews from customers</blockquote>
+<p class="hint">Google の日本語版のページでは、次のように書かれています。</p>
+<blockquote class="policy-quote">販売者が次の行為を行うことは禁止されています。… 顧客からの否定的なクチコミの投稿を妨げたり禁止したり、肯定的なクチコミを選択的に募ったりする行為。</blockquote>
+<blockquote class="policy-quote">評価の操作には、インセンティブ付きのクチコミや偏ったクチコミが含まれます。これらは禁止されており、マップから削除されます。</blockquote>
+<p class="hint">出典：Google「禁止および制限されているコンテンツ」<a href="https://support.google.com/contributionpolicy/answer/7400114?hl=en" target="_blank" rel="noopener noreferrer">英語 ↗</a>・<a href="https://support.google.com/contributionpolicy/answer/7400114?hl=ja" target="_blank" rel="noopener noreferrer">日本語 ↗</a>（2026年10月2日に確認）</p>
+<p><strong>完全には防げません。</strong>お客さまが共有リンク（QR）にある Google の口コミのURLを直接開けば、この設定がオンでも口コミは書けます。</p>
+<p>お客さまの端末がこの設定を読み込めないとき（通信の不具合など）は、その端末で最後に読み込めた設定を使います（読み込んでから7日以内で、いまの説明文に同意したときの設定に限ります）。オンの設定を読み込んだ端末では、読み込めないあいだも振り分けます。一度も読み込めていない端末や、7日を過ぎた端末では、振り分けはオフとして扱います。設定を変えてから、すべてのお客さまの画面に反映されるまで最大2分程度かかります。</p>
+<p class="route-warn"><strong>この設定をオンにすると、Google のポリシーに反するとみなされ、口コミの削除やビジネスプロフィールの制限を受けるおそれがあります。</strong>オンにするかどうかは、お店のご判断です。運営は、この設定が Google に認められるとはお約束できません。</p>
+<label class="check"><input id="route-agree" type="checkbox"><span>上の Google のポリシーと、口コミの削除やビジネスプロフィールの制限のおそれがあることを読み、理解しました。</span></label>
+<button id="route-next" class="secondary" type="button" disabled>確認へ進む</button>
+<div id="route-confirm" class="route-confirm hidden" role="alertdialog" aria-labelledby="route-confirm-text">
+<p id="route-confirm-text" tabindex="-1"><strong>振り分けをオンにします。</strong>「気になった」が1つでもあるお客さまには、Google への案内が出なくなります。よろしいですか？</p>
+<button id="route-on" class="primary" type="button">同意してオンにする</button><button id="route-cancel" class="text-link" type="button">やめる</button>
+</div>
+</div>
+<button id="route-off" class="secondary hidden" type="button">振り分けをオフにする</button>
+<p id="route-status" class="hint" role="status" aria-live="polite"></p>
+<h3>お店の LINE・インスタ</h3>
+<p class="hint">登録すると、お客さまの画面のいちばん下に「お店の LINE を友だち追加」「インスタをフォロー」のボタンが出ます。口コミを書いたかどうかや評価とは関係なく、すべてのお客さまに同じように出ます。特典などの文言は付きません。</p>
+<form id="links-form">
+<label for="link-line">LINE 公式アカウントの友だち追加URL <span class="optional">任意</span></label><input id="link-line" type="url" maxlength="200" placeholder="https://lin.ee/… または https://line.me/R/ti/p/@…" autocomplete="off">
+<label for="link-instagram">インスタのプロフィールURL <span class="optional">任意</span></label><input id="link-instagram" type="url" maxlength="200" placeholder="https://www.instagram.com/…/" autocomplete="off">
+<p class="hint">空にして保存すると、そのボタンは出なくなります。</p>
+<button class="primary" type="submit">保存する</button>
+<p id="links-status" class="hint" role="status" aria-live="polite"></p>
+</form>
 </section>
 </div>
 <section id="notice-sheet" aria-label="札の見本"><p class="notice-head">お客さまの声から、直しました</p><p class="notice-topic" id="notice-sheet-topic"></p><p class="notice-text" id="notice-sheet-text"></p><p class="notice-foot">よかったことも、気になったことも、QRからひとことお聞かせください。</p></section>

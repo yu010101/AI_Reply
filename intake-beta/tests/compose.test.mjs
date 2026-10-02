@@ -231,3 +231,16 @@ test('examples read naturally (fixed snapshots)',()=>{
   // v11: the sentence is split into one span per clause (drawn beside the chips it came from); the words must still be exactly compose.js's
   assert.equal(ex.length,1,'one LP example');assert.equal(ex[0][1].replace(/<[^>]+>/g,''),C.compose('ja','food',d)[1].text,'LP example drifted from compose.js');
 });
+
+// 振り分け（2026-10-02 本人決定・店主が同意してオンにした店だけ）: 「評価が低い」= 話題のうち「気になった」が1つでもある（業種によらず）。
+// 全業種・全話題で、その話題だけ「気になった」・残りは よかった/ふつう を数え上げる（期待値は compose.js から作らない）。
+test('isLow: one "concern" on any topic is low, in every kind; no concern is never low; details and order do not matter; bad picks are refused',()=>{
+  assert.deepEqual(Object.keys(C.TOPICS).sort(),['beauty','food','general','retail']);
+  for(const kind of Object.keys(C.TOPICS)){const ids=C.topicsFor(kind);
+    for(const rest of ['good','ok'])assert.equal(C.isLow(kind,ids.map(topic=>({topic,rating:rest}))),false,kind+' all '+rest);
+    assert.equal(C.isLow(kind,ids.map((topic,i)=>({topic,rating:i%2?'ok':'good'}))),false,kind+' mixed, no concern');
+    for(const c of ids){const picks=ids.map((topic,i)=>({topic,rating:topic===c?'concern':(i%2?'ok':'good'),details:topic===c?C.detailsFor(kind,topic).slice(0,1):[]}));
+      assert.equal(C.isLow(kind,picks),true,kind+' concern on '+c);assert.equal(C.isLow(kind,[...picks].reverse()),true,kind+' reversed');}
+    assert.equal(C.isLow(kind,ids.map(topic=>({topic,rating:'concern'}))),true);}
+  assert.throws(()=>C.isLow('food',[{topic:'dish',rating:'bad'}]));assert.throws(()=>C.isLow('food',[]));
+});

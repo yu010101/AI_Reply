@@ -360,6 +360,24 @@ html:has(body[data-view=lp]){scroll-snap-type:y proximity;scroll-padding-top:60p
 .report-table{font-size:13px}
 .report-steps{display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:14px;margin:10px 0}
 .report-steps dd{margin:0;text-align:right}
+/* 店主の管理画面（2026-10-02）: 声・到達の数字・設定 */
+.report-page .card h3{font-size:15px;margin:18px 0 6px}
+.report-details{margin:6px 0 4px;padding-left:20px;font-size:14px}
+.held-count{font-size:14px;margin:6px 0}
+.held-count .few{color:var(--sub);font-size:11px}
+.report-scroll{overflow-x:auto}
+.route-state{font-weight:600}
+.route-consent{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:10px 0;background:var(--paper)}
+.policy-quote{margin:6px 0 10px;padding:8px 12px;border-left:3px solid var(--line);background:var(--surface);font-size:14px;overflow-wrap:anywhere}
+.route-warn{border-left:3px solid #b42318;padding:6px 10px;background:#fff4f2}
+.route-confirm{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.route-confirm button{margin:0 12px 0 0}
+#settings-card form{margin-top:6px}
+.reach-switch{display:flex;gap:8px;margin:4px 0 8px}
+.reach-switch button[aria-pressed=true]{background:var(--accent-tint);border-color:var(--accent)}
+/* お客さま画面: お店の LINE・インスタ（評価と関係なく全員に同じ）と、振り分けで Google への案内を出さないときのお礼 */
+.store-link-row{display:flex;flex-wrap:wrap;gap:10px}
+.store-link-row a{flex:1 1 200px;text-align:center}
 #notice-sheet{display:none;text-align:center;border:1px solid var(--line);border-radius:8px;padding:28px 20px;margin-top:16px;background:#fff}
 #notice-sheet.is-ready{display:block}
 .notice-head{font-size:28px;font-weight:700;margin:0 0 10px}

@@ -268,7 +268,11 @@ def main():
   assert pg.evaluate(no_overflow),'LP mobile overflow'
   assert pg.locator('#poster-qr svg').count()==1,'sample QR not drawn'  # the hero shows a photo, the poster section keeps the QR sample
   body=pg.locator('#lp').inner_text()
-  for must in ['架空の例です','星や感想で、振り分けません。','特典と引き換えにしません。','自動で投稿しません。','2,980','税込','先着10店','合同会社Radineer']:assert must in body,must
+  for must in ['架空の例です','気になったことも、文章から消しません。','特典と引き換えにしません。','自動で投稿しません。','2,980','税込','先着10店','合同会社Radineer']:assert must in body,must
+  # 2026-10-02 本人決定: 「振り分けない」の約束は外し（振り分けは店主が選べる設定・既定オフ・同意制）、「ポリシーに沿う／準拠」とは書かない
+  whole=pg.evaluate('document.documentElement.textContent')
+  for gone in ['振り分けません','振り分けず','低い評価だけを別の窓口に回すしくみはありません','同じGoogleの入口','ポリシーに沿','準拠']:assert gone not in whole,gone
+  assert '口コミの削除やビジネスプロフィールの制限を受けるおそれ' in pg.locator('#faq-rule').text_content(),'the FAQ states the risk of the setting'
   # decided wording, verbatim: FV lead, price, promises ①②④ and the retention period
   assert pg.locator('.lp-hero .lead').inner_text().replace('\n','')==LEAD,pg.locator('.lp-hero .lead').inner_text()
   # v12: moved into answers that open on demand (textContent, verbatim); the price slide keeps its short visible caveat
