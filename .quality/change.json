@@ -1,59 +1,66 @@
 {
- "task_id": "hitokoto-review-nits-20260930",
- "owner": "reviews-lp fix-nits (Claude実装・ローカルcommitのみ) → メインが本人確認のうえ push/PR",
+ "task_id": "hitokoto-owner-dashboard-20261002",
+ "owner": "reviews-lp owner-dashboard（Claude実装・ブランチ/PRまで）→ メインが審査のうえ merge・D1 0006 適用・配備",
  "acceptance": [
-  "お客さま画面の選択件数（/api/pick-stat）の「1セッション1回」の sessionStorage キーに店ID(sid)を含める（hk-pick-stat:<sid>）。sid なしの旧QRは従来の hk-pick-stat 1つ。funnel_browser.py で A→A→B→旧QR→旧QR の送信が [A,B,なし] になることを確認",
-  "scripts/deploy_preflight.py の cron 検査: 'async scheduled(' の文字列一致をやめ、語として scheduled が出れば（async の有無・空白/改行・コメント・メソッド定義・プロパティ+function/アロー関数/名前つき関数・短縮プロパティ・引用符つきの鍵のどれでも）PURGE_CRON と triggers.crons を求める（fail-closed。scheduledTime 等の別の語は数えない）。main が読めない（OSError）ときは config_main_unreadable で拒否",
-  "報告トークン: SHA-256 で stores を引いたあと、取れた行の token_hash と計算したハッシュを tokenMatches（定数時間）で照合し、一致しなければ 404",
-  "運営の GET（/api/loop-events・/api/pick-stats・/api/funnel-stats）に quota の 'opday:<日付>' 行で1日 OPERATOR_CAPS.day 回の共通上限（429）。認証失敗・不正な since は数えない。3日で削除（RATE_KEY_PREFIXES にも追加）",
-  "/api/trial: 同じ4項目の申込を TRIAL_DEDUP_MS(10分)以内に再送したら1件にする。quota を予約する前に SELECT で確かめ、再送は {ok:true}・行なし・Slack なし・quota 不変（上限に達した送信元の再送も 200）。同時送信は INSERT ... SELECT ... WHERE NOT EXISTS の1文で1件にし、予約を返す",
-  "Slack 通知の受付番号が正の整数でないときは「（不明）」と書き、null/false/undefined を出さない",
-  "compose.js が読めないとき、お客さま画面は理由（4言語）を compose-status に出し、表を隠して「自分で書く」を開く（ボタンが無反応のまま残らない）",
-  "trtotal: 予約順が trip→trday→trtotal で、429 のときは trtotal を保持していない（解放漏れは起きない）ことを試験で固定",
-  "lp_browser.py: '#scope .report-mini' の複数一致で strict モードが落ちないよう all_inner_texts で全件を検査",
-  "既存の試験（worker/compose/poster_kit/funnel/lp/loop/report/poster/loop_adapter/preflight/approval）を維持。配備・wrangler・D1 書込・push はしない"
+  "店主の管理画面（report.html/report.js を育てる）: 最初に「お客さまの声」（話題×よかった/ふつう/気になった・「どこが？」の5件以上・お店にだけ届いた声）、その下に到達の数字（段階と view/cands/copy/google の日ごとの推移）・効果・札・お店の設定。認証は既存の報告トークン（POST 本文・rpip 上限共有）",
+  "振り分け: 既定オフ。POST /api/settings {token, route:true, consent:ROUTE_CONSENT_VERSION} のときだけオン（同意なしは 400 consent_required、版違いは 400）。同意の日時・版を store_settings と store_route_log に記録。オフは同意不要・状態が変わるときだけ記録。画面は Google のポリシー原文（英語・日本語版）と口コミ削除・ビジネスプロフィール制限のおそれを示し、チェック＋確認の2段でだけ送る",
+  "評価が低い = 「気になった」が業種の話題数の半分より多い（compose.js isLow。本人確認待ちの案）。お客さま画面と worker が同じ関数で判定",
+  "お客さま画面（振り分けオン）: 低い評価は候補・コピー・Google への案内を出さずお礼だけ（AI にも送らない）。オンの店では回答前の Google への2つの道を隠す。件数は /api/pick-stat の同じ本文から worker が store_route_counts（held/passed）と store_held_picks に数える",
+  "振り分けオフの店: 顧客向け API の応答と D1 の行が main e4e1ebb と1バイト一致（worker.test.mjs、サーバー自身の失敗記録の版ラベルとそこから作る指紋だけ除く）、お客さま画面の #customer-view の outerHTML 9時点とリクエスト本文が e4e1ebb と一致（dashboard_browser.py。差は新しいQRの GET /api/store-config 1回だけ）",
+  "LINE・インスタ: 許可したホスト・形だけ（lin.ee/<code>・line.me/R/ti/p/@<id>・www.instagram.com/<user>/）を正規形で保存、それ以外は 400 invalid_url。お客さま画面の最後に、評価と関係なく全員に同じボタン（最初から表示・特典の文言なし・新しいタブ・noopener noreferrer）。CSP は不変",
+  "LP・店主向け説明・privacy から「振り分けない」の約束を外し、「ポリシーに沿う／準拠」とは書かない。設定の存在と口コミ削除・制限のおそれを FAQ に明記",
+  "migrations/0006_store_settings.sql（4表を足すだけ・本番未適用）と schema.sql が一致。保存期間: store_held_picks・store_route_counts は13か月、4表ともお店の登録（最後に使われてから1年）と一緒に子を先に消す。privacy・LP の保存期間と一致",
+  "既存の試験（worker/compose/poster_kit/funnel/lp/loop/report/poster/preflight/approval）を維持。配備・wrangler・D1 書込・merge はしない"
  ],
  "reuse": [
   {
+   "path": "intake-beta/public/report.html",
+   "decision": "extend",
+   "reason": "既存の報告ページ（報告トークン・5件未満の規則・効果欄・札）をそのまま管理画面に育てる"
+  },
+  {
+   "path": "intake-beta/public/report.js",
+   "decision": "extend",
+   "reason": "既存の post()/cell()/show()/effect() を使い、声・日ごと・設定を足す"
+  },
+  {
    "path": "intake-beta/worker.mjs",
    "decision": "extend",
-   "reason": "既存の reserve()/release()/tokenMatches()/operatorRead()/RATE_KEY_PREFIXES と quota 表をそのまま使う"
+   "reason": "既存の ownerApi()/ownerGate()/storeFor()/storeReport()/saveStorePickStat()/purgePlan() と store_picks・store_steps を使う"
+  },
+  {
+   "path": "intake-beta/public/compose.js",
+   "decision": "extend",
+   "reason": "判定 isLow は既存の normalize() の検査をそのまま通す"
   },
   {
    "path": "intake-beta/public/app.js",
    "decision": "extend",
-   "reason": "既存の sendPickStat()/applyLang()/openWriteOwn()/announce() を使い、キーと compose.js 不在時の分岐だけ足す"
-  },
-  {
-   "path": "scripts/deploy_preflight.py",
-   "decision": "extend",
-   "reason": "既存の require_cron_for_scheduled() と Refuse をそのまま使い、検出と読めないときの扱いだけ変える"
+   "reason": "既存の showCustomer()/sendPickStat()/el()/applyLang() の data-i18n で動的要素も4言語化"
   },
   {
    "path": "intake-beta/tests/worker.test.mjs",
    "decision": "extend",
-   "reason": "既存の sqliteQuota(実SQLite)・withFetch・newStore/report で試験を追加"
-  },
-  {
-   "path": "intake-beta/tests/funnel_browser.py",
-   "decision": "extend",
-   "reason": "既存の make()/route の偽 API で同じタブの複数店・compose.js 404 を試験"
-  },
-  {
-   "path": "intake-beta/tests/poster_kit.test.mjs",
-   "decision": "reuse",
-   "reason": "data-i18n の全キーが4言語すべてで文字列であることの既存の静的試験（applyLang の辞書キー検査の担保）"
+   "reason": "既存の sqliteQuota(実SQLite)・trialEnv・newStore・report・retentionEnv で試験を追加"
   }
  ],
  "changed_files": [
   ".quality/change.json",
   "intake-beta/worker.mjs",
+  "intake-beta/schema.sql",
+  "intake-beta/migrations/0006_store_settings.sql",
   "intake-beta/public/app.js",
+  "intake-beta/public/compose.js",
+  "intake-beta/public/index.html",
+  "intake-beta/public/loop.js",
+  "intake-beta/public/privacy.html",
+  "intake-beta/public/report.html",
+  "intake-beta/public/report.js",
+  "intake-beta/public/styles.css",
+  "intake-beta/tests/compose.test.mjs",
   "intake-beta/tests/worker.test.mjs",
-  "intake-beta/tests/funnel_browser.py",
   "intake-beta/tests/lp_browser.py",
-  "scripts/deploy_preflight.py",
-  "scripts/test_deploy_preflight.py"
+  "intake-beta/tests/dashboard_browser.py"
  ],
- "adoption_scope_note": "main 20ed68b（本番配備済み version 2ac01fe8）から切った隔離 worktree（fix/hitokoto-review-nits）。配備なし・本番D1未適用・push なし。審査原文は ai-runs/devin/runs/evidence/devin-ai14-r1..r4.json・devin-ai13-r1.json と ~/tasks/reviews-lp/codex-v2-r1..r5.log。"
+ "adoption_scope_note": "main e4e1ebb（本番 version 4a52fbfc）から切った worktree feature/hitokoto-owner-dashboard。配備なし・本番 D1 未適用（0006 は worker より先に適用が要る）。merge は本人審査後。"
 }

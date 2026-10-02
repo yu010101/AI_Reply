@@ -8,7 +8,7 @@
 // (2) お客さまの感想: 選択式だけ（どうだったか×どこで）。自由記述の欄は無い。送れるのは1セッション1回。
 // (3) 店主のご意見（LP・#create のフッター）: 区分＋200字までのひとこと。サーバーが保存前にメール・電話・URL・鍵を伏せ字にする。
 (function(){
-const VERSION='2026.09.29-1';  // worker.mjs の LOOP_VERSION と同じ値（worker.test.mjs で照合）
+const VERSION='2026.10.02-1';  // worker.mjs の LOOP_VERSION と同じ値（worker.test.mjs で照合）
 const ENDPOINT='/api/loop-event';
 const FILES=['app.js','compose.js','loop.js','qrcode.min.js'];
 const ERROR_TYPES=['Error','TypeError','RangeError','ReferenceError','SyntaxError','EvalError','URIError','AggregateError','AbortError','NotAllowedError','NotFoundError','NotSupportedError','InvalidStateError','QuotaExceededError','SecurityError','NetworkError','TimeoutError','DataCloneError','InvalidCharacterError','OtherError'];

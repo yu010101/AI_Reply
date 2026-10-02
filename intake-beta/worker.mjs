@@ -119,7 +119,7 @@ async function notifyTrial(url,storeName,id,report){
 //   （UTC で10分前の日付より前）の行だけを events.py が読める JSON 配列で返す。返す行に本文・IP・店名・申込情報は無い。
 //   締まった日の行はもう変わらないので、同じ日を読み直しても events.py の event_id が同じになり二重に数えない。
 export const LOOP_PRODUCT='hitokoto-beta';
-export const LOOP_VERSION='2026.09.29-1';  // public/loop.js の VERSION と同じ値（試験で照合）。配備ごとに両方を上げる
+export const LOOP_VERSION='2026.10.02-1';  // public/loop.js の VERSION と同じ値（試験で照合）。配備ごとに両方を上げる
 export const LOOP_ERROR_SCREENS=['lp','create','customer'];
 export const LOOP_CUSTOMER_FB_SCREENS=['customer-pick','customer-candidates','customer-edit','customer-own'];
 export const LOOP_OWNER_FB_SCREENS=['lp','create'];
@@ -258,6 +258,17 @@ async function saveStorePickStat(db,day,stat){
     db.prepare(STORE_STEP_SQL).bind(stat.sid,day,'picks',stat.sid,stat.kind,STORE_CAPS.row),
     db.prepare(STORE_TOUCH_SQL+' AND kind = ?').bind(day,stat.sid,day,stat.kind)]);
 }
+// 振り分け（管理画面の設定。既定オフ・同意制）: only a store whose routing is on (store_settings.route_low = 1, issued for the same kind)
+// gets a held/passed count, and only a held customer's picks go to store_held_picks. The decision is Compose.isLow, the same function the
+// customer screen uses to hide the Google guidance. Every statement is conditional in SQL, so a store with routing off gets no row.
+const ROUTE_ON='WHERE EXISTS (SELECT 1 FROM store_settings st JOIN stores s ON s.sid = st.sid WHERE st.sid = ? AND st.route_low = 1 AND s.kind = ?)';
+async function saveStoreRoute(db,day,stat){
+  const held=Compose.isLow(stat.kind,stat.picks);
+  const count='INSERT INTO store_route_counts (sid, day, outcome, count) SELECT ?,?,?,1 '+ROUTE_ON+' ON CONFLICT(sid, day, outcome) DO UPDATE SET count=count+1 WHERE count < ?';
+  const pick='INSERT INTO store_held_picks (sid, day, topic, rating, detail, count) SELECT ?,?,?,?,?,1 '+ROUTE_ON+' ON CONFLICT(sid, day, topic, rating, detail) DO UPDATE SET count=count+1 WHERE count < ?';
+  await db.batch([db.prepare(count).bind(stat.sid,day,held?'held':'passed',stat.sid,stat.kind,STORE_CAPS.row),
+    ...(held?pickStatRows(stat).map(([kind,topic,rating,detail])=>db.prepare(pick).bind(stat.sid,day,topic,rating,detail,stat.sid,kind,STORE_CAPS.row)):[])]);
+}
 async function pickStats(request,env,url,ctx){
   const gate=await operatorRead(request,env,url,ctx);if(gate instanceof Response)return gate;const {since,closed}=gate;
   try{
@@ -351,7 +362,14 @@ async function storeFor(db,token){
   const hash=await reportTokenHash(token);const row=await db.prepare('SELECT sid, kind, token_hash FROM stores WHERE token_hash = ?').bind(hash).first();
   return row&&await tokenMatches(String(row.token_hash),hash)?{sid:row.sid,kind:row.kind}:null;
 }
-export async function storeReport(db,sid,kind,now=Date.now()){
+// 管理画面（2026-10-02）: the same report grows. With enough counts it also carries
+//   details:   「どこが」 counts (topic × rating × detail) at or above REPORT_MIN only, in the screen order (smaller ones are left out),
+//   daily:     one row per day of the window with any of DAILY_STEPS (QR を開いた→候補→コピー→Google), oldest first, each cell under REPORT_MIN null,
+//   route:     {held, passed} while the store routes or has routed in the window (null otherwise), and held_topics: the held customers'
+//              topic × rating counts (the 「お店にだけ届いた声」), with the same small-count rule.
+// `settings` (routing and links) is added by the caller, also when there are not enough counts yet.
+export const DAILY_STEPS=['view','cands','copy','google'];
+export async function storeReport(db,sid,kind,now=Date.now(),routeOn=false){
   const since=utcDay(now-(REPORT_DAYS-1)*86400000);
   const [picks,steps]=await Promise.all([
     db.prepare("SELECT topic, rating, SUM(count) AS n FROM store_picks WHERE sid = ? AND day >= ? AND detail = '' GROUP BY topic, rating").bind(sid,since).all(),
@@ -360,8 +378,85 @@ export async function storeReport(db,sid,kind,now=Date.now()){
   const base={kind,since,days:REPORT_DAYS,min:REPORT_MIN};
   if(responses<REPORT_MIN)return {...base,enough:false};
   const shown=n=>n>=REPORT_MIN?n:null;
-  const topics=Compose.topicsFor(kind).map(topic=>{const row={topic};for(const r of Compose.RATINGS)row[r]=shown(picks.results.filter(x=>x.topic===topic&&x.rating===r).reduce((a,x)=>a+x.n,0));return row;});
-  return {...base,enough:true,responses,topics,steps:REPORT_STEPS.map(step=>({step,count:shown(stepN[step]||0)}))};
+  const table=rows=>Compose.topicsFor(kind).map(topic=>{const row={topic};for(const r of Compose.RATINGS)row[r]=shown(rows.filter(x=>x.topic===topic&&x.rating===r).reduce((a,x)=>a+x.n,0));return row;});
+  const [details,daily,route,held]=await Promise.all([
+    db.prepare("SELECT topic, rating, detail, SUM(count) AS n FROM store_picks WHERE sid = ? AND day >= ? AND detail != '' GROUP BY topic, rating, detail").bind(sid,since).all(),
+    db.prepare('SELECT day, step, SUM(count) AS n FROM store_steps WHERE sid = ? AND day >= ? AND step IN ('+DAILY_STEPS.map(()=>'?').join(',')+') GROUP BY day, step').bind(sid,since,...DAILY_STEPS).all(),
+    db.prepare('SELECT outcome, SUM(count) AS n FROM store_route_counts WHERE sid = ? AND day >= ? GROUP BY outcome').bind(sid,since).all(),
+    db.prepare("SELECT topic, rating, SUM(count) AS n FROM store_held_picks WHERE sid = ? AND day >= ? AND detail = '' GROUP BY topic, rating").bind(sid,since).all()]);
+  const order=(topic,rating,detail)=>[Compose.topicsFor(kind).indexOf(topic),Compose.RATINGS.indexOf(rating),Compose.detailsFor(kind,topic).indexOf(detail)];
+  const cmp=(a,b)=>{const x=order(a.topic,a.rating,a.detail),y=order(b.topic,b.rating,b.detail);return x[0]-y[0]||x[1]-y[1]||x[2]-y[2];};
+  const detailRows=details.results.filter(r=>r.n>=REPORT_MIN&&Compose.detailsFor(kind,r.topic).includes(r.detail)).map(r=>({topic:r.topic,rating:r.rating,detail:r.detail,count:r.n})).sort(cmp);
+  const days=[...new Set(daily.results.map(r=>r.day))].sort();
+  const dailyRows=days.map(day=>Object.fromEntries([['day',day],...DAILY_STEPS.map(step=>[step,shown(daily.results.filter(r=>r.day===day&&r.step===step).reduce((a,r)=>a+r.n,0))])]));
+  const routed=routeOn||route.results.length>0;const outcome=o=>shown(route.results.filter(r=>r.outcome===o).reduce((a,r)=>a+r.n,0));
+  return {...base,enough:true,responses,topics:table(picks.results),steps:REPORT_STEPS.map(step=>({step,count:shown(stepN[step]||0)})),
+    details:detailRows,daily:dailyRows,route:routed?{held:outcome('held'),passed:outcome('passed')}:null,held_topics:routed?table(held.results):null};
+}
+// ---- 管理画面の「お店の設定」: 振り分け（既定オフ・同意制）と LINE・インスタ ----
+// ROUTE_CONSENT_VERSION: the dated version of the consent wording shown on report.html (Google's policy, quoted as published on 2026-10-02,
+//   and the risk of review removal / Business Profile restrictions). The page sends it back; any other value is refused, so a change of the
+//   wording (a new version here and in report.js) needs a fresh consent. On: the time (UTC, seconds) and the version are kept on the store and
+//   in store_route_log; off: needs no consent, logged once (a repeated off writes nothing). The last consent stays on record after off.
+// LINE / Instagram: only these shapes, stored in one canonical form ('' = none). Query and fragment are dropped (share links add igsh=, utm_…).
+//   LINE: https://lin.ee/<code> or https://line.me/R/ti/p/@<id> (also %40<id>). Instagram: https://www.instagram.com/<user>/ (or instagram.com).
+export const ROUTE_CONSENT_VERSION='2026-10-02';
+export const STORE_LINK_MAX=200;
+const IG_RESERVED=new Set(['p','reel','reels','tv','explore','accounts','stories','direct','about','developer','legal','web','challenge','privacy','emails','session']);
+export function validStoreLink(kind,raw){
+  if(typeof raw!=='string'||!['line','instagram'].includes(kind))return null;
+  if(raw==='')return '';
+  if(raw.length>STORE_LINK_MAX||raw.trim()!==raw||/\s/.test(raw)||UNSAFE_CHARS.test(raw))return null;
+  let u;try{u=new URL(raw);}catch{return null;}
+  if(u.protocol!=='https:'||u.username||u.password||u.port)return null;
+  const h=u.hostname.toLowerCase();let out=null;
+  if(kind==='line'){
+    if(h==='lin.ee'){const m=/^\/([A-Za-z0-9_-]{1,40})\/?$/.exec(u.pathname);if(m)out='https://lin.ee/'+m[1];}
+    else if(h==='line.me'){const m=/^\/R\/ti\/p\/(?:@|%40)([A-Za-z0-9._-]{1,40})\/?$/.exec(u.pathname);if(m)out='https://line.me/R/ti/p/@'+m[1];}
+  }else if(h==='www.instagram.com'||h==='instagram.com'){
+    const m=/^\/([A-Za-z0-9._]{1,30})\/?$/.exec(u.pathname);if(m&&!IG_RESERVED.has(m[1].toLowerCase()))out='https://www.instagram.com/'+m[1]+'/';
+  }
+  return out&&out.length<=STORE_LINK_MAX?out:null;
+}
+// Returns {route?, line?, instagram?} to save, or {error}. Unknown keys and types are refused, not dropped.
+export function validSettings(data){
+  if(!isObject(data)||!exactKeys(data,['token'],['route','consent','line','instagram'])||typeof data.token!=='string'||!TOKEN_RX.test(data.token))return {error:'invalid_input'};
+  if(!('route' in data)&&!('line' in data)&&!('instagram' in data))return {error:'invalid_input'};
+  const out={};
+  if('route' in data){if(typeof data.route!=='boolean')return {error:'invalid_input'};
+    if(data.route){if(!('consent' in data))return {error:'consent_required'};if(data.consent!==ROUTE_CONSENT_VERSION)return {error:'invalid_input'};}
+    else if('consent' in data)return {error:'invalid_input'};
+    out.route=data.route;}
+  else if('consent' in data)return {error:'invalid_input'};
+  for(const k of ['line','instagram'])if(k in data){if(typeof data[k]!=='string')return {error:'invalid_input'};const v=validStoreLink(k,data[k]);if(v===null)return {error:'invalid_url'};out[k]=v;}
+  return out;
+}
+const NO_SETTINGS={route:false,consentAt:null,line:'',instagram:''};
+async function storeSettings(db,sid){
+  const row=await db.prepare('SELECT route_low, route_consent_at, line_url, instagram_url FROM store_settings WHERE sid = ?').bind(sid).first();
+  return row?{route:row.route_low===1,consentAt:row.route_consent_at||null,line:row.line_url||'',instagram:row.instagram_url||''}:{...NO_SETTINGS};
+}
+async function saveStoreSettings(db,sid,req,now=Date.now()){
+  const cur=await storeSettings(db,sid);const at=new Date(now).toISOString().slice(0,19)+'Z';const st=[db.prepare('INSERT INTO store_settings (sid) VALUES (?) ON CONFLICT(sid) DO NOTHING').bind(sid)];
+  if(req.route===true){st.push(db.prepare('UPDATE store_settings SET route_low = 1, route_consent_at = ?, route_consent_version = ? WHERE sid = ?').bind(at,ROUTE_CONSENT_VERSION,sid),
+    db.prepare("INSERT INTO store_route_log (sid, at, action, consent_version) VALUES (?,?,'on',?)").bind(sid,at,ROUTE_CONSENT_VERSION));}
+  if(req.route===false&&cur.route){st.push(db.prepare('UPDATE store_settings SET route_low = 0 WHERE sid = ?').bind(sid),
+    db.prepare("INSERT INTO store_route_log (sid, at, action, consent_version) VALUES (?,?,'off',NULL)").bind(sid,at));}
+  if('line' in req)st.push(db.prepare('UPDATE store_settings SET line_url = ? WHERE sid = ?').bind(req.line,sid));
+  if('instagram' in req)st.push(db.prepare('UPDATE store_settings SET instagram_url = ? WHERE sid = ?').bind(req.instagram,sid));
+  await db.batch(st);
+  return storeSettings(db,sid);
+}
+// GET /api/store-config?s=<sid>: what the customer screen needs for a newer QR: {route, line, instagram}. Nothing else (no consent time, no
+// token, no kind). An unknown sid answers like a store with nothing set, so the answer does not tell issued IDs apart. Without D1 the same
+// "nothing set" (the customer screen then behaves exactly as before); a D1 failure is 503 (the screen also falls back to routing off).
+async function storeConfig(request,env,ctx,url){
+  if(request.method!=='GET')return json({error:'method_not_allowed'},405);
+  const keys=[...url.searchParams.keys()];const sid=url.searchParams.get('s');
+  if(keys.length!==1||keys[0]!=='s'||!SID_RX.test(sid||''))return json({error:'invalid_input'},400);
+  if(!env.QUOTA)return json({route:false,line:'',instagram:''});
+  try{const s=await storeSettings(env.QUOTA,sid);return json({route:s.route,line:s.line,instagram:s.instagram});}
+  catch(e){console.error('store_config_error',String((e&&e.name)||'Error').slice(0,40));loopServerError(env,ctx,'api-store','store_config_error',e);return json({error:'unavailable'},503);}
 }
 async function ownerApi(request,env,ctx,url,route){
   const refused=refuse(request,env,url);if(refused)return refused;
@@ -379,6 +474,7 @@ async function ownerApi(request,env,ctx,url,route){
     const token=!isObject(data)||typeof data.token!=='string'||!TOKEN_RX.test(data.token)?null:data.token;
     if(!token||(route==='report'&&!exactKeys(data,['token'])))return json({error:'invalid_input'},400);
     if(route==='notice'){const pre=validNotice(data,null);if(pre.error)return json({error:pre.error},400);}
+    const settings=route==='settings'?validSettings(data):null;if(settings&&settings.error)return json({error:settings.error},400);
     const g=await ownerGate(request,env,'report',(day,hash)=>[['rpip:'+day+':'+hash,REPORT_CAPS.perSenderDay]]);if(g.refused)return g.refused;held=g.held;
     const store=await storeFor(env.QUOTA,token);
     purgeOwnerRows(env,ctx);
@@ -386,14 +482,15 @@ async function ownerApi(request,env,ctx,url,route){
     // the owner opened the report (or checked a sign): the store is in use. Awaited, so a failed write is a 503 the owner can retry
     // (and is counted in loop_events) instead of a silent miss that would let the store expire while it is being read.
     await env.QUOTA.prepare(STORE_TOUCH_SQL).bind(g.day,store.sid,g.day).run();
-    if(route==='report')return json(await storeReport(env.QUOTA,store.sid,store.kind));
+    if(route==='report'){const s=await storeSettings(env.QUOTA,store.sid);return json({...await storeReport(env.QUOTA,store.sid,store.kind,Date.now(),s.route),settings:s});}
+    if(route==='settings')return json({settings:await saveStoreSettings(env.QUOTA,store.sid,settings)});
     const notice=validNotice(data,store.kind);if(notice.error)return json({error:notice.error},400);
     return json(notice);
   }catch(e){
     // a store that was not saved must not keep the sender's slot; a report that failed keeps nothing either
     await release(env.QUOTA,held.splice(0)).catch(()=>{});
     console.error(route+'_error',String((e&&e.name)||'Error').slice(0,40));
-    loopServerError(env,ctx,route==='store'?'api-store':'api-report',route+'_error',e);
+    loopServerError(env,ctx,route==='store'?'api-store':'api-report',route+'_error',e);  // settings errors count as api-report (the owner page)
     return json({error:'unavailable'},503);
   }
 }
@@ -496,6 +593,9 @@ export function monthsBefore(day,n){
   return new Date(Date.UTC(yy,mm,Math.min(d,new Date(Date.UTC(yy,mm+1,0)).getUTCDate()))).toISOString().slice(0,10);
 }
 const IDLE_STORE="SELECT sid FROM stores WHERE COALESCE(last_used_day, created_day) < ?";
+// Every table that refers to stores (sid). An idle store's rows in each are removed first; the store goes once none is left.
+// 0006 (管理画面): store_held_picks・store_route_counts (13 months by day, like the other counts), store_settings・store_route_log (with the store).
+export const STORE_CHILDREN=['store_picks','store_steps','store_held_picks','store_route_counts','store_settings','store_route_log'];
 // 連打対策の行の種類（quota の key の接頭辞）。新しい上限を足したらここにも足す（試験で worker.mjs 内の LIKE '<種類>:%' と一致を確認）
 export const RATE_KEY_PREFIXES=['ip','day','trip','trday','lfip','lpip','lpday','psip','psday','rpip','seip','stip','stday','opday'];
 export const RATE_KEEP_DAYS=3;
@@ -512,11 +612,14 @@ export function purgePlan(now=Date.now()){
     ...RATE_KEY_PREFIXES.map(p=>['quota_rate_'+p,"DELETE FROM quota WHERE rowid IN (SELECT rowid FROM quota WHERE key >= '"+p+":' AND key < ? LIMIT ?)",p+':'+rate]),
     ['store_picks',byDay('store_picks'),counts],
     ['store_steps',byDay('store_steps'),counts],
+    ['store_held_picks',byDay('store_held_picks'),counts],
+    ['store_route_counts',byDay('store_route_counts'),counts],
     ['loop_events',byDay('loop_events',' AND text_masked IS NULL'),counts],
     ['loop_events_owner_text',byDay('loop_events',' AND text_masked IS NOT NULL'),ownerText],
     ['store_picks_idle_store','DELETE FROM store_picks WHERE rowid IN (SELECT rowid FROM store_picks WHERE sid IN ('+IDLE_STORE+') LIMIT ?)',storeIdle],
     ['store_steps_idle_store','DELETE FROM store_steps WHERE rowid IN (SELECT rowid FROM store_steps WHERE sid IN ('+IDLE_STORE+') LIMIT ?)',storeIdle],
-    ['stores','DELETE FROM stores WHERE rowid IN (SELECT rowid FROM stores WHERE COALESCE(last_used_day, created_day) < ? AND NOT EXISTS (SELECT 1 FROM store_picks p WHERE p.sid = stores.sid) AND NOT EXISTS (SELECT 1 FROM store_steps s WHERE s.sid = stores.sid) LIMIT ?)',storeIdle]]};
+    ...STORE_CHILDREN.slice(2).map(tb=>[tb+'_idle_store','DELETE FROM '+tb+' WHERE rowid IN (SELECT rowid FROM '+tb+' WHERE sid IN ('+IDLE_STORE+') LIMIT ?)',storeIdle]),
+    ['stores','DELETE FROM stores WHERE rowid IN (SELECT rowid FROM stores WHERE COALESCE(last_used_day, created_day) < ? AND '+STORE_CHILDREN.map(tb=>'NOT EXISTS (SELECT 1 FROM '+tb+' c WHERE c.sid = stores.sid)').join(' AND ')+' LIMIT ?)',storeIdle]]};
 }
 // Runs every step even when one fails (a failed child step simply keeps its stores for the next day). Returns {deleted, more, failed}.
 export async function purgeExpired(db,now=Date.now(),limit=PURGE_LIMIT){
@@ -612,6 +715,8 @@ export default {
         await savePickStat(env.QUOTA,day,stat);
         // ① the store's own counts are extra: a failure there is counted but does not undo the anonymous counts above
         if(stat.sid)try{await saveStorePickStat(env.QUOTA,day,stat);}catch(e){console.error('pick_store_error',String((e&&e.name)||'Error').slice(0,40));loopServerError(env,ctx,'api-pick','pick_store_error',e);}
+        // 振り分けの件数 are extra again: their own batch, so a failure there never undoes the counts above or changes the answer
+        if(stat.sid)try{await saveStoreRoute(env.QUOTA,day,stat);}catch(e){console.error('pick_route_error',String((e&&e.name)||'Error').slice(0,40));loopServerError(env,ctx,'api-pick','pick_route_error',e);}
         const cutoff=utcDay(Date.now()-3*86400000);
         ctx.waitUntil(env.QUOTA.prepare("DELETE FROM quota WHERE (key LIKE 'psip:%' AND substr(key,6,10) < ?) OR (key LIKE 'psday:%' AND substr(key,7,10) < ?)").bind(cutoff,cutoff).run());
         return json({recorded:true});
@@ -627,6 +732,8 @@ export default {
     if(url.pathname==='/api/store')return ownerApi(request,env,ctx,url,'store');
     if(url.pathname==='/api/report')return ownerApi(request,env,ctx,url,'report');
     if(url.pathname==='/api/notice')return ownerApi(request,env,ctx,url,'notice');
+    if(url.pathname==='/api/settings')return ownerApi(request,env,ctx,url,'settings');
+    if(url.pathname==='/api/store-config')return storeConfig(request,env,ctx,url);
     if(url.pathname==='/api/trial'){
       const refused=refuse(request,env,url);if(refused)return refused;
       let data;try{data=await boundedJSON(request);}catch(e){return json({error:'invalid_input'},e.message==='large'?413:400);}

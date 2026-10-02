@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f3f5f1">
 <title>ひとことβ｜QRを置くだけ。お客さまが、自分の言葉で書ける。</title>
-<meta name="description" content="お店の口コミ入口をつくる「ひとことβ」。店名とGoogleの口コミリンクでQRと掲示用ポスターを作成。お客さまは話題ごとにどうだったかをタップで選び（書いた感想からAIが先に選ぶこともできます）、選んだことだけでできた文章を自由に直して、確認してから自分でGoogleに投稿します。振り分け・特典との引き換え・自動投稿はしません。">
+<meta name="description" content="お店の口コミ入口をつくる「ひとことβ」。店名とGoogleの口コミリンクでQRと掲示用ポスターを作成。お客さまは話題ごとにどうだったかをタップで選び（書いた感想からAIが先に選ぶこともできます）、選んだことだけでできた文章を自由に直して、確認してから自分でGoogleに投稿します。特典との引き換え・自動投稿はしません。">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -30,7 +30,7 @@
 <p class="lead">店名とGoogleの口コミリンクを入れると、お客さま用の共有リンク・QR・掲示用ポスターができます。登録やクレジットカードは要りません。</p>
 </div>
 <form id="store-form" class="card create-part"><h2>店名とリンクを入れる</h2><p class="muted">必要なのは店名とGoogleの口コミリンクだけ。作成後にお客さまの画面を確認できます。</p><label for="store-name">お店の名前</label><input id="store-name" maxlength="80" required placeholder="例：喫茶 こもれび" autocomplete="organization"><details class="optional-settings"><summary>お店に合わせた質問を選ぶ（任意）</summary><label for="store-kind">お店の種類 <span class="optional">任意</span></label><select id="store-kind"><option value="general">その他・指定しない</option><option value="food">飲食店・カフェ</option><option value="beauty">美容室・サロン</option><option value="retail">ショップ</option></select></details><label for="review-url">Googleの口コミリンク</label><input id="review-url" type="url" required placeholder="https://g.page/r/…/review" aria-describedby="url-help"><p id="url-help" class="hint">お店のGoogleビジネスプロフィールにある「クチコミを依頼」からコピーできます。例：https://g.page/r/店舗ID/review</p><button class="primary" type="submit">共有リンクを作る <span>↗</span></button><p class="error" id="store-error" role="alert"></p></form>
-<section id="share-result" class="card create-part hidden" aria-label="共有リンク"><div class="eyebrow">準備ができました</div><h2>お客さまへ、このリンクを。</h2><input id="share-url" readonly aria-label="共有URL"><button id="copy-link" class="primary">リンクをコピー</button><a id="preview-link" class="text-link">お客さまの画面を開く ↗</a><p class="print-only" id="print-store"></p><div id="qr-area" class="hidden"></div><p class="print-only" id="print-message"></p><p class="print-only" id="print-url"></p><div id="poster-actions" class="hidden"><button id="print-qr" class="secondary" type="button">掲示用に印刷する</button><a id="download-qr" class="text-link" download="hitokoto-qr.svg">QR画像を保存する（SVG）</a><p class="hint">印刷には店名・QR・共有URLが入ります（報告用リンクは入りません）。店名と共有URLは運営に保存されないため、印刷物やメモで保管してください。</p><div class="voice-kit" id="voice-kit"><strong>声かけの例（画面だけに表示・印刷されません）</strong><p id="voice-script"></p><p class="hint">割引・特典と引き換えにしたり、よい評価だけをお願いしたりしないでください。Googleの口コミのポリシーで禁止されています。</p><p class="hint" data-staff-note>お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから口コミを投稿しないでください。Googleのポリシーで、雇用関係や家族関係などの「利益相反に基づくコンテンツ」は禁止されています。</p></div></div><div id="owner-copy" class="owner-copy hidden"><h3>店主控え（お客さまに見せないでください）</h3><p class="hint">報告用リンクを開くと、このQRから来たお客さまが選んだ話題と評価の件数（直近4週）と、どこまで進んだかを見られます。件数が少ないうちは、お客さまが特定されないよう「まだ少ない」とだけ表示します。リンクを知っている人は誰でも見られるので、お店の方だけで保管してください。運営はこのリンクを保存していないため、再発行できません。お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから口コミを投稿しないでください。Googleのポリシーで、雇用関係や家族関係などの「利益相反に基づくコンテンツ」は禁止されています。<a href="privacy.html#store-report">データの扱い</a></p><label for="report-url">報告用リンク（店主だけ）</label><input id="report-url" readonly><button id="copy-report" class="secondary" type="button">報告用リンクをコピー</button><button id="print-owner" class="secondary" type="button">店主控えを印刷する</button><a id="open-report" class="text-link" target="_blank" rel="noopener noreferrer">報告を開く ↗</a><p id="owner-copy-status" class="hint" role="status" aria-live="polite"></p><p class="hint">作り直すと、新しい報告用リンクになります（前のQRと前の報告用リンクもそのまま使えます）。</p><div class="owner-print print-only"><p class="owner-print-title">ひとことβ 店主控え（お客さまに見せないでください）</p><p id="owner-print-store"></p><p class="owner-print-label">報告用リンク（店主だけ）</p><p id="owner-print-report" class="owner-print-url"></p><p class="owner-print-label">お客さま用の共有リンク</p><p id="owner-print-share" class="owner-print-url"></p><p>報告用リンクを知っている人は誰でも件数を見られます。運営は再発行できないため、この紙は店内の見えない場所に保管してください。</p></div></div><p id="owner-copy-none" class="hint hidden">報告用リンクは作れませんでした（通信できなかったため）。QRと共有リンクはそのまま使えます。報告が必要なときは、時間をおいて作り直してください。</p></section>
+<section id="share-result" class="card create-part hidden" aria-label="共有リンク"><div class="eyebrow">準備ができました</div><h2>お客さまへ、このリンクを。</h2><input id="share-url" readonly aria-label="共有URL"><button id="copy-link" class="primary">リンクをコピー</button><a id="preview-link" class="text-link">お客さまの画面を開く ↗</a><p class="print-only" id="print-store"></p><div id="qr-area" class="hidden"></div><p class="print-only" id="print-message"></p><p class="print-only" id="print-url"></p><div id="poster-actions" class="hidden"><button id="print-qr" class="secondary" type="button">掲示用に印刷する</button><a id="download-qr" class="text-link" download="hitokoto-qr.svg">QR画像を保存する（SVG）</a><p class="hint">印刷には店名・QR・共有URLが入ります（報告用リンクは入りません）。店名と共有URLは運営に保存されないため、印刷物やメモで保管してください。</p><div class="voice-kit" id="voice-kit"><strong>声かけの例（画面だけに表示・印刷されません）</strong><p id="voice-script"></p><p class="hint">割引・特典と引き換えにしたり、よい評価だけをお願いしたりしないでください。Googleの口コミのポリシーで禁止されています。</p><p class="hint" data-staff-note>お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから口コミを投稿しないでください。Googleのポリシーで、雇用関係や家族関係などの「利益相反に基づくコンテンツ」は禁止されています。</p></div></div><div id="owner-copy" class="owner-copy hidden"><h3>店主控え（お客さまに見せないでください）</h3><p class="hint">報告用リンクを開くと、店主の管理画面で、このQRから来たお客さまが選んだ話題と評価の件数（直近4週）とどこまで進んだかを見たり、お店の設定（振り分け・LINE・インスタ）を変えたりできます。件数が少ないうちは、お客さまが特定されないよう「まだ少ない」とだけ表示します。リンクを知っている人は誰でも見られるので、お店の方だけで保管してください。運営はこのリンクを保存していないため、再発行できません。お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから口コミを投稿しないでください。Googleのポリシーで、雇用関係や家族関係などの「利益相反に基づくコンテンツ」は禁止されています。<a href="privacy.html#store-report">データの扱い</a></p><label for="report-url">報告用リンク（店主だけ）</label><input id="report-url" readonly><button id="copy-report" class="secondary" type="button">報告用リンクをコピー</button><button id="print-owner" class="secondary" type="button">店主控えを印刷する</button><a id="open-report" class="text-link" target="_blank" rel="noopener noreferrer">管理画面を開く ↗</a><p id="owner-copy-status" class="hint" role="status" aria-live="polite"></p><p class="hint">作り直すと、新しい報告用リンクになります（前のQRと前の報告用リンクもそのまま使えます）。</p><div class="owner-print print-only"><p class="owner-print-title">ひとことβ 店主控え（お客さまに見せないでください）</p><p id="owner-print-store"></p><p class="owner-print-label">報告用リンク（店主だけ）</p><p id="owner-print-report" class="owner-print-url"></p><p class="owner-print-label">お客さま用の共有リンク</p><p id="owner-print-share" class="owner-print-url"></p><p>報告用リンクを知っている人は誰でも件数を見られます。運営は再発行できないため、この紙は店内の見えない場所に保管してください。</p></div></div><p id="owner-copy-none" class="hint hidden">報告用リンクは作れませんでした（通信できなかったため）。QRと共有リンクはそのまま使えます。報告が必要なときは、時間をおいて作り直してください。</p></section>
 
 <div id="lp">
 <section class="slide lp-hero" id="top" aria-labelledby="fv-h">
@@ -115,10 +115,10 @@
 <div class="scene-img promise-bg"><img src="img/promise-interior.webp" width="960" height="720" loading="lazy" decoding="async" alt="営業時間外の静かな喫茶店の店内。木のカウンターとテーブル、紺の壁"><span class="ai-badge">イメージ（AI生成）</span></div>
 <p class="slide-no" aria-hidden="true">05<span> / 09</span></p>
 <div class="slide-in">
-<h2 id="promise-h" class="reveal">気持ちを誘導しない道具です。</h2>
+<h2 id="promise-h" class="reveal">書くのは、お客さま本人です。</h2>
 <p class="one reveal">ひとことβが守る、3つの約束。</p>
 <ol class="promises">
-<li class="reveal"><svg class="illus pr-sym" viewBox="0 0 120 72" aria-hidden="true"><rect x="4" y="4" width="38" height="22" rx="5"/><path d="M11 26l-3 7 9-7M12 12h22M12 18h14"/><rect x="4" y="42" width="38" height="22" rx="5"/><path d="M11 64l-3 7 9-7M12 50h22M12 56h14"/><path d="M44 15c14 0 14 18 26 18M44 53c14 0 14-16 26-16" class="arrow"/><path d="M64 29l6 4-6 4" class="arrow"/><rect x="74" y="18" width="42" height="34" rx="4"/><circle cx="83" cy="30" r="3" class="dot"/><circle cx="95" cy="30" r="3" class="dot"/><circle cx="107" cy="30" r="3" class="dot"/><path d="M81 42h28"/></svg><h3>星や感想で、振り分けません。</h3></li>
+<li class="reveal"><svg class="illus pr-sym" viewBox="0 0 120 72" aria-hidden="true"><rect x="22" y="6" width="76" height="60" rx="6"/><path d="M32 20h56M32 30h40"/><path d="M32 44h50" class="arrow"/><circle cx="90" cy="44" r="4" class="dot"/><path d="M32 54h30"/></svg><h3>気になったことも、文章から消しません。</h3></li>
 <li class="reveal"><svg class="illus pr-sym" viewBox="0 0 120 72" aria-hidden="true"><rect x="42" y="34" width="36" height="28"/><rect x="38" y="25" width="44" height="9"/><path d="M60 25v37M60 25c-4-9-14-9-12-2 1 3 7 3 12 2zM60 25c4-9 14-9 12-2-1 3-7 3-12 2z"/><circle cx="60" cy="38" r="32"/><path d="M37 15l46 46"/></svg><h3>特典と引き換えにしません。</h3></li>
 <li class="reveal"><svg class="illus pr-sym" viewBox="0 0 120 72" aria-hidden="true"><rect x="30" y="4" width="34" height="64" rx="6"/><path d="M42 10h10"/><path d="M37 22h20M37 28h16M37 34h20"/><rect x="37" y="46" width="20" height="9" rx="2" class="dot"/><circle cx="92" cy="26" r="8"/><path d="M78 60c0-13 28-13 28 0"/><path d="M80 44l-18 6" class="arrow"/><path d="M68 45l-6 5 8 1" class="arrow"/></svg><h3>自動で投稿しません。内容も作りません。</h3></li>
 </ol>
@@ -216,18 +216,18 @@
 <p class="one reveal">声の件数は、店主だけが見られます。</p>
 <div class="scope-grid">
 <div>
-<ul class="icon-list scope-yes"><li><svg class="ico" aria-hidden="true"><use href="#i-qr-code"></use></svg><span>QRと共有リンク</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-printer"></use></svg><span>ポスター印刷</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-mouse-pointer-click"></use></svg><span>選ぶだけで候補の文</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-message-square-text"></use></svg><span>感想から先に選ぶ（AI）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-chart-line"></use></svg><span>声の報告と札</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-spell-check"></use></svg><span>句読点の整え（AI）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-languages"></use></svg><span>画面の4言語表示</span></li></ul>
+<ul class="icon-list scope-yes"><li><svg class="ico" aria-hidden="true"><use href="#i-qr-code"></use></svg><span>QRと共有リンク</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-printer"></use></svg><span>ポスター印刷</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-mouse-pointer-click"></use></svg><span>選ぶだけで候補の文</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-message-square-text"></use></svg><span>感想から先に選ぶ（AI）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-chart-line"></use></svg><span>店主の管理画面（声・数字・札・設定）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-spell-check"></use></svg><span>句読点の整え（AI）</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-languages"></use></svg><span>画面の4言語表示</span></li></ul>
 <h3 class="sub-h">まだできないこと</h3>
-<ul class="icon-list scope-no"><li><svg class="ico" aria-hidden="true"><use href="#i-message-square-text"></use></svg><span>口コミの一覧・返信</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-chart-line"></use></svg><span>効果の分析</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-store"></use></svg><span>複数店舗の管理</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-save"></use></svg><span>設定の保存</span></li></ul>
+<ul class="icon-list scope-no"><li><svg class="ico" aria-hidden="true"><use href="#i-message-square-text"></use></svg><span>口コミの一覧・返信</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-chart-line"></use></svg><span>効果の分析</span></li><li><svg class="ico" aria-hidden="true"><use href="#i-store"></use></svg><span>複数店舗の管理</span></li></ul>
 </div>
-<figure class="report-mini reveal" aria-label="店主だけのリンクで開く「お店の声の報告」画面と、印刷できる「直しました」の札の縮小見本（形だけで、件数は入れていません）">
+<figure class="report-mini reveal" aria-label="店主だけのリンクで開く「お店の管理画面」と、印刷できる「直しました」の札の縮小見本（形だけで、件数は入れていません）">
 <div class="rm-screen">
-<p class="rm-title">お店の声の報告</p>
+<p class="rm-title">お店の管理画面</p>
 <table class="rm-table"><thead><tr><th scope="col">話題</th><th scope="col">よかった</th><th scope="col">ふつう</th><th scope="col">気になった</th></tr></thead>
 <tbody><tr><th scope="row">料理</th><td><span class="rm-bar"></span></td><td><span class="rm-bar"></span></td><td><span class="rm-bar"></span></td></tr><tr><th scope="row">接客</th><td><span class="rm-bar"></span></td><td><span class="rm-bar"></span></td><td><span class="rm-bar"></span></td></tr><tr><th scope="row">待ち時間</th><td><span class="rm-bar"></span></td><td><span class="rm-bar"></span></td><td><span class="rm-bar"></span></td></tr></tbody></table>
 </div>
 <div class="rm-sign"><p class="rm-sign-h">お客さまの声から、直しました</p><span class="rm-bar rm-bar-wide"></span></div>
-<figcaption>報告画面と札の縮小見本</figcaption>
+<figcaption>管理画面と札の縮小見本</figcaption>
 </figure>
 </div>
 <div class="scope-part" id="data">
@@ -237,7 +237,7 @@
 <table class="data-table"><tbody>
 <tr><th scope="row">時間・話題・お店ごとの件数、エラーの記録</th><td>13か月</td></tr>
 <tr><th scope="row">店主のご意見</th><td>6か月</td></tr>
-<tr><th scope="row">お店の登録</th><td>最後に使われてから1年</td></tr>
+<tr><th scope="row">お店の登録と設定</th><td>最後に使われてから1年</td></tr>
 <tr><th scope="row">連打対策の記録</th><td>3日</td></tr>
 <tr><th scope="row">試用のお申し込み</th><td>試用期間の終了から1年</td></tr>
 </tbody></table>
@@ -260,8 +260,8 @@
 </details>
 <details class="faq-group" id="faq-rule"><summary class="faq-cat"><svg class="ico" aria-hidden="true"><use href="#i-shield-check"></use></svg>Googleのルールと3つの約束</summary>
 <details><summary>Googleに自動で投稿されますか？</summary><p>されません。お客さまがご自身でGoogleを開き、星を選んで文章を貼り付け、投稿します。投稿せずに閉じてもかまいません。</p><p>QRを作ったら、お客さまの画面を開いて試せます。試しただけでGoogleに投稿されることはありません。</p></details>
-<details><summary>Googleのルールに反しませんか？</summary><p>Googleのポリシーでは、特典と引き換えに口コミを頼むことや、よい口コミだけを選んで頼むことが禁止されています。ひとことβは感想で振り分けず、特典も付けません。お店の頼み方もルールの対象なので、声かけの際はご注意ください。</p><p>よかった感想も、気になった感想も、同じGoogleの入口へ。低い評価だけを別の窓口に回すしくみはありません。</p><p>お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから投稿しないでください。Googleのポリシーで「利益相反に基づくコンテンツ」（雇用関係・家族関係など）は禁止されています。店主控えにも同じ注意を載せています。</p><p><a href="https://support.google.com/contributionpolicy/answer/7400114?hl=ja" target="_blank" rel="noopener noreferrer">Googleの口コミのポリシー（禁止および制限されているコンテンツ）</a></p></details>
-<details><summary>気になった感想も、そのまま投稿されますか？</summary><p>はい。どんな感想にも同じGoogleへの入口を用意しています。AIが気になった点を消したり、やわらげたりすることもありません。</p></details>
+<details><summary>Googleのルールに反しませんか？</summary><p>Googleのポリシーでは、特典と引き換えに口コミを頼むこと、否定的な口コミの投稿を妨げること、よい口コミだけを選んで頼むことが禁止されています。ひとことβは特典を付けません。お店の頼み方もルールの対象なので、声かけの際はご注意ください。</p><p>ひとことβには、お店が選べる「振り分け」の設定があります（初めはオフ）。オンにすると、「気になった」が話題の半分より多いお客さまにはGoogleへの案内を出さず、選ばれた話題と評価は件数として店主にだけ届きます。この設定は、Googleのポリシーで禁止されている「よい口コミだけを選んで頼む」ことに当たるおそれがあり、口コミの削除やビジネスプロフィールの制限を受けるおそれがあります。オンにするときは、店主の管理画面でポリシーの原文とこのおそれを確かめ、同意していただきます。</p><p>お店のスタッフ・ご家族・取引先など、お店と利害関係のある方は、このQRから投稿しないでください。Googleのポリシーで「利益相反に基づくコンテンツ」（雇用関係・家族関係など）は禁止されています。店主控えにも同じ注意を載せています。</p><p><a href="https://support.google.com/contributionpolicy/answer/7400114?hl=ja" target="_blank" rel="noopener noreferrer">Googleの口コミのポリシー（禁止および制限されているコンテンツ）</a></p></details>
+<details><summary>気になった感想も、そのまま文章になりますか？</summary><p>はい。候補の文には、選んだ「気になった」が必ず残ります。AIが気になった点を消したり、やわらげたりすることもありません。</p><p>ただし、お店が「振り分け」をオンにしている場合、「気になった」が話題の半分より多いお客さまには、Googleへの案内を出しません。</p></details>
 <details><summary>口コミを書いてくれたお客さまに、割引をしてもいいですか？</summary><p>いけません。割引・プレゼント・ポイントなどと引き換えに口コミを頼むことは、Googleのポリシーで禁止されています。お店の方にも、特典を付けないようお願いしています。</p></details>
 <details><summary>お店が文章を用意して、書いてもらえますか？</summary><p>できません。投稿するかどうか、何を書くかを決めるのはお客さまです。お店が文章を用意して書いてもらうこともできません。</p><p>選べる話題はお店の種類ごとに決まった言葉で、お店が変えることはできません。</p></details>
 </details>
@@ -274,8 +274,8 @@
 <details><summary>QRはどこに置けばいいですか？</summary><p>レジ横やテーブル、お会計のトレーなど、お客さまの目に入る場所に置いてください。印刷すると、店名・QR・共有リンクと、ひとことの案内が1枚に入ります。QR画像（SVG）だけを保存して、お店のPOPに使うこともできます。</p></details>
 <details><summary>口コミリンクはどこで手に入りますか？</summary><p>Googleビジネスプロフィールの「クチコミを依頼」から、口コミを書いてもらうリンクをコピーできます。</p><ol class="plain-notes"><li>Googleビジネスプロフィールを開く</li><li>「クチコミを依頼」を選ぶ</li><li>表示されたリンクをコピーして、ひとことβに貼る</li></ol></details>
 <details><summary>スタッフは、どう声をかければいいですか？</summary><p>「よろしければ、今日の感想をこちらのQRからひとことお聞かせください。よかったことも、気になったことも、どちらでも大丈夫です。」のように、よい評価だけをお願いしない言い方をおすすめしています。QRを作ると、お店の種類に合わせた声かけの例が表示されます。</p><p>よい評価だけをお願いする言い方や、特典と引き換えにする言い方はしないでください。</p></details>
-<details><summary>お店ごとの声の報告とは何ですか？</summary><p>お店ごとの声の報告（店主だけのリンク）と「直しました」の札が使えます。新しいQRでは、選ばれた話題と評価の件数をお店ごとにも数え、店主だけが持つ報告用リンクで見られます。件数が少ないうちは、お客さまが特定されないよう表示しません。</p></details>
-<details><summary>体験版で、まだできないことは？</summary><p>口コミの一覧・返信、効果の分析、複数店舗の管理、お店の設定の保存は、まだできません。</p></details>
+<details><summary>店主の管理画面とは何ですか？</summary><p>店主だけが持つ報告用リンクで開く画面です。新しいQRから来たお客さまが選んだ話題と評価の件数（お客さまの声）、QRを開いてから候補・コピー・Googleまで進んだ件数と日ごとの推移、効果を確かめる欄、「直しました」の札、お店の設定（振り分け・LINE・インスタ）があります。件数が少ないうちは、お客さまが特定されないよう表示しません。</p><p>LINE公式アカウントの友だち追加URLとインスタのURLを登録すると、お客さまの画面のいちばん下に、評価とは関係なく、すべてのお客さまに同じボタンが出ます。特典などの文言は付きません。</p></details>
+<details><summary>体験版で、まだできないことは？</summary><p>口コミの一覧・返信、効果の分析、複数店舗の管理は、まだできません。</p></details>
 </details>
 <details class="faq-group" id="faq-data"><summary class="faq-cat"><svg class="ico" aria-hidden="true"><use href="#i-lock"></use></svg>お客さまのデータ</summary>
 <details><summary>お客さまの個人情報は扱いますか？</summary><p>お客さまに名前や連絡先の入力はお願いしていません。感想の本文もデータベースに保存しません。</p></details>
@@ -284,7 +284,8 @@
 <li>共有リンクに入るのは、店名・Googleの口コミリンク・お店の種類と、新しく作ったQRではお店ごとの件数を数えるための乱数の店ID（店名から作ったものではありません）だけです。</li>
 <li>利用状況は、日付と操作の種類だけを数えます。店名・本文・IPアドレスは送りも保存もしません。</li>
 <li>候補を作るときに選んだ話題と評価の組み合わせの件数を、業種ごとに数えます。店舗やお客さまとは結びつけず、感想の文章は送りません。</li><li>新しいQRでは、同じ件数をお店ごとにも数え、店主だけが持つ報告用リンクで見られます。件数が少ないうちは、お客さまが特定されないよう表示しません。</li><li>お客さま画面の各段階に、開いてから何秒ごろ着いたか（10秒・20秒などの区切り）を数えます。秒そのもの・本文・店名は送りません。</li>
-<li>時間の計測・話題の件数・お店ごとの件数・エラーの記録は13か月、店主のご意見は6か月、お店の登録は最後に使われてから1年で、毎日自動で削除します。連打対策の記録は3日で消します。</li>
+<li>時間の計測・話題の件数・お店ごとの件数・エラーの記録は13か月、店主のご意見は6か月、お店の登録と設定は最後に使われてから1年で、毎日自動で削除します。連打対策の記録は3日で消します。</li>
+<li>お店が管理画面で設定した振り分けのオン・オフと同意した日時、LINE・インスタのURLは、店IDとひも付けて保存します。振り分けがオンのあいだは、Googleへの案内を出したか出さなかったかの件数と、出さなかったお客さまの話題と評価の件数も、お店ごとに数えます。</li>
 <li>試用のお申し込み内容は、試用期間の終了から1年で削除します。正式版をお申し込みのお店は契約期間中保管します。</li>
 </ul><p><a href="privacy.html#retention">記録ごとの保存期間</a>　<a href="privacy.html">データの扱いをくわしく見る</a></p></details>
 </details>
